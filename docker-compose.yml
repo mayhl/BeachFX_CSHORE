@@ -1,0 +1,7 @@
+services:
+  beachfx-cshore:
+    build: .
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: /bin/bash -c "uv run dist_py/1_make_cshore_infiles.py && uv run dist_py/2_run_cshore.py && uv run dist_py/3_make_dat_file.py"

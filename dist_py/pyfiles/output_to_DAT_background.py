@@ -46,11 +46,11 @@ class output_to_DAT_background(object):
 
 		for i in dataset_names:									#loop through each profile/storm combination
 			init_profile = self.h5reader3(h5_filename, i, 'Initial Profile')	#reading the datafrom the h5file
-                        fin_profile = self.h5reader3(h5_filename, i, 'Final Profile')
+			fin_profile = self.h5reader3(h5_filename, i, 'Final Profile')
 			max_profile = self.h5reader3(h5_filename, i, 'Max Prof Elev')
 			min_profile = self.h5reader3(h5_filename, i, 'Min Prof Elev')
 			max_wav = self.h5reader3(h5_filename, i, 'Max Wave Ht')
-                        max_elv = self.h5reader3(h5_filename, i, 'Max Water Elev+Setup')
+			max_elv = self.h5reader3(h5_filename, i, 'Max Water Elev+Setup')
 
 			init_profile[:,0], init_profile[:,1] = self.reverse_l_r(init_profile[:,0], init_profile[:,1],init_profile[-1,0]) #swithcing from cshore orientation to beach-fx orientation (seaward positive)
 			fin_profile[:,0], fin_profile[:,1] = self.reverse_l_r(fin_profile[:,0], fin_profile[:,1],init_profile[-1,0])

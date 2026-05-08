@@ -1,0 +1,18 @@
+[project]
+name = "beachfx-cshore"
+version = "0.1.0"
+description = "Setup and run CSHORE for Beach-fx"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "h5py",
+]
+
+[project.scripts]
+make-infiles = "dist_py.1_make_cshore_infiles:main"
+run-cshore = "dist_py.2_run_cshore:main"
+make-dat = "dist_py.3_make_dat_file:main"
+
+[tool.uv]
+package = false

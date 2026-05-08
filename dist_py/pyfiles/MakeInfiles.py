@@ -9,9 +9,9 @@ class MakeInfiles(object):
 	def __init__(self):
 		self.infiles = {}
 
-	def init(self, meta_dict, cshore_dict, profiles, storms):	
+	def init(self, meta_dict, config, profiles, storms):	
 		self.meta_dict = meta_dict			#setting up dictionaries
-		self.cshore_dict = cshore_dict
+		self.config = config
 		self.profiles = profiles	
 		self.storms = storms
 
@@ -53,7 +53,7 @@ class MakeInfiles(object):
 					self.meta_dict['Storm'] = storm
 					fname = reach + '_' + profile + '-' + storm + '.infile' 	#the infile name
 
-					csio.make_CSHORE_infile(fname, BC_dict, self.meta_dict, self.cshore_dict) 	#making the infile
+					csio.make_CSHORE_infile(fname, BC_dict, self.meta_dict, self.config) 	#making the infile
 			count += 1
 
 

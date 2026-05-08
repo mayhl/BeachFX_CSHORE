@@ -22,7 +22,7 @@ class cshoreIO(object):
 		self.OSETUP_dict = {}
 		self.meta_dict = {}
 
-	def make_CSHORE_infile(self, fname, BC_dict, meta_dict, cshore_dict):
+	def make_CSHORE_infile(self, fname, BC_dict, meta_dict, config):
 		"""This function creates the input file for CSHORE model
 
 		:param fname: name of the CSHORE infile we are writing
@@ -96,48 +96,52 @@ class cshoreIO(object):
 		# else:
 		# 	pass
 
+		cshore_cfg = config['cshore']
+		logic_cfg = config['model_logic']
+		veg_cfg = config['vegetation']
+
 		in_dict = {'header': ['------------------------------------------------------------',
 							  'Reach : %s  Profile : %s  Storm:  %s'  %(meta_dict['Reach'], meta_dict['Profile'], meta_dict['Storm']),
 							  '------------------------------------------------------------'],			# the three lines of the header for the input text file
-				   'iline': 1,  # single line
-				   'iprofl': 1.1,  # 0 = no morph, 1 = run morph
-				   'isedav': 0,  # 0 = unlimited sand, 1 = hard bottom
-				   'iperm': 0,  # 0 = no permeability, 1 = permeable
-				   'iover': 1,  # 0 = no overtopping , 1 = include overtopping
-				   'infilt': 0,  # 1 = include infiltration landward of dune crest
-				   'iwtran': 0,  # 0 = no standing water landward of crest, 1 = wave transmission due to overtopping
+				   'iline': logic_cfg['iline'],
+				   'iprofl': logic_cfg['iprofl'],
+				   'isedav': logic_cfg['isedav'],
+				   'iperm': logic_cfg['iperm'],
+				   'iover': logic_cfg['iover'],
+				   'infilt': logic_cfg['infilt'],
+				   'iwtran': logic_cfg['iwtran'],
 				  
-				   'ipond': 0,  # 0 = no ponding seaward of SWL
-				   'iwcint': 0,  # 0 = no W & C interaction , 1 = include W & C interaction
-				   'iroll': 0,  # 0 = no roller, 1 = roller
-				   'iwind': 0,  # 0 = no wind effect'
-				   'itide': 0,  # 0 = no tidal effect on currents
-				   'iveg': 0,  # 1 = include vegitation effect (I'm assuming)
-				   'dx': cshore_dict['dx'],  # constant dx
+				   'ipond': logic_cfg['ipond'],
+				   'iwcint': logic_cfg['iwcint'],
+				   'iroll': logic_cfg['iroll'],
+				   'iwind': logic_cfg['iwind'],
+				   'itide': logic_cfg['itide'],
+				   'iveg': 1 if veg_cfg['enabled'] else 0,
+				   'dx': cshore_cfg['dx'],
 
-				   'gamma': cshore_dict['gamma'], # shallow water ratio of wave height to water depth (wave breaking parameter?)
-				   'sporo': 0.4,  # sediment porosity
-				   'sg': 2.65,  # specific gravity of the sand grains (I changed the order so I could use this in the fall velocity calculator)
-				   'temp' : 20,	#water temperature (deg. C)
-				   'salin': 0,	#salinity (ppt)
+				   'gamma': cshore_cfg['gamma'],
+				   'sporo': cshore_cfg['sporo'],
+				   'sg': cshore_cfg['sg'],
+				   'temp' : cshore_cfg['temp'],
+				   'salin': cshore_cfg['salin'],
 
-				   'veg_Cd': 1,  # vegitation drag coeff
-				   'veg_n': 100,  # vegitation density (units?)
-				   'veg_dia': .01,  # vegitation diam (units? mean or median?)
-				   'veg_ht': .20,  # vegitation height (units? mean or median?)
-				   'veg_rod': .1,  # vegitation erosion limit below sand for failure (what is this?!?!?)
-				   'veg_extent': np.array([.7, 1]),  # vegitation coverage as fraction of total domain length (what is this?!?!?)
+				   'veg_Cd': veg_cfg['Cd'],
+				   'veg_n': veg_cfg['n'],
+				   'veg_dia': veg_cfg['dia'],
+				   'veg_ht': veg_cfg['ht'],
+				   'veg_rod': veg_cfg['rod'],
+				   'veg_extent': np.array(veg_cfg['extent']),
 
 				   
-				   'effb': cshore_dict['effb'],  # suspension efficiency due to breaking eB (what is this?)
-				   'efff': 0.005,  # suspension efficiency due to friction ef (what is this?)
-				   'slp': .5,  # suspended load parameter (what is this?)
-				   'slpot': .1,  # overtopping suspended load parameter (what is this?)
-				   'tanphi': .630,  # tangent (sediment friction angle - units?)
-				   'blp': 0.001,  # bedload parameter (what is this?)
-				   'rwh': .02,  # numerical rununp wire height (what is this? units?)
-				   'ilab': 0,  # controls the boundary condition timing. Don't change - supposed to be 0!!!
-				   'fw': 0.015}  # bottom friction factor
+				   'effb': cshore_cfg['effb'],
+				   'efff': cshore_cfg['efff'],
+				   'slp': cshore_cfg['slp'],
+				   'slpot': cshore_cfg['slpot'],
+				   'tanphi': cshore_cfg['tanphi'],
+				   'blp': cshore_cfg['blp'],
+				   'rwh': cshore_cfg['rwh'],
+				   'ilab': logic_cfg['ilab'],
+				   'fw': cshore_cfg['fw']}
 
 		in_dict['d50'] = BC_dict['d50']		#d50 in mm
 		# in_dict['wf'] = dirtLib.vfall(in_dict['d50'], BC_dict['temp'], BC_dict['salin'], in_dict['sg'])  # fall velocity of sand grain
@@ -226,23 +230,23 @@ class cshoreIO(object):
 				fid.write('%11.2f%11.4f\n' %(in_dict['timebc_surg'][ii], BC_dict['swlbc'][ii]))
 
 
-                #interp zb to cshore grid to remain consistent with matlab scripting bdj 2019-12-05 
-                x = BC_dict['x']
-                x = np.arange(x[0], x[-1], cshore_dict['dx']).tolist()
-                zb = np.interp(x,BC_dict['x'],BC_dict['zb'])
-                # now writethe bottom position
-                #fid.write('%-8i                             ->NBINP \n' % len(BC_dict['x'])) superceded bdj 2019-12-05 
-                fid.write('%-8i                             ->NBINP \n' % len(x))
+			#interp zb to cshore grid to remain consistent with matlab scripting bdj 2019-12-05 
+			x = BC_dict['x']
+			x = np.arange(x[0], x[-1], cshore_cfg['dx']).tolist()
+			zb = np.interp(x,BC_dict['x'],BC_dict['zb'])
+			# now writethe bottom position
+			#fid.write('%-8i                             ->NBINP \n' % len(BC_dict['x'])) superceded bdj 2019-12-05 
+			fid.write('%-8i                             ->NBINP \n' % len(x))
 
 		if in_dict['iperm'] == 1 or in_dict['isedav'] >= 1:
 			fid.write('%-8i                             ->NPINP \n' % len(BC_dict['x_p'])) # this parameter is not specified in Brad's run_model...  This will crash if these conditions are met
 		else:
 			pass
 
-                
-                #for ii in range(0, len(BC_dict['x'])):  superceded bdj 2019-12-05 
+
+		#for ii in range(0, len(BC_dict['x'])):  superceded bdj 2019-12-05 
 		#	fid.write('%11.4f%11.4f%11.4f\n' % (BC_dict['x'][ii], BC_dict['zb'][ii], in_dict['fw']))
-                for ii in range(0, len(x)):
+		for ii in range(0, len(x)):
 			fid.write('%11.4f%11.4f%11.4f\n' % (x[ii],zb[ii], in_dict['fw']))
 
 		if in_dict['iperm'] == 1 or in_dict['isedav'] >= 1:

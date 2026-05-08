@@ -2,6 +2,7 @@
 *~
 *.infile
 *.mat
+.DS_Store
 ./do_not_git
 ./do_not_git/*
 do_not_git
@@ -12,3 +13,8 @@ from_hpc.tgz.used
 outfiles
 work_*
 dng*
+
+# Data directory
+data/infiles/
+data/outfiles/
+*.h5
