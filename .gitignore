@@ -17,4 +17,16 @@ dng*
 # Data directory
 data/infiles/
 data/outfiles/
+data/outfiles_legacy/
+data/outfiles_new/
+data/outfiles_refernce/
+data/EventDate_LC.csv
+data/New_EventDate_LC.csv
 *.h5
+
+# Submodules / nested repos
+chart/
+StormSim-Library/
+
+# Temp scripts
+temp/

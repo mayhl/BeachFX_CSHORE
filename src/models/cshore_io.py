@@ -101,6 +101,7 @@ class cshoreIO(object):
         cshore_cfg = config["cshore"]
         logic_cfg = config["model_logic"]
         veg_cfg = config["vegetation"]
+        veg_enabled = veg_cfg["enabled"]
 
         in_dict = {
             "header": [
@@ -121,19 +122,19 @@ class cshoreIO(object):
             "iroll": logic_cfg["iroll"],
             "iwind": logic_cfg["iwind"],
             "itide": logic_cfg["itide"],
-            "iveg": 1 if veg_cfg["enabled"] else 0,
+            "iveg": 1 if veg_enabled else 0,
             "dx": cshore_cfg["dx"],
             "gamma": cshore_cfg["gamma"],
             "sporo": cshore_cfg["sporo"],
             "sg": cshore_cfg["sg"],
             "temp": cshore_cfg["temp"],
             "salin": cshore_cfg["salin"],
-            "veg_Cd": veg_cfg["Cd"],
-            "veg_n": veg_cfg["n"],
-            "veg_dia": veg_cfg["dia"],
-            "veg_ht": veg_cfg["ht"],
-            "veg_rod": veg_cfg["rod"],
-            "veg_extent": np.array(veg_cfg["extent"]),
+            "veg_Cd": veg_cfg.get("Cd", 1.0) if veg_enabled else 0.0,
+            "veg_n": veg_cfg.get("n", 0.0) if veg_enabled else 0.0,
+            "veg_dia": veg_cfg.get("dia", 0.0) if veg_enabled else 0.0,
+            "veg_ht": veg_cfg.get("ht", 0.0) if veg_enabled else 0.0,
+            "veg_rod": veg_cfg.get("rod", 0.0) if veg_enabled else 0.0,
+            "veg_extent": np.array(veg_cfg.get("extent", [0.0, 1.0])) if veg_enabled else np.array([0.0, 1.0]),
             "effb": cshore_cfg["effb"],
             "efff": cshore_cfg["efff"],
             "slp": cshore_cfg["slp"],
@@ -296,9 +297,10 @@ class cshoreIO(object):
                     % (in_dict["timebc_surg"][ii], BC_dict["swlbc"][ii])
                 )
 
-            # interp zb to cshore grid to remain consistent with matlab scripting bdj 2019-12-05
+            # interp zb to cshore grid; use linspace for deterministic grid size
             x = BC_dict["x"]
-            x = np.arange(x[0], x[-1], cshore_cfg["dx"]).tolist()
+            n_pts = int(round((x[-1] - x[0]) / cshore_cfg["dx"])) + 1
+            x = np.linspace(x[0], x[-1], n_pts).tolist()
             zb = np.interp(x, BC_dict["x"], BC_dict["zb"])
             # now writethe bottom position
             # fid.write('%-8i                             ->NBINP \n' % len(BC_dict['x'])) superceded bdj 2019-12-05
@@ -818,6 +820,12 @@ class cshoreIO(object):
 
         """
 
+        # Reset state dicts so stale data from a previous storm never bleeds in
+        self.ODOC_dict = {}
+        self.readIF_dict = {}
+        self.OBPROF_dict = {}
+        self.OSETUP_dict = {}
+
         self.read_CSHORE_ODOC(path)
         self.read_CSHORE_infile(path)
         self.read_CSHORE_OBPROF(path)
@@ -919,20 +927,21 @@ class cshoreIO(object):
             zb = np.zeros([num_steps + 1, self.ODOC_dict["nbinp"]]) * np.nan
             zb_p = np.zeros([num_steps + 1, self.ODOC_dict["nbinp"]]) * np.nan
             ivegetated = np.zeros([num_steps + 1, self.ODOC_dict["nbinp"]]) * np.nan
-        else:  # note: drs modified this
-            x = np.zeros([num_steps + 1, int(self.OBPROF_row_counter)]) * np.nan
-            zb = np.zeros([num_steps + 1, int(self.OBPROF_row_counter)]) * np.nan
-            zb_p = np.zeros([num_steps + 1, int(self.OBPROF_row_counter)]) * np.nan
-            ivegetated = (
-                np.zeros([num_steps + 1, int(self.OBPROF_row_counter)]) * np.nan
-            )
+        else:  # note: drs modified this — allocate from actual first time-step size
+            actual_n = len(self.OBPROF_dict["morph1"]["x"])
+            x = np.zeros([num_steps + 1, actual_n]) * np.nan
+            zb = np.zeros([num_steps + 1, actual_n]) * np.nan
+            zb_p = np.zeros([num_steps + 1, actual_n]) * np.nan
+            ivegetated = np.zeros([num_steps + 1, actual_n]) * np.nan
 
         for ii in range(0, num_steps + 1):
             # OBPROF
             temp_dict_prof = self.OBPROF_dict["morph%s" % str(ii + 1)]
             time[ii] = temp_dict_prof["time"]
-            x[ii] = temp_dict_prof["x"]
-            zb[ii] = temp_dict_prof["zb"]
+            # Guard against 1-point grid variation between chained storms
+            n = min(x.shape[1], len(temp_dict_prof["x"]))
+            x[ii, :n]  = temp_dict_prof["x"][:n]
+            zb[ii, :n] = temp_dict_prof["zb"][:n]
             if len(temp_dict_prof["zb_p"]) > 0:
                 zb_p[ii] = temp_dict_long["zb_p"]
             if len(temp_dict_prof["ivegetated"]) > 0:

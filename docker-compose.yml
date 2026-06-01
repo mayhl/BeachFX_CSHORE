@@ -3,5 +3,6 @@ services:
     build: .
     volumes:
       - .:/app
+      - /app/.venv
     working_dir: /app
-    command: uv run dist_py/1_make_cshore_infiles.py
+    command: uv run examples/run_cshore.py

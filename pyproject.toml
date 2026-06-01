@@ -9,12 +9,11 @@ dependencies = [
     "h5py",
     "pandas>=3.0.2",
     "pyarrow>=24.0.0",
+    "matplotlib",
 ]
 
 [project.scripts]
-make-infiles = "dist_py.1_make_cshore_infiles:main"
-run-cshore = "dist_py.2_run_cshore:main"
-make-dat = "dist_py.3_make_dat_file:main"
+run-cshore = "examples.run_cshore:main"
 
 [tool.uv]
 package = false

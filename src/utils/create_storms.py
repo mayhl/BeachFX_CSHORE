@@ -37,21 +37,23 @@ class CreateStorms(object):
         """
         df = pd.read_parquet(storm_file)
 
-        # Group by storm_id
-        for storm_id, storm_df in df.groupby("storm_id"):
+        # Sort time steps within each storm, then order storms by start date
+        df = df.sort_values(["storm_id", "hydro_tstp"])
+        storm_start = df.groupby("storm_id")["date"].min().sort_values()
+        df = df.set_index("storm_id").loc[storm_start.index].reset_index()
+
+        for storm_id, storm_df in df.groupby("storm_id", sort=False):
             storm_name = f"STM{storm_id}"
 
-            # Map columns to expected dictionary keys
-            # Assuming water_elevation is surge, wave_height is Hmo
             hmo = storm_df["wave_height"].values
             hrms = hmo / np.sqrt(2)
             tp = storm_df["wave_peak_period"].values
             surge = storm_df["water_elevation"].values
             angle = storm_df["wave_direction"].values
-            
-            # Calculate time in seconds
-            # Assuming constant time step (e.g. 30 mins = 1800s)
-            time_array = np.arange(len(hmo)) * 1800
+
+            # Time array in seconds from hydro_tstp index and 30-min step
+            dt = 1800  # seconds per timestep
+            time_array = np.arange(len(hmo)) * dt
             
             # Save to dictionary
             self.cshore_storms[storm_name] = {

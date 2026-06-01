@@ -6,6 +6,7 @@ from .morpho_updater import MorphologyUpdater, MockMorphoUpdater
 from utils.chs_utils import write_parquet
 from typing import List, Dict
 import os
+import sys
 import subprocess
 import numpy as np
 import h5py
@@ -22,11 +23,14 @@ class CshoreAdapter(AbstractModelAdapter):
         self.updater = updater or MockMorphoUpdater()
         self.csio = cshoreIO()
         self.mkInfiles = MakeInfiles()
-        root_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..")
-        )
-        self.exe_path = os.path.join(
-            root_path, self.config["paths"]["executables"], "CSHORE_USACE_LINUX.out"
+        _exe_names = {
+            "darwin": "cshore_usace_macos.out",
+            "linux": "CSHORE_USACE_LINUX.out",
+            "win32": "cshore_usace_win.out",
+        }
+        _exe_name = _exe_names.get(sys.platform, "CSHORE_USACE_LINUX.out")
+        self.exe_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "executables", _exe_name)
         )
 
     def prepare_infiles(self, meta_dict: dict, profiles: dict, storms: dict) -> None:
@@ -34,7 +38,7 @@ class CshoreAdapter(AbstractModelAdapter):
 
     def run_simulation(self, reach_dir: str, infile_name: str) -> dict:
         root_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
         reach_path = os.path.join(root_path, self.config["paths"]["infiles"], reach_dir)
 
@@ -61,22 +65,31 @@ class CshoreAdapter(AbstractModelAdapter):
 
         logger.info(f"Binary execution finished for {infile_name}")
 
+        # Check CSHORE produced output — binary silently deletes files when
+        # water elevation exceeds maximum profile elevation
+        if not os.path.exists(os.path.join(storm_dir, "ODOC")):
+            raise RuntimeError(
+                f"CSHORE produced no output for {infile_name}. "
+                f"Surge likely exceeded profile crest elevation. "
+                f"Check storm forcing or profile extent."
+            )
+
         # Load results from the isolated directory
         params, bc, veg, hydro, sed, morpho = self.csio.load_CSHORE_results(storm_dir)
         logger.info(f"Results loaded for {infile_name}")
 
-        # Return structured results
+        # Return structured results in meters (SI throughout)
         return {
             "storm_id": infile_name,
-            "initial_profile_x": np.array(morpho["x"][0]) / 0.3048,
-            "initial_profile_zb": np.array(morpho["zb"][0]) / 0.3048,
-            "final_profile_x": np.array(morpho["x"][-1]) / 0.3048,
-            "final_profile_zb": np.array(morpho["zb"][-1]) / 0.3048,
+            "initial_profile_x": np.array(morpho["x"][0]),
+            "initial_profile_zb": np.array(morpho["zb"][0]),
+            "final_profile_x": np.array(morpho["x"][-1]),
+            "final_profile_zb": np.array(morpho["zb"][-1]),
         }
 
     def save_master_parquet(self, reach_dir: str, profile_key: str, data: List[Dict]):
         root_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
         reach_out_path = os.path.join(
             root_path, self.config["paths"]["outfiles"], reach_dir
@@ -85,15 +98,19 @@ class CshoreAdapter(AbstractModelAdapter):
 
         parquet_filename = os.path.join(reach_out_path, f"{profile_key}.parquet")
 
-        # Consolidate list of dicts to DataFrame
+        # Consolidate list of dicts to DataFrame; convert m→ft for Beach-FX output
         master_df = pd.DataFrame(data)
+        master_df["chain_order"] = range(len(master_df))   # preserve chain sequence
+        for col in ["initial_profile_x", "initial_profile_zb", "final_profile_x", "final_profile_zb"]:
+            if col in master_df.columns:
+                master_df[col] = master_df[col].apply(lambda v: v / 0.3048)
         master_df["profile_id"] = profile_key.replace("_chain", "")
         write_parquet(parquet_filename, master_df.to_dict(orient="list"))
         logger.info(f"Successfully wrote master output: {parquet_filename}")
 
     def parse_outputs(self, reach_dir: str) -> None:
         root_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
         reach_out_path = os.path.join(
             root_path, self.config["paths"]["outfiles"], reach_dir

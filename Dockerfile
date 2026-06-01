@@ -19,10 +19,10 @@ WORKDIR /app
 COPY . .
 
 # Ensure the Linux binary is executable
-RUN chmod +x dist_py/executables/CSHORE_USACE_LINUX.out
+RUN chmod +x src/executables/CSHORE_USACE_LINUX.out
 
 # Install dependencies using uv
 RUN uv sync
 
 # Default command to run the workflow
-CMD ["uv", "run", "dist_py/1_make_cshore_infiles.py"]
+CMD ["uv", "run", "examples/run_cshore.py"]

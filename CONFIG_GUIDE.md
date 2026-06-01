@@ -1,66 +1,99 @@
 # BeachFX-CSHORE Configuration Guide
 
-This guide explains the parameters found in `config.json`. Most values are converted from Imperial (US) to Metric (SI) during processing, but inputs are generally specified in the units familiar to coastal engineers.
+All runtime inputs are declared in `config.json` at the project root.
 
 ## 1. Paths (`paths`)
-Defines the directory structure for the workflow.
-- **`data`**: Root folder for input profiles and storm data.
-- **`infiles`**: Where the generated CSHORE input files are stored.
-- **`outfiles`**: Where the HDF5 and final `.dat` result files are stored.
-- **`executables`**: Location of the CSHORE binary (`.out` or `.exe`).
 
-## 2. Profile Parameters (`profile`)
-Defines the beach geometry.
-- **`names`**: Unique identifiers for each reach (e.g., "Reach1").
-- **`height_dune`**: Elevation of the dune crest (ft).
-- **`width_dune`**: Width of the flat dune crest (ft).
-- **`width_berm`**: Width of the berm (ft).
-- **`width_upland`**: Width of the upland area (ft).
-- **`height_upland`**: Elevation of the upland area (ft).
-- **`slope_dune`**: Slope of the dune face (rise/run).
-- **`height_berm`**: Elevation of the berm (ft).
-- **`slope_foreshore`**: Slope of the foreshore/beach face (rise/run).
-- **`d50`**: Median sediment grain size (mm).
+| Key | Description |
+|---|---|
+| `data` | Root folder for input data files |
+| `storms` | Path to storm forcing parquet file |
+| `infiles` | Where generated CSHORE input files are written |
+| `outfiles` | Where results and plots are written |
+
+The CSHORE binary is selected automatically by platform from `src/executables/` — no config needed.
+
+## 2. Profile (`profile`)
+
+Each reach is a named entry with two fields:
+
+```json
+"profile": {
+    "Reach1": { "d50": 0.3, "file": "data/Profile.csv" }
+}
+```
+
+| Key | Description |
+|---|---|
+| `d50` | Median sediment grain size (mm) |
+| `file` | Path to cross-shore profile CSV (feet, Beach-FX seaward-positive convention) |
+
+Profile CSV format: two columns `x, z` (no header), values in feet. The loader converts to meters and reverses to CSHORE's landward-positive convention automatically. To add a new reach, add an entry here — no code changes needed.
 
 ## 3. CSHORE Physics (`cshore`)
-Technical constants for the numerical model.
-- **`dx`**: Constant grid spacing between calculation nodes (m).
-- **`gamma`**: Shallow water ratio of wave height to water depth (breaking parameter). Default is 0.7.
-- **`effb`**: Suspension efficiency due to breaking wave energy (eB). Standard USACE value is 0.002.
-- **`efff`**: Suspension efficiency due to bottom friction (ef). Default is 0.005.
-- **`slp`**: Suspended load parameter.
-- **`slpot`**: Overtopping suspended load parameter.
-- **`tanphi`**: Tangent of the sediment friction angle.
-- **`blp`**: Bedload parameter.
-- **`sporo`**: Sediment porosity (typically 0.4).
-- **`sg`**: Specific gravity of sand grains (typically 2.65 for quartz).
-- **`temp`**: Water temperature (Celsius) used for fall velocity calculation.
-- **`salin`**: Salinity (ppt).
-- **`fw`**: Bed friction factor applied at every node.
 
-## 4. Tidal Configuration (`tide`)
-- **`amp`**: Tidal amplitude (m).
-- **`T`**: Tidal period (hours). Default 12.5 for semi-diurnal.
-- **`phases`**: Numerical code for phase shift (1=High, 2=Falling, 3=Low, 4=Rising).
+| Key | Description |
+|---|---|
+| `dx` | Cross-shore grid spacing (m) |
+| `gamma` | Breaking wave height-to-depth ratio (default 0.7) |
+| `effb` | Suspension efficiency from wave breaking (default 0.002) |
+| `efff` | Suspension efficiency from bottom friction (default 0.005) |
+| `slp` | Suspended load parameter |
+| `slpot` | Overtopping suspended load parameter |
+| `tanphi` | Tangent of sediment friction angle |
+| `blp` | Bedload parameter |
+| `rwh` | Wave runup height parameter |
+| `sporo` | Sediment porosity (typically 0.4) |
+| `sg` | Specific gravity of sand (typically 2.65 for quartz) |
+| `temp` | Water temperature (°C) for fall velocity calculation |
+| `salin` | Salinity (ppt) |
+| `fw` | Bed friction factor applied at every node |
 
-## 5. Model Logic (`model_logic`)
-Control toggles for CSHORE's FORTRAN engine.
-- **`iprofl`**: Toggle for morphology (1.1 = Run with erosion/accretion, 0 = Fixed).
-- **`isedav`**: Sand availability (0 = Unlimited, 1 = Hard bottom/Limited).
-- **`iover`**: Enable overtopping calculations (1 = On, 0 = Off).
-- **`iperm`**: Permeability (1 = Permeable bottom, 0 = Impermeable).
-- **`infilt`**: Include infiltration landward of dune crest (1 = Yes, 0 = No).
-- **`iwtran`**: Wave transmission due to overtopping.
-- **`iroll`**: Include wave roller physics (1 = Yes, 0 = No).
-- **`iwind`**: Include wind effects.
-- **`itide`**: Include tidal effect on currents (0 = No).
-- **`ilab`**: Controls boundary condition timing. **Must be 0 for this workflow.**
+## 4. Model Logic (`model_logic`)
 
-## 6. Vegetation (`vegetation`)
-- **`enabled`**: Boolean to toggle vegetation effects.
-- **`Cd`**: Vegetation drag coefficient.
-- **`n`**: Vegetation density.
-- **`dia`**: Vegetation stem diameter (m).
-- **`ht`**: Vegetation height (m).
-- **`rod`**: Erosion limit below sand for vegetation failure.
-- **`extent`**: Fraction of the domain covered by vegetation (e.g., [0.7, 1.0]).
+CSHORE Fortran engine control flags.
+
+| Key | Description |
+|---|---|
+| `iprofl` | Morphology update: `1.1` = active erosion/accretion, `0` = fixed bed |
+| `iline` | Wave transformation mode |
+| `isedav` | Sediment availability: `0` = unlimited, `1` = hard bottom |
+| `iperm` | Permeability: `0` = impermeable, `1` = permeable |
+| `iover` | Overtopping: `1` = on, `0` = off |
+| `infilt` | Infiltration landward of dune crest: `1` = on |
+| `iwtran` | Wave transmission through overtopping |
+| `ipond` | Ponding landward of structure |
+| `iwcint` | Wave-current interaction |
+| `iroll` | Wave roller physics |
+| `iwind` | Wind effects |
+| `itide` | Tidal effect on currents |
+| `ilab` | Boundary condition timing — **must be `0` for field conditions** |
+
+## 5. Vegetation (`vegetation`)
+
+| Key | Description |
+|---|---|
+| `enabled` | `false` disables vegetation entirely (default) |
+
+When enabling vegetation, add the following fields:
+
+```json
+"vegetation": {
+    "enabled": true,
+    "Cd": 1.0,
+    "n": 100.0,
+    "dia": 0.01,
+    "ht": 0.2,
+    "rod": 0.1,
+    "extent": [0.7, 1.0]
+}
+```
+
+| Key | Description |
+|---|---|
+| `Cd` | Drag coefficient |
+| `n` | Stem density (stems/m²) |
+| `dia` | Stem diameter (m) |
+| `ht` | Canopy height (m) |
+| `rod` | Erosion depth below sand for stem failure (m) |
+| `extent` | Fractional cross-shore extent of vegetation `[start, end]` |

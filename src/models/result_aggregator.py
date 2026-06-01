@@ -29,8 +29,10 @@ class ParquetResultAggregator:
             all_data.append(df)
 
         if all_data:
-            # Consolidate into one master file
+            # Consolidate into one master file, sorted by chain order
             master_df = pd.concat(all_data, ignore_index=True)
+            if "chain_order" in master_df.columns:
+                master_df = master_df.sort_values("chain_order").reset_index(drop=True)
             # Use os.path.basename(self.reach_out_path) to get the reach name
             reach_name = os.path.basename(self.reach_out_path)
             master_filename = os.path.join(
