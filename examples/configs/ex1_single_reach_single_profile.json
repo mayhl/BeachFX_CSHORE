@@ -1,0 +1,54 @@
+{
+  "_description": "Example 1 — single reach, single profile, FWOP only",
+  "paths": {
+    "storms": "data/storms/ex_storms_10s_45d.parquet",
+    "output": "output/ex1"
+  },
+  "simulation": {
+    "sim_start":    "2025-01-01",
+    "sim_end_days": 500
+  },
+  "units": {
+    "input": "m"
+  },
+  "cshore": {
+    "blp":    0.001,
+    "effb":   0.002,
+    "gamma":  0.7,
+    "efff":   0.005,
+    "slp":    0.5,
+    "slpot":  0.1,
+    "tanphi": 0.63,
+    "dx":     1.0,
+    "rwh":    0.02,
+    "fw":     0.015,
+    "iprofl": 1.1
+  },
+  "alternatives": {
+    "FWOP": {
+      "storm": {
+        "T_recover":      21.0,
+        "recovery_model": "linear",
+        "hydro_dt":             1.0
+      },
+      "erosion": {
+        "type":         "uniform",
+        "rate":         0.00082,
+        "interval": 30.0
+      },
+      "slc": {
+        "rate":         1.1e-5,
+        "interval": 30.0,
+        "scenario":     "mid"
+      }
+    }
+  },
+  "reaches": {
+    "Reach1": {
+      "profiles": ["data/profiles/reach1_p1.csv"],
+      "berm_elevation": 1.83,
+      "datum": 0.0,
+      "cshore":   { "d50": 0.3 }
+    }
+  }
+}

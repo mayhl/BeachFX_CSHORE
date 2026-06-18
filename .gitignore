@@ -27,6 +27,19 @@ data/New_EventDate_LC.csv
 # Submodules / nested repos
 chart/
 StormSim-Library/
+beachfx-kernel-mods-master/
 
 # Temp scripts
 temp/
+
+# Pipeline output
+output/
+
+# Large raw input data
+CHS-SA_TS_SimB_Post0_SP1416_STWAVE14_Timeseries.csv
+data/chs_*.parquet
+data/top*.parquet
+data/EventDate_LC.parquet
+
+# Generated artifacts
+examples/storm_recovery_experiment.png

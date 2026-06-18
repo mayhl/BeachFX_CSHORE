@@ -90,6 +90,15 @@ def select_storms(df, args):
 
     selected_stats = stats.loc[sorted(ids)].sort_values("start_date")
 
+    if args.min_spacing is not None:
+        selected_stats = selected_stats.sort_values("start_date")
+        kept, last_date = [], None
+        for sid, row in selected_stats.iterrows():
+            if last_date is None or (row["start_date"] - last_date).days >= args.min_spacing:
+                kept.append(sid)
+                last_date = row["start_date"]
+        selected_stats = selected_stats.loc[kept]
+
     if args.n is not None:
         selected_stats = selected_stats.head(args.n)
 
@@ -107,14 +116,33 @@ def select_storms(df, args):
     return df[df["Storm ID"].isin(final_ids)]
 
 
-def convert(df):
+def convert(df, sim_start=None, spacing_days=None):
+    """Convert selected CHS storms to the parquet schema.
+
+    If *sim_start* and *spacing_days* are both provided, storm hydrographs are
+    re-timed onto synthetic evenly-spaced dates::
+
+        storm_i_start = sim_start + (i+1) * spacing_days
+
+    The relative timing within each storm's hydrograph is preserved.
+    This is required when the source data is a concurrent CHS ensemble
+    (all storms simulated in the same short window) rather than sequential
+    historical events.
+    """
+    origin = pd.Timestamp(sim_start) if sim_start else None
     rows = []
-    for storm_id, grp in df.groupby("Storm ID", sort=True):
+    for storm_idx, (storm_id, grp) in enumerate(df.groupby("Storm ID", sort=True)):
         grp = grp.sort_values("yyyymmddHHMM").reset_index(drop=True)
-        dates = pd.to_datetime(
+        orig_dates = pd.to_datetime(
             grp["yyyymmddHHMM"].astype(int).astype(str).str.zfill(12),
             format="%Y%m%d%H%M",
         )
+        if origin is not None and spacing_days is not None:
+            storm_start = origin + pd.Timedelta(days=(storm_idx + 1) * spacing_days)
+            dates = storm_start + (orig_dates - orig_dates.iloc[0])
+        else:
+            dates = orig_dates
+
         for i, (_, row) in enumerate(grp.iterrows()):
             rows.append({
                 "lifecycle":        0,
@@ -125,12 +153,17 @@ def convert(df):
                 "wave_peak_period": row["Peak Period"],
                 "wave_direction":   row["Mean Wave Direction"],
                 "water_elevation":  row["Water Elevation"],
+                # Wind speed retained so storm_events.csv can derive Saffir-Simpson.
+                # NOTE: recurrence_interval_yr and aep are NOT available in this
+                # timeseries CSV — they require a separate JPM rates file keyed by
+                # storm_id.  Populate those storm_events.csv columns from that file.
+                "wind_speed_ms":    row.get("Wind Magnitude", float("nan")),
             })
 
     out = pd.DataFrame(rows)
     return out[[
         "lifecycle", "wave_peak_period", "wave_direction", "hydro_tstp",
-        "storm_id", "water_elevation", "wave_height", "date",
+        "storm_id", "water_elevation", "wave_height", "date", "wind_speed_ms",
     ]]
 
 
@@ -145,18 +178,24 @@ def main():
     parser.add_argument("--n",         type=int,             help="Keep first N after other filters")
     parser.add_argument("--top-surge", type=int, dest="top_surge", help="Top N by peak surge")
     parser.add_argument("--top-wave",  type=int, dest="top_wave",  help="Top N by peak Hm0")
-    parser.add_argument("--min-surge", type=float, dest="min_surge", help="Min peak surge (m)")
-    parser.add_argument("--max-surge", type=float, dest="max_surge", help="Max peak surge (m)")
-    parser.add_argument("--min-wave",  type=float, dest="min_wave",  help="Min peak Hm0 (m)")
-    parser.add_argument("--ids",       help="Comma-separated storm IDs e.g. 65,71,204")
+    parser.add_argument("--min-surge",   type=float, dest="min_surge",   help="Min peak surge (m)")
+    parser.add_argument("--max-surge",   type=float, dest="max_surge",   help="Max peak surge (m)")
+    parser.add_argument("--min-wave",    type=float, dest="min_wave",    help="Min peak Hm0 (m)")
+    parser.add_argument("--min-spacing",  type=int,   dest="min_spacing",  help="Min days between storm starts in source data (greedy; not useful for concurrent CHS ensembles)")
+    parser.add_argument("--spacing-days", type=float, dest="spacing_days", help="Re-time storms onto synthetic dates: storm_i starts at sim_start + (i+1)*spacing_days")
+    parser.add_argument("--sim-start",    default="2025-01-01", dest="sim_start", help="Simulation origin for --spacing-days (default: 2025-01-01)")
+    parser.add_argument("--ids",          help="Comma-separated storm IDs e.g. 65,71,204")
     args = parser.parse_args()
 
     print(f"Input : {args.csv}")
     print(f"Output: {args.out}")
+    if args.spacing_days:
+        print(f"Re-timing: sim_start={args.sim_start}, spacing={args.spacing_days} days/storm")
 
     df  = load_chs(args.csv)
     sub = select_storms(df, args)
-    out = convert(sub)
+    out = convert(sub, sim_start=args.sim_start if args.spacing_days else None,
+                  spacing_days=args.spacing_days)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     out.to_parquet(args.out, index=False)
