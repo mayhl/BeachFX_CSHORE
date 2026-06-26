@@ -14,25 +14,23 @@ import pytest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from framework.config import ReachConfig
-from framework.profile import Profile
-from framework.reach import ReachContext, run_lifecycle
-from framework.results import NullResultsSink
-from framework.runner.local import LocalCSHORERunner
-from framework.types import SnapshotLabel
+from erosion.config import ReachConfig
+from erosion.profile import Profile
+from erosion.reach import ReachContext, run_lifecycle
+from erosion.results import NullResultsSink
+from erosion.runner.local import LocalCSHORERunner
+from erosion.types import SnapshotLabel
 
 
 @pytest.fixture(scope="module")
-def config() -> dict:
-    with open(os.path.join(ROOT, "config.json")) as f:
-        return json.load(f)
+def cshore_params():
+    return ReachConfig().cshore
 
 
 @pytest.fixture(scope="module")
-def real_profile(config) -> Profile:
-    from utils.geometry import load_raw_profile
-    reach_cfg = config["profile"]["Reach1"]
-    raw = load_raw_profile(os.path.join(ROOT, reach_cfg["file"]), reach_cfg["d50"])
+def real_profile() -> Profile:
+    from erosion.geometry import load_raw_profile
+    raw = load_raw_profile(os.path.join(ROOT, "data/profiles/reach1_p0.csv"), 0.3)
     return Profile(id="Reach1_p0", x=raw["x"], zb=raw["z"].copy(), d50=raw["d50"])
 
 
@@ -54,12 +52,8 @@ def _storms_df(n_storms: int = 3) -> pd.DataFrame:
 
 
 @pytest.mark.integration
-def test_three_storm_chain_completes(config, real_profile):
+def test_three_storm_chain_completes(cshore_params, real_profile):
     """Full 3-storm chain via run_lifecycle; profile is updated after each storm."""
-    cshore_params = ReachConfig.model_validate(
-        {"cshore": {**config.get("cshore", {}), **config.get("model_logic", {})}},
-    ).cshore
-
     with tempfile.TemporaryDirectory() as work_dir:
         runner = LocalCSHORERunner(params=cshore_params, work_dir=work_dir)
         p = Profile(id=real_profile.id, x=real_profile.x.copy(),
@@ -89,12 +83,8 @@ def test_three_storm_chain_completes(config, real_profile):
 
 
 @pytest.mark.integration
-def test_three_storm_chain_no_nans(config, real_profile):
+def test_three_storm_chain_no_nans(cshore_params, real_profile):
     """No NaN values in bed level or x-grid after a 3-storm chain."""
-    cshore_params = ReachConfig.model_validate(
-        {"cshore": {**config.get("cshore", {}), **config.get("model_logic", {})}},
-    ).cshore
-
     with tempfile.TemporaryDirectory() as work_dir:
         runner = LocalCSHORERunner(params=cshore_params, work_dir=work_dir)
         p = Profile(id=real_profile.id, x=real_profile.x.copy(),

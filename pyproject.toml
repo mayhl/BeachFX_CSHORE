@@ -1,11 +1,12 @@
 [project]
-name = "beachfx-cshore"
+name = "erosion"
 version = "0.1.0"
-description = "Setup and run CSHORE for Beach-fx"
+description = "CHART FEAT erosion module — lifecycle orchestrator + CSHORE cross-shore morphology"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy",
+    "scipy",
     "h5py",
     "pandas>=3.0.2",
     "pyarrow>=24.0.0",
@@ -17,7 +18,14 @@ dependencies = [
 ]
 
 [project.scripts]
-run-cshore = "examples.run_cshore:main"
+run-pipeline = "erosion.pipeline:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/erosion"]
 
 [tool.uv]
-package = false
+package = true

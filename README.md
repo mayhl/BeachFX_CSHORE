@@ -1,47 +1,69 @@
-# BeachFX-CSHORE
+# erosion
 
-Python simulation framework for coastal Beach-FX studies using CSHORE as the cross-shore morphology engine. Supports multi-reach, multi-alternative (FWOP/FWP), and multi-lifecycle Monte Carlo simulations driven by a structured event queue.
+The **erosion module** of CHART FEAT — a Python simulation framework for storm-driven erosion of ocean-facing sandy beaches, using CSHORE as the 1D cross-shore morphology engine. It couples a multi-decade lifecycle orchestrator with CSHORE per-storm response to support Coastal Storm Risk Management (CSRM) feasibility studies, and supports multi-reach, multi-alternative (FWOP/FWP), and multi-lifecycle Monte Carlo simulations.
 
 ## Structure
 
 ```
 src/
-  framework/       # event-driven simulation engine
-    events/        # StormEvent, RecoveryEvent, NourishmentEvent, BackgroundErosion, SLC
-    runner/        # LocalCSHORERunner, MockCSHORERunner
-    config.py      # ReachConfig, CSHOREParams, NourishmentConfig, ...
-    queue_builder.py
-    reach.py
-    results.py
-  models/          # legacy ChainedPolicy / CshoreAdapter (run_cshore.py)
-  utils/           # profile loading, geometry, sediment helpers
-  executables/     # CSHORE binaries (macOS, Linux, Windows)
+  erosion/             # the erosion module (interval-loop simulation engine)
+    reach.py           # run_lifecycle() — the lifecycle orchestrator
+    interstorm.py      # Phase 1: background erosion + sea-level-change ticks
+    storm.py           # Phase 2: parallel CSHORE driver + storm scheduling
+    nourishment.py     # Phase 3: berm recovery + nourishment campaigns
+    profile.py         # Profile data + profile events (StormResponse, Recovery, ...)
+    metrics.py         # BeachFX morphology classification + 0-D metrics
+    config.py          # ReachConfig, CSHOREParams, NourishmentConfig, ...
+    units.py           # unit-aware config fields (ft/m, cy/m3)
+    results.py         # ParquetResultsSink (output writer)
+    geometry.py        # profile CSV loading
+    viz.py             # plotting helpers
+    runner/            # CSHORE execution boundary
+      base.py          # CSHORERunner ABC, CSHOREResult
+      local.py         # LocalCSHORERunner (subprocess)
+      mock.py          # MockCSHORERunner (tests)
+      cshore_io.py     # CSHORE infile generation + ODOC/OBPROF/OSETUP parsing
+      vfall.py         # sediment fall-velocity (CSHORE wf input)
+    pipeline.py      # main entry point (run-pipeline console script)
+  executables/         # CSHORE binaries (macOS, Linux, Windows)
 data/
-  profiles/        # cross-shore profile CSVs (x ft, z ft, NAVD88)
-  storms/          # storm forcing parquets (one row per hydrograph timestep)
+  profiles/            # cross-shore profile CSVs (x ft, z ft, NAVD88)
+  storms/              # storm forcing parquets (one row per hydrograph timestep)
 examples/
-  run_pipeline.py  # main entry point — multi-reach × alternative × lifecycle
-  configs/         # example config files (ex1–ex4)
-tests/             # unit + integration test suite
+  configs/             # example config files (ex1–ex4)
+tests/                 # unit + integration test suite
 ```
+
+## Architecture
+
+Each lifecycle runs as an **interval loop** over the storm schedule
+(`erosion/reach.py::run_lifecycle`). For every storm, three phases execute in order:
+
+1. **Inter-storm** (`run_interstorm`) — apply background erosion and sea-level-change ticks from the previous storm up to this one.
+2. **Storm response** (`run_parallel_cshore`) — run CSHORE for every profile in parallel (one subprocess per profile, capped at CPU count); interpolate each result back onto the profile's fixed grid.
+3. **Campaign** (`run_campaign`) — post-storm berm recovery, then any triggered nourishment, scheduled by priority across profiles.
+
+Profiles are pure data; physics is applied through small `ProfileEvent` types
+(`StormResponse`, `Recovery`, `FullNourishment`, `PartialNourishment`, `ErosionTick`).
+CSHORE is pluggable behind the `CSHORERunner` interface (`LocalCSHORERunner` for the
+real binary, `MockCSHORERunner` for tests).
 
 ## Quick Start
 
+The `run-pipeline` console script takes a config by **short name** (resolved
+against `examples/configs/`) or by path:
+
 ```bash
-# Ex1 — single reach, single profile, FWOP
-uv run examples/run_pipeline.py examples/configs/ex1_single_reach_single_profile.json
+uv run run-pipeline ex1    # single reach, single profile, FWOP
+uv run run-pipeline ex2    # single reach, 3 profiles with priority ordering
+uv run run-pipeline ex3    # 3 reaches, 2-3 profiles each
+uv run run-pipeline ex4    # single reach, FWOP vs FWP (with nourishment)
 
-# Ex2 — single reach, 3 profiles with priority ordering, FWOP
-uv run examples/run_pipeline.py examples/configs/ex2_single_reach_multi_profile.json
+# By path, and with a worker cap:
+uv run run-pipeline examples/configs/ex3_multi_reach_multi_profile.json --workers 4
 
-# Ex3 — 3 reaches, 2-3 profiles each, FWOP
-uv run examples/run_pipeline.py examples/configs/ex3_multi_reach_multi_profile.json
-
-# Ex4 — single reach, 3 profiles, FWOP vs FWP (with nourishment)
-uv run examples/run_pipeline.py examples/configs/ex4_multi_profile_multi_alt.json
-
-# Parallel workers (default: cpu_count, capped at lifecycle count)
-uv run examples/run_pipeline.py examples/configs/ex3_multi_reach_multi_profile.json --workers 4
+# Equivalent module form:
+uv run python -m erosion ex1
 ```
 
 Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
@@ -247,22 +269,23 @@ uv run examples/chs_to_parquet.py \
 
 ```
 output/{reach}/{alternative}/lc_{lc:04d}/
-  snapshots.parquet      # profile_id, label, t, node_idx, x, zb, zbe
-  profiles.parquet       # final profile state per profile
-  profile_events.parquet # per-profile event log
-  reach_events.csv       # reach-level event log
+  profiles.parquet        # all labeled snapshots — profile_id, label, t, node_idx, x, zb
+  storm_hazard.parquet    # per-storm CSHORE output — profile_id, t_storm, node_idx, x, mwl, Hs, runup_m
+  profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
+  profile_events.parquet  # per-(profile, snapshot) log + storm_response_type
+  segment_events.csv      # nourishment events — event_type, profile_id, t_start, t_end, volume_m3, volume_cy
   run_metadata.json
   run_summary.txt
 ```
 
-Snapshot labels follow the Beach-FX convention: `INIT`, `PreStorm`, `PostStorm`, `REC`, `SSN`, `ESN`, `SEN`, `EEN`, `EndIteration`.
+Snapshot labels follow the Beach-fx convention: `INIT`, `PreStorm`, `PostStorm`, `INUNDATION`, `RECS`, `REC`, `Pre-PDI`, `Post-PDI`, `SSN`, `ESN`, `SEN`, `EEN`, `Periodic`, `EndIteration`.
 
 ## Parallelism
 
 Lifecycles within each (reach, alternative) pair run in parallel via Dask:
 
 ```bash
-uv run examples/run_pipeline.py config.json --workers 4
+uv run run-pipeline ex3 --workers 4
 ```
 
 Workers share the storms DataFrame in memory (thread mode — no serialisation overhead). Dask dashboard available at `http://localhost:8787` during the run.
@@ -278,6 +301,7 @@ uv sync
 ## Running Tests
 
 ```bash
-uv run pytest tests/                   # unit tests only
-uv run pytest tests/ -m integration   # requires CSHORE binary in src/executables/
+uv run pytest tests/                       # full suite (unit + integration)
+uv run pytest tests/ -m "not integration"  # unit tests only
+uv run pytest tests/ -m integration        # integration only — needs CSHORE binary in src/executables/
 ```

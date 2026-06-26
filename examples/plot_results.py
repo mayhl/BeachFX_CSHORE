@@ -24,7 +24,7 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from framework.viz import (load_runs, plot_metrics, plot_profile_evolution,
+from erosion.viz import (load_runs, plot_metrics, plot_profile_evolution,
                            generate_profile_frames, generate_event_transition_frames,
                            make_profile_video)
 

@@ -10,22 +10,20 @@ import pytest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from framework.config import ReachConfig
-from framework.profile import Profile
-from framework.runner.local import LocalCSHORERunner
+from erosion.config import ReachConfig
+from erosion.profile import Profile
+from erosion.runner.local import LocalCSHORERunner
 
 
 @pytest.fixture(scope="module")
-def config() -> dict:
-    with open(os.path.join(ROOT, "config.json")) as f:
-        return json.load(f)
+def cshore_params():
+    return ReachConfig().cshore
 
 
 @pytest.fixture(scope="module")
-def real_profile(config) -> Profile:
-    from utils.geometry import load_raw_profile
-    reach_cfg = config["profile"]["Reach1"]
-    raw = load_raw_profile(os.path.join(ROOT, reach_cfg["file"]), reach_cfg["d50"])
+def real_profile() -> Profile:
+    from erosion.geometry import load_raw_profile
+    raw = load_raw_profile(os.path.join(ROOT, "data/profiles/reach1_p0.csv"), 0.3)
     return Profile(id="Reach1_p0", x=raw["x"], zb=raw["z"], d50=raw["d50"])
 
 
@@ -43,10 +41,7 @@ def _storm_forcing() -> dict:
 
 
 @pytest.mark.integration
-def test_single_storm_changes_profile(config, real_profile):
-    cshore_params = ReachConfig.model_validate(
-        {"cshore": {**config.get("cshore", {}), **config.get("model_logic", {})}},
-    ).cshore
+def test_single_storm_changes_profile(cshore_params, real_profile):
     with tempfile.TemporaryDirectory() as work_dir:
         runner = LocalCSHORERunner(params=cshore_params, work_dir=work_dir)
         zb_before = real_profile.zb.copy()
@@ -64,10 +59,7 @@ def test_single_storm_changes_profile(config, real_profile):
 
 
 @pytest.mark.integration
-def test_single_storm_result_has_no_nans(config, real_profile):
-    cshore_params = ReachConfig.model_validate(
-        {"cshore": {**config.get("cshore", {}), **config.get("model_logic", {})}},
-    ).cshore
+def test_single_storm_result_has_no_nans(cshore_params, real_profile):
     with tempfile.TemporaryDirectory() as work_dir:
         runner = LocalCSHORERunner(params=cshore_params, work_dir=work_dir)
         result = runner.run(real_profile, _storm_forcing())
