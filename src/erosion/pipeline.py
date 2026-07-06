@@ -24,6 +24,7 @@ Output layout:
             run_metadata.json
             run_summary.txt
 """
+
 from __future__ import annotations
 
 import glob
@@ -57,6 +58,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Storm events output
 # ---------------------------------------------------------------------------
+
 
 def _saffir_simpson(wind_ms: float) -> int:
     """Map 1-min sustained wind speed (m/s) to Saffir-Simpson category (0–5).
@@ -99,15 +101,17 @@ def _write_storm_events(storms_df: pd.DataFrame, out_root: str) -> None:
         else:
             ss = None
 
-        records.append({
-            "lifecycle":              int(lc),
-            "storm_id":               str(storm_id),
-            "event_date":             event_date,
-            "duration_hours":         round(duration_hours, 2),
-            "saffir_simpson":         ss,
-            "recurrence_interval_yr": None,   # needs a JPM rates file keyed by storm_id
-            "aep":                    None,   # = 1 / recurrence_interval_yr
-        })
+        records.append(
+            {
+                "lifecycle": int(lc),
+                "storm_id": str(storm_id),
+                "event_date": event_date,
+                "duration_hours": round(duration_hours, 2),
+                "saffir_simpson": ss,
+                "recurrence_interval_yr": None,  # needs a JPM rates file keyed by storm_id
+                "aep": None,  # = 1 / recurrence_interval_yr
+            }
+        )
 
     out_df = pd.DataFrame(records)
     csv_path = os.path.join(out_root, "storm_events.csv")
@@ -119,6 +123,7 @@ def _write_storm_events(storms_df: pd.DataFrame, out_root: str) -> None:
 # ---------------------------------------------------------------------------
 # Config helpers
 # ---------------------------------------------------------------------------
+
 
 def _resolve_config(arg: str) -> str:
     """Resolve a config argument to a path.
@@ -191,21 +196,29 @@ def _load_profiles(
     profiles = []
     for i in order:
         raw = load_raw_profile(profile_paths[i], d50)
-        profiles.append(Profile(
-            id=f"{reach_id}_p{i}", x=raw["x"], zb=raw["z"].copy(),
-            d50=raw["d50"], geometry=geometry,
-        ))
+        profiles.append(
+            Profile(
+                id=f"{reach_id}_p{i}",
+                x=raw["x"],
+                zb=raw["z"].copy(),
+                d50=raw["d50"],
+                geometry=geometry,
+            )
+        )
     return profiles
 
 
 def _fresh_profiles(profiles: list[Profile]) -> list[Profile]:
-    return [Profile(id=p.id, x=p.x.copy(), zb=p.zb.copy(), d50=p.d50, geometry=p.geometry)
-            for p in profiles]
+    return [
+        Profile(id=p.id, x=p.x.copy(), zb=p.zb.copy(), d50=p.d50, geometry=p.geometry)
+        for p in profiles
+    ]
 
 
 # ---------------------------------------------------------------------------
 # Per-lifecycle unit of work
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _LifecycleJob:
@@ -233,12 +246,22 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
         infile_dir = os.path.join(sink.out_dir, "infiles") if job.save_cshore else None
         runner = LocalCSHORERunner(params=job.cfg.cshore, work_dir=work_dir, infile_dir=infile_dir)
         ctx = ReachContext(
-            reach_id=job.reach_id, alternative_id=job.alt_id, results=sink,
-            sim_start=job.sim_start, cfg=job.cfg, longshore_widths=job.longshore_widths,
+            reach_id=job.reach_id,
+            alternative_id=job.alt_id,
+            results=sink,
+            sim_start=job.sim_start,
+            cfg=job.cfg,
+            longshore_widths=job.longshore_widths,
         )
         run_lifecycle(
-            profiles, job.storms_df, job.sim_start, job.sim_end,
-            job.cfg, runner, ctx, lifecycle=job.lc,
+            profiles,
+            job.storms_df,
+            job.sim_start,
+            job.sim_end,
+            job.cfg,
+            runner,
+            ctx,
+            lifecycle=job.lc,
         )
 
     return job.reach_id, job.alt_id, job.lc
@@ -248,67 +271,84 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
 # Run
 # ---------------------------------------------------------------------------
 
+
 def run(config_path: str, max_workers: int | None = None, oversubscription: float = 2.0) -> None:
     with open(config_path) as f:
         cfg_raw = json.load(f)
 
-    paths       = cfg_raw["paths"]
-    sim         = cfg_raw["simulation"]
+    paths = cfg_raw["paths"]
+    sim = cfg_raw["simulation"]
     base_cshore = cfg_raw.get("cshore", {})
     global_alts = cfg_raw.get("alternatives", {})
-    reaches     = cfg_raw["reaches"]
+    reaches = cfg_raw["reaches"]
 
-    sim_start   = datetime.fromisoformat(sim["sim_start"])
-    sim_end     = float(sim["sim_end_days"])
-    out_root    = paths["output"]
+    sim_start = datetime.fromisoformat(sim["sim_start"])
+    sim_end = float(sim["sim_end_days"])
+    out_root = paths["output"]
     save_cshore = paths.get("save_cshore", False)
 
-    input_units   = cfg_raw.get("units", {}).get("input", "ft")
+    input_units = cfg_raw.get("units", {}).get("input", "ft")
     units_context = {"input_units": input_units}
 
-    storms_df  = pd.read_parquet(os.path.join(ROOT, paths["storms"]))
+    storms_df = pd.read_parquet(os.path.join(ROOT, paths["storms"]))
     lifecycles = sorted(storms_df["lifecycle"].unique())
 
     cpu_count = os.cpu_count() or 1
-    n_slots   = max(1, int(cpu_count * oversubscription))
+    n_slots = max(1, int(cpu_count * oversubscription))
     n_workers = max_workers or n_slots
-    log.info("Slots: cpu=%d × %.1f = %d  →  %d Dask worker(s)",
-             cpu_count, oversubscription, n_slots, n_workers)
+    log.info(
+        "Slots: cpu=%d × %.1f = %d  →  %d Dask worker(s)",
+        cpu_count,
+        oversubscription,
+        n_slots,
+        n_workers,
+    )
 
     # In-process threaded cluster: a long synchronous CSHORE subprocess can
     # starve the shared event loop and trip heartbeat timeouts (logged as ERROR
     # but harmless — the task still completes).  Give heartbeats slack, stop the
     # scheduler reaping a busy worker, and quiet routine distributed chatter.
-    dask.config.set({
-        "distributed.comm.timeouts.connect": "60s",
-        "distributed.comm.timeouts.tcp":     "60s",
-        "distributed.scheduler.worker-ttl":  None,
-        "distributed.admin.tick.limit":      "1h",
-    })
+    dask.config.set(
+        {
+            "distributed.comm.timeouts.connect": "60s",
+            "distributed.comm.timeouts.tcp": "60s",
+            "distributed.scheduler.worker-ttl": None,
+            "distributed.admin.tick.limit": "1h",
+        }
+    )
     logging.getLogger("distributed").setLevel(logging.WARNING)
 
     # One thread per worker: CSHORE runs as a subprocess so the GIL is released.
     # processes=False keeps storms_df in shared memory (no per-job serialisation).
-    with LocalCluster(
-        n_workers=n_workers, threads_per_worker=1, processes=False,
-        dashboard_address="localhost:8787",
-    ) as cluster, Client(cluster) as client:
-
-        log.info("Dask dashboard → http://localhost:8787/status  (%d worker(s), %d lifecycle(s))",
-                 n_workers, len(lifecycles))
+    with (
+        LocalCluster(
+            n_workers=n_workers,
+            threads_per_worker=1,
+            processes=False,
+            dashboard_address="localhost:8787",
+        ) as cluster,
+        Client(cluster) as client,
+    ):
+        log.info(
+            "Dask dashboard → http://localhost:8787/status  (%d worker(s), %d lifecycle(s))",
+            n_workers,
+            len(lifecycles),
+        )
 
         all_jobs: list[_LifecycleJob] = []
         for reach_id, reach_data in reaches.items():
-            reach_cshore  = reach_data.get("cshore", {})
-            alts          = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
+            reach_cshore = reach_data.get("cshore", {})
+            alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
             profile_paths = [os.path.join(ROOT, p) for p in reach_data["profiles"]]
-            priorities    = reach_data.get("profile_priority")
+            priorities = reach_data.get("profile_priority")
 
             n_profiles = len(profile_paths)
-            prios      = priorities if priorities is not None else list(range(n_profiles))
-            order      = sorted(range(n_profiles), key=lambda i: prios[i])
+            prios = priorities if priorities is not None else list(range(n_profiles))
+            order = sorted(range(n_profiles), key=lambda i: prios[i])
             longshore_widths = _resolve_widths(
-                reach_data.get("longshore_width", 1.0), order, units_context,
+                reach_data.get("longshore_width", 1.0),
+                order,
+                units_context,
             )
 
             _be = reach_data.get("berm_elevation")
@@ -317,32 +357,45 @@ def run(config_path: str, max_workers: int | None = None, oversubscription: floa
                     {"berm_elevation": _be, "datum": reach_data.get("datum", 0.0)},
                     context=units_context,
                 )
-                if _be is not None else None
+                if _be is not None
+                else None
             )
 
             for alt_id, alt_data in alts.items():
-                alt_cshore    = alt_data.pop("cshore", {})
+                alt_cshore = alt_data.pop("cshore", {})
                 merged_cshore = _merge_cshore(base_cshore, reach_cshore, alt_cshore)
-                cfg           = ReachConfig.model_validate(
-                    {**alt_data, "cshore": merged_cshore}, context=units_context,
+                cfg = ReachConfig.model_validate(
+                    {**alt_data, "cshore": merged_cshore},
+                    context=units_context,
                 )
-                base_profiles = _load_profiles(profile_paths, cfg.cshore.d50, reach_id, priorities, geometry)
+                base_profiles = _load_profiles(
+                    profile_paths, cfg.cshore.d50, reach_id, priorities, geometry
+                )
 
                 for lc in lifecycles:
-                    all_jobs.append(_LifecycleJob(
-                        reach_id=reach_id, alt_id=alt_id, lc=int(lc),
-                        base_profiles=base_profiles, cfg=cfg,
-                        storms_df=storms_df, sim_start=sim_start,
-                        sim_end=sim_end, out_root=out_root,
-                        longshore_widths=longshore_widths, save_cshore=save_cshore,
-                    ))
+                    all_jobs.append(
+                        _LifecycleJob(
+                            reach_id=reach_id,
+                            alt_id=alt_id,
+                            lc=int(lc),
+                            base_profiles=base_profiles,
+                            cfg=cfg,
+                            storms_df=storms_df,
+                            sim_start=sim_start,
+                            sim_end=sim_end,
+                            out_root=out_root,
+                            longshore_widths=longshore_widths,
+                            save_cshore=save_cshore,
+                        )
+                    )
 
         log.info("Submitting %d job(s) total", len(all_jobs))
         # pure=False → random task keys; skips deterministic tokenization of the
         # job payload (Profile dataclasses w/ numpy arrays, storms_df), which
         # newer Dask cannot hash and would otherwise raise TokenizationError on.
-        fut_to_job = {fut: job
-                      for fut, job in zip(client.map(_run_lifecycle, all_jobs, pure=False), all_jobs)}
+        fut_to_job = {
+            fut: job for fut, job in zip(client.map(_run_lifecycle, all_jobs, pure=False), all_jobs)
+        }
 
         total_done = total_failed = 0
         for fut in as_completed(fut_to_job):
@@ -371,14 +424,30 @@ def main(argv: list[str] | None = None) -> None:
         datefmt="%H:%M:%S",
     )
     parser = argparse.ArgumentParser(prog="run-pipeline")
-    parser.add_argument("config", nargs="?", default="ex1",
-                        help="config name (e.g. ex1) resolved against examples/configs/, or a .json path")
-    parser.add_argument("--workers", type=int, default=None,
-                        help="Dask worker count (default: cpu_count × oversubscription)")
-    parser.add_argument("--oversubscription", type=float, default=2.0,
-                        help="CSHORE slot multiplier relative to cpu_count (default: 2.0)")
+    parser.add_argument(
+        "config",
+        nargs="?",
+        default="ex1",
+        help="config name (e.g. ex1) resolved against examples/configs/, or a .json path",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Dask worker count (default: cpu_count × oversubscription)",
+    )
+    parser.add_argument(
+        "--oversubscription",
+        type=float,
+        default=2.0,
+        help="CSHORE slot multiplier relative to cpu_count (default: 2.0)",
+    )
     args = parser.parse_args(argv)
-    run(_resolve_config(args.config), max_workers=args.workers, oversubscription=args.oversubscription)
+    run(
+        _resolve_config(args.config),
+        max_workers=args.workers,
+        oversubscription=args.oversubscription,
+    )
 
 
 if __name__ == "__main__":

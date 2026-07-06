@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import math
 import logging
-from typing import Annotated, Literal, TYPE_CHECKING, Union
+import math
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 from .units import ufloat
 
 if TYPE_CHECKING:
-    from .profile import Profile
     from .config import ReachConfig
+    from .profile import Profile
 
 log = logging.getLogger(__name__)
 
@@ -19,16 +19,18 @@ log = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
+
 class SLCConfig(BaseModel):
     """Sea-level change policy for one reach.
 
     ``rate`` is in m/day (positive = rising sea level, which lowers the bed equilibrium).
     ``per_profile_rates`` overrides ``rate`` for specific profiles.
     """
+
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
     interval: ufloat("days") = 30.0
-    scenario: str = "mid"                   # label carried into output metadata
+    scenario: str = "mid"  # label carried into output metadata
 
 
 class UniformErosionConfig(BaseModel):
@@ -37,6 +39,7 @@ class UniformErosionConfig(BaseModel):
     ``rate`` is in m/day.  ``per_profile_rates`` maps profile_id → rate and,
     if non-empty, takes precedence over ``rate`` for those profiles.
     """
+
     type: Literal["uniform"] = "uniform"
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
@@ -49,11 +52,12 @@ class GenCadeErosionConfig(BaseModel):
     Params TBD — discriminator keeps the schema extensible without changing
     ``ReachConfig`` once GenCade is implemented.
     """
+
     type: Literal["gencade"] = "gencade"
 
 
 ErosionConfig = Annotated[
-    Union[UniformErosionConfig, GenCadeErosionConfig],
+    UniformErosionConfig | GenCadeErosionConfig,
     Field(discriminator="type"),
 ]
 
@@ -61,6 +65,7 @@ ErosionConfig = Annotated[
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _erosion_rate(profile: Profile, ecfg: UniformErosionConfig | None) -> float:
     if ecfg is None:
@@ -82,6 +87,7 @@ def _apply_tick(
     slc: SLCConfig | None,
 ) -> None:
     from .profile import ErosionTick
+
     ErosionTick(
         t=t_tick,
         dz_erosion=_erosion_rate(profile, ecfg) * dt,
@@ -92,6 +98,7 @@ def _apply_tick(
 # ---------------------------------------------------------------------------
 # Phase 1 runner
 # ---------------------------------------------------------------------------
+
 
 def run_interstorm(
     profiles: list[Profile],
@@ -115,14 +122,14 @@ def run_interstorm(
 
     interval = min(
         ecfg.interval if ecfg is not None else math.inf,
-        slc.interval  if slc  is not None else math.inf,
+        slc.interval if slc is not None else math.inf,
     )
     if math.isinf(interval):
         return  # no erosion or SLC configured
 
     t = t_start
     while t < t_storm:
-        dt     = min(interval, t_storm - t)
+        dt = min(interval, t_storm - t)
         t_tick = t + dt
         for p in profiles:
             _apply_tick(p, dt, t_tick, ecfg, slc)

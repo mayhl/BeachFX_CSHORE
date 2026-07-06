@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import CSHOREResult, CSHORERunner
 from ..profile import Profile
+from .base import CSHOREResult, CSHORERunner
 
 
 class MockCSHORERunner(CSHORERunner):

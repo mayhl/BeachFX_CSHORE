@@ -1,0 +1,57 @@
+{
+  "datum": 0.0,
+  "design_BE": 2.0,
+  "knots_x": [
+    19.619420944862068,
+    39.0,
+    56.0,
+    300.0,
+    320.0
+  ],
+  "knots_z": [
+    0.0,
+    1.9941850113187973,
+    1.9941850113187973,
+    3.9803480688856,
+    3.9803480688856
+  ],
+  "metrics": {
+    "berm_elevation": 1.9941850113187973,
+    "berm_scarp": false,
+    "berm_width": 17.0,
+    "dune_back_relief": NaN,
+    "dune_back_slope": NaN,
+    "dune_back_width": 0.0,
+    "dune_crest_elevation": NaN,
+    "dune_crest_x": NaN,
+    "dune_front_relief": NaN,
+    "dune_front_slope": NaN,
+    "dune_front_width": 0.0,
+    "dune_scarp": false,
+    "dune_top_width": 0.0,
+    "dune_width": 0.0,
+    "fit_quality": 0.7654408826528174,
+    "foreshore_slope": 0.10237650667585005,
+    "morph_type": "HIGH_UPLAND",
+    "n_upland_nodes": 21,
+    "scarp_height": NaN,
+    "shoreline_x": 19.619420944862068,
+    "upland_elevation": 3.9803480688856,
+    "volume_above_datum": 1035.5785422573567
+  },
+  "name": "trapezoidal_highupland_noisy",
+  "spec": {
+    "berm_elevation": 2.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 3.0,
+      "front_width": 15.0,
+      "shape": "trapezoidal",
+      "sigma": 6.0,
+      "top_width": 12.0
+    },
+    "noise": 0.05,
+    "seed": 6,
+    "upland_elevation": 4.0
+  }
+}

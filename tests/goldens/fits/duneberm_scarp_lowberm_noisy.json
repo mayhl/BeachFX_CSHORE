@@ -1,0 +1,63 @@
+{
+  "datum": 0.0,
+  "design_BE": 3.0,
+  "knots_x": [
+    19.819029228436023,
+    59.0,
+    80.0447112737466,
+    82.9640680888321,
+    103.03722288452545,
+    320.0
+  ],
+  "knots_z": [
+    0.0,
+    2.9739899827450813,
+    2.997716084645707,
+    6.99869685104442,
+    3.9870963348573794,
+    4.015554694844747
+  ],
+  "metrics": {
+    "berm_elevation": 2.9739899827450813,
+    "berm_scarp": true,
+    "berm_width": 20.0,
+    "dune_back_relief": 2.9831421561996727,
+    "dune_back_slope": 0.15003125053532548,
+    "dune_back_width": 20.073154795693355,
+    "dune_crest_elevation": 6.99869685104442,
+    "dune_crest_x": 82.9640680888321,
+    "dune_front_relief": 4.024706868299338,
+    "dune_front_slope": 1.37050077117125,
+    "dune_front_width": 2.919356815085493,
+    "dune_scarp": true,
+    "dune_top_width": 0.0,
+    "dune_width": 22.99251161077885,
+    "fit_quality": 0.12460115718571259,
+    "foreshore_slope": 0.07302467254992874,
+    "morph_type": "LOW_BERM",
+    "n_upland_nodes": 21,
+    "scarp_height": 4.019015974891032,
+    "shoreline_x": 19.819029228436023,
+    "upland_elevation": 4.015554694844747,
+    "volume_above_datum": 1121.970105472067
+  },
+  "name": "duneberm_scarp_lowberm_noisy",
+  "spec": {
+    "berm_elevation": 3.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 7.0,
+      "front_width": 3.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "noise": 0.05,
+    "scarp": [
+      58.0,
+      0.5
+    ],
+    "seed": 18,
+    "upland_elevation": 4.0
+  }
+}

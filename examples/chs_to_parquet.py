@@ -16,11 +16,11 @@ Examples:
     uv run examples/chs_to_parquet.py --min-surge 0.5 --min-wave 1.0
     uv run examples/chs_to_parquet.py --ids 65,66,71
 """
+
 import argparse
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -41,12 +41,14 @@ def load_chs(csv_path):
 def storm_stats(df):
     """Per-storm summary: peak surge, peak Hm0, start date, row count."""
     g = df.groupby("Storm ID")
-    stats = pd.DataFrame({
-        "peak_surge": g["Water Elevation"].max(),
-        "peak_hmo":   g["Zero Moment Wave Height"].max(),
-        "start_date": g["yyyymmddHHMM"].min().astype(str).str.zfill(12),
-        "rows":       g.size(),
-    })
+    stats = pd.DataFrame(
+        {
+            "peak_surge": g["Water Elevation"].max(),
+            "peak_hmo": g["Zero Moment Wave Height"].max(),
+            "start_date": g["yyyymmddHHMM"].min().astype(str).str.zfill(12),
+            "rows": g.size(),
+        }
+    )
     stats["start_date"] = pd.to_datetime(
         stats["start_date"].astype(float).astype(int).astype(str).str.zfill(12),
         format="%Y%m%d%H%M",
@@ -106,11 +108,17 @@ def select_storms(df, args):
 
     # Print summary table
     print(f"\nSelected {len(final_ids)} storms:\n")
-    print(f"  {'ID':>6}  {'Start date':<20}  {'Peak surge (m)':>14}  {'Peak Hm0 (m)':>12}  {'Rows':>5}")
-    print(f"  {'──':>6}  {'──────────':<20}  {'──────────────':>14}  {'────────────':>12}  {'────':>5}")
+    print(
+        f"  {'ID':>6}  {'Start date':<20}  {'Peak surge (m)':>14}  {'Peak Hm0 (m)':>12}  {'Rows':>5}"
+    )
+    print(
+        f"  {'──':>6}  {'──────────':<20}  {'──────────────':>14}  {'────────────':>12}  {'────':>5}"
+    )
     for sid in final_ids:
         s = selected_stats.loc[sid]
-        print(f"  {sid:>6}  {str(s['start_date']):<20}  {s['peak_surge']:>14.3f}  {s['peak_hmo']:>12.3f}  {int(s['rows']):>5}")
+        print(
+            f"  {sid:>6}  {str(s['start_date']):<20}  {s['peak_surge']:>14.3f}  {s['peak_hmo']:>12.3f}  {int(s['rows']):>5}"
+        )
     print()
 
     return df[df["Storm ID"].isin(final_ids)]
@@ -144,27 +152,38 @@ def convert(df, sim_start=None, spacing_days=None):
             dates = orig_dates
 
         for i, (_, row) in enumerate(grp.iterrows()):
-            rows.append({
-                "lifecycle":        0,
-                "storm_id":         str(storm_id),
-                "hydro_tstp":       i,
-                "date":             dates.iloc[i],
-                "wave_height":      row["Zero Moment Wave Height"],
-                "wave_peak_period": row["Peak Period"],
-                "wave_direction":   row["Mean Wave Direction"],
-                "water_elevation":  row["Water Elevation"],
-                # Wind speed retained so storm_events.csv can derive Saffir-Simpson.
-                # NOTE: recurrence_interval_yr and aep are NOT available in this
-                # timeseries CSV — they require a separate JPM rates file keyed by
-                # storm_id.  Populate those storm_events.csv columns from that file.
-                "wind_speed_ms":    row.get("Wind Magnitude", float("nan")),
-            })
+            rows.append(
+                {
+                    "lifecycle": 0,
+                    "storm_id": str(storm_id),
+                    "hydro_tstp": i,
+                    "date": dates.iloc[i],
+                    "wave_height": row["Zero Moment Wave Height"],
+                    "wave_peak_period": row["Peak Period"],
+                    "wave_direction": row["Mean Wave Direction"],
+                    "water_elevation": row["Water Elevation"],
+                    # Wind speed retained so storm_events.csv can derive Saffir-Simpson.
+                    # NOTE: recurrence_interval_yr and aep are NOT available in this
+                    # timeseries CSV — they require a separate JPM rates file keyed by
+                    # storm_id.  Populate those storm_events.csv columns from that file.
+                    "wind_speed_ms": row.get("Wind Magnitude", float("nan")),
+                }
+            )
 
     out = pd.DataFrame(rows)
-    return out[[
-        "lifecycle", "wave_peak_period", "wave_direction", "hydro_tstp",
-        "storm_id", "water_elevation", "wave_height", "date", "wind_speed_ms",
-    ]]
+    return out[
+        [
+            "lifecycle",
+            "wave_peak_period",
+            "wave_direction",
+            "hydro_tstp",
+            "storm_id",
+            "water_elevation",
+            "wave_height",
+            "date",
+            "wind_speed_ms",
+        ]
+    ]
 
 
 def main():
@@ -173,18 +192,33 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--csv",       default=DEFAULT_CSV,  help="CHS timeseries CSV")
-    parser.add_argument("--out",       default=DEFAULT_OUT,  help="Output parquet path")
-    parser.add_argument("--n",         type=int,             help="Keep first N after other filters")
+    parser.add_argument("--csv", default=DEFAULT_CSV, help="CHS timeseries CSV")
+    parser.add_argument("--out", default=DEFAULT_OUT, help="Output parquet path")
+    parser.add_argument("--n", type=int, help="Keep first N after other filters")
     parser.add_argument("--top-surge", type=int, dest="top_surge", help="Top N by peak surge")
-    parser.add_argument("--top-wave",  type=int, dest="top_wave",  help="Top N by peak Hm0")
-    parser.add_argument("--min-surge",   type=float, dest="min_surge",   help="Min peak surge (m)")
-    parser.add_argument("--max-surge",   type=float, dest="max_surge",   help="Max peak surge (m)")
-    parser.add_argument("--min-wave",    type=float, dest="min_wave",    help="Min peak Hm0 (m)")
-    parser.add_argument("--min-spacing",  type=int,   dest="min_spacing",  help="Min days between storm starts in source data (greedy; not useful for concurrent CHS ensembles)")
-    parser.add_argument("--spacing-days", type=float, dest="spacing_days", help="Re-time storms onto synthetic dates: storm_i starts at sim_start + (i+1)*spacing_days")
-    parser.add_argument("--sim-start",    default="2025-01-01", dest="sim_start", help="Simulation origin for --spacing-days (default: 2025-01-01)")
-    parser.add_argument("--ids",          help="Comma-separated storm IDs e.g. 65,71,204")
+    parser.add_argument("--top-wave", type=int, dest="top_wave", help="Top N by peak Hm0")
+    parser.add_argument("--min-surge", type=float, dest="min_surge", help="Min peak surge (m)")
+    parser.add_argument("--max-surge", type=float, dest="max_surge", help="Max peak surge (m)")
+    parser.add_argument("--min-wave", type=float, dest="min_wave", help="Min peak Hm0 (m)")
+    parser.add_argument(
+        "--min-spacing",
+        type=int,
+        dest="min_spacing",
+        help="Min days between storm starts in source data (greedy; not useful for concurrent CHS ensembles)",
+    )
+    parser.add_argument(
+        "--spacing-days",
+        type=float,
+        dest="spacing_days",
+        help="Re-time storms onto synthetic dates: storm_i starts at sim_start + (i+1)*spacing_days",
+    )
+    parser.add_argument(
+        "--sim-start",
+        default="2025-01-01",
+        dest="sim_start",
+        help="Simulation origin for --spacing-days (default: 2025-01-01)",
+    )
+    parser.add_argument("--ids", help="Comma-separated storm IDs e.g. 65,71,204")
     args = parser.parse_args()
 
     print(f"Input : {args.csv}")
@@ -192,10 +226,11 @@ def main():
     if args.spacing_days:
         print(f"Re-timing: sim_start={args.sim_start}, spacing={args.spacing_days} days/storm")
 
-    df  = load_chs(args.csv)
+    df = load_chs(args.csv)
     sub = select_storms(df, args)
-    out = convert(sub, sim_start=args.sim_start if args.spacing_days else None,
-                  spacing_days=args.spacing_days)
+    out = convert(
+        sub, sim_start=args.sim_start if args.spacing_days else None, spacing_days=args.spacing_days
+    )
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     out.to_parquet(args.out, index=False)

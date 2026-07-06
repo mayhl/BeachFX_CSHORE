@@ -2,11 +2,16 @@
 
 Covers: ErosionTick, StormResponse, Recovery, FullNourishment, PartialNourishment.
 """
+
 import numpy as np
 import pytest
 
 from erosion.profile import (
-    ErosionTick, FullNourishment, PartialNourishment, Recovery, StormResponse,
+    ErosionTick,
+    FullNourishment,
+    PartialNourishment,
+    Recovery,
+    StormResponse,
 )
 from erosion.runner.base import CSHOREResult
 from erosion.types import SnapshotLabel
@@ -19,8 +24,7 @@ def _p(n: int = 100):
 
 def _result(n: int = 80) -> CSHOREResult:
     x_new = np.linspace(5, 185, n)
-    return CSHOREResult(zb=np.ones(n) * -0.3, x=x_new,
-                        eta=np.zeros(n), Hs=np.zeros(n), runup_m=0.1)
+    return CSHOREResult(zb=np.ones(n) * -0.3, x=x_new, eta=np.zeros(n), Hs=np.zeros(n), runup_m=0.1)
 
 
 class TestErosionTick:
@@ -132,21 +136,23 @@ class TestRecovery:
     def test_z_berm_mask_below_berm(self):
         n = 10
         zb_post = np.zeros(n)
-        zb_pre  = np.ones(n) * 2.0
+        zb_pre = np.ones(n) * 2.0
         p = _p(n)
         p.zb = zb_post.copy()
-        Recovery(t=5.0, fraction=1.0, zb_post_storm=zb_post,
-                 zb_pre_storm=zb_pre, z_berm=1.0).apply(p)
+        Recovery(t=5.0, fraction=1.0, zb_post_storm=zb_post, zb_pre_storm=zb_pre, z_berm=1.0).apply(
+            p
+        )
         # zb_post=0 < z_berm=1 → all nodes below berm → recover to zb_pre=2
         np.testing.assert_allclose(p.zb, zb_pre, atol=1e-14)
 
     def test_z_berm_mask_above_berm_unchanged(self):
         n = 10
-        zb_post = np.ones(n) * 1.5   # above z_berm=1.0
+        zb_post = np.ones(n) * 1.5  # above z_berm=1.0
         p = _p(n)
         p.zb = zb_post.copy()
-        Recovery(t=5.0, fraction=1.0, zb_post_storm=zb_post,
-                 zb_pre_storm=np.ones(n) * 3.0, z_berm=1.0).apply(p)
+        Recovery(
+            t=5.0, fraction=1.0, zb_post_storm=zb_post, zb_pre_storm=np.ones(n) * 3.0, z_berm=1.0
+        ).apply(p)
         # zb_post=1.5 >= z_berm=1 → mask=False → zb unchanged
         np.testing.assert_allclose(p.zb, zb_post, atol=1e-14)
 

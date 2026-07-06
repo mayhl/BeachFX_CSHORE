@@ -8,37 +8,38 @@ plot_metrics(runs, profile_id, ...)           -> Figure
 make_profile_video(run, profile_id, out_path) -> None
 plot_idealized_fit(x, zb, design_berm_elevation, ...) -> Figure   # fit debug overlay
 """
+
 from __future__ import annotations
 
-import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
-import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
-
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RunResult:
     """Pipeline output for one (reach, alternative, lifecycle) directory."""
-    out_dir:   str
-    reach_id:  str
-    alt_id:    str
+
+    out_dir: str
+    reach_id: str
+    alt_id: str
     lifecycle: int
 
     _profiles: pd.DataFrame | None = field(default=None, repr=False)
-    _metrics:  pd.DataFrame | None = field(default=None, repr=False)
-    _hazard:   pd.DataFrame | None = field(default=None, repr=False)
-    _events:   pd.DataFrame | None = field(default=None, repr=False)
+    _metrics: pd.DataFrame | None = field(default=None, repr=False)
+    _hazard: pd.DataFrame | None = field(default=None, repr=False)
+    _events: pd.DataFrame | None = field(default=None, repr=False)
 
     def _load(self, name: str) -> pd.DataFrame | None:
         path = os.path.join(self.out_dir, name)
@@ -117,16 +118,18 @@ def load_runs(
 
 _ALT_COLORS = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b"]
 
+
 def _alt_color(runs: dict[str, RunResult], alt_id: str) -> str:
     keys = list(runs.keys())
     return _ALT_COLORS[keys.index(alt_id) % len(_ALT_COLORS)]
 
+
 _LABEL_STYLE: dict[str, dict] = {
-    "INIT":         {"color": "black",   "lw": 2.0,  "ls": "-",  "zorder": 5},
-    "PreStorm":     {"color": "#888888", "lw": 0.8,  "ls": "--", "zorder": 2},
-    "PostStorm":    {"color": "#d62728", "lw": 1.0,  "ls": "-",  "zorder": 3},
-    "REC":          {"color": "#2ca02c", "lw": 0.8,  "ls": ":",  "zorder": 2},
-    "EndIteration": {"color": "#1f77b4", "lw": 2.0,  "ls": "-",  "zorder": 5},
+    "INIT": {"color": "black", "lw": 2.0, "ls": "-", "zorder": 5},
+    "PreStorm": {"color": "#888888", "lw": 0.8, "ls": "--", "zorder": 2},
+    "PostStorm": {"color": "#d62728", "lw": 1.0, "ls": "-", "zorder": 3},
+    "REC": {"color": "#2ca02c", "lw": 0.8, "ls": ":", "zorder": 2},
+    "EndIteration": {"color": "#1f77b4", "lw": 2.0, "ls": "-", "zorder": 5},
 }
 
 
@@ -143,6 +146,7 @@ def _get_profile_snapshot(
 # ---------------------------------------------------------------------------
 # Plot 1 — profile cross-section evolution
 # ---------------------------------------------------------------------------
+
 
 def _beach_zoom(sub: pd.DataFrame, margin_m: float = 150.0) -> tuple[float, float]:
     """Auto-detect beach zone: from (shoreline - margin) to profile landward end."""
@@ -232,8 +236,11 @@ def plot_profile_evolution(
     plt.colorbar(sm, ax=ax, label="Time (days)", fraction=0.02, pad=0.01)
 
     # Zoom to beach zone using only post-CSHORE snapshots
-    xlim = zoom_x or (_beach_zoom(sub[sub["label"].isin(all_labels)]) if zoom_beach
-                      else (sub["x"].min(), sub["x"].max()))
+    xlim = zoom_x or (
+        _beach_zoom(sub[sub["label"].isin(all_labels)])
+        if zoom_beach
+        else (sub["x"].min(), sub["x"].max())
+    )
     ax.set_xlim(xlim)
 
     ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
@@ -259,22 +266,28 @@ def plot_profile_evolution(
 # ---------------------------------------------------------------------------
 
 _METRIC_LABELS = {
-    "berm_width":           "Berm width (m)",
+    "berm_width": "Berm width (m)",
     "dune_crest_elevation": "Dune crest elevation (m)",
-    "shoreline_x":          "Shoreline position (m)",
-    "volume_above_datum":   "Volume above datum (m²/m)",
+    "shoreline_x": "Shoreline position (m)",
+    "volume_above_datum": "Volume above datum (m²/m)",
 }
 
 # Causal order within each simulation step
-_LABEL_ORDER = {"INIT": 0, "PreStorm": 1, "PostStorm": 2, "REC": 3,
-                "EndIteration": 4, "Periodic": 5}
+_LABEL_ORDER = {
+    "INIT": 0,
+    "PreStorm": 1,
+    "PostStorm": 2,
+    "REC": 3,
+    "EndIteration": 4,
+    "Periodic": 5,
+}
 
 # Marker style per snapshot label
 _LABEL_MARKER = {
-    "PreStorm":  dict(marker="o", s=12, zorder=3, alpha=0.6),   # circle
-    "PostStorm": dict(marker="v", s=25, zorder=5, alpha=0.9),   # triangle-down
-    "REC":       dict(marker="^", s=12, zorder=3, alpha=0.6),   # triangle-up
-    "Periodic":  dict(marker=".", s=8,  zorder=2, alpha=0.4),   # dot
+    "PreStorm": dict(marker="o", s=12, zorder=3, alpha=0.6),  # circle
+    "PostStorm": dict(marker="v", s=25, zorder=5, alpha=0.9),  # triangle-down
+    "REC": dict(marker="^", s=12, zorder=3, alpha=0.6),  # triangle-up
+    "Periodic": dict(marker=".", s=8, zorder=2, alpha=0.4),  # dot
 }
 
 
@@ -282,7 +295,10 @@ def plot_metrics(
     runs: dict[str, RunResult],
     profile_id: str,
     metrics: Sequence[str] = (
-        "berm_width", "dune_crest_elevation", "shoreline_x", "volume_above_datum"
+        "berm_width",
+        "dune_crest_elevation",
+        "shoreline_x",
+        "volume_above_datum",
     ),
     labels: Sequence[str] | None = None,
 ) -> Figure:
@@ -308,8 +324,7 @@ def plot_metrics(
             if metric not in df.columns:
                 continue
             # Single connected line through all snapshots in causal order
-            ax.plot(df["t"], df[metric], color=color, lw=1.1, label=alt_id,
-                    zorder=2, alpha=0.7)
+            ax.plot(df["t"], df[metric], color=color, lw=1.1, label=alt_id, zorder=2, alpha=0.7)
             # Markers per label — first alt only adds label text to legend
             first_alt = list(runs.keys())[0] == alt_id
             for lbl, style in _LABEL_MARKER.items():
@@ -317,9 +332,7 @@ def plot_metrics(
                 if sub.empty:
                     continue
                 legend_lbl = lbl if first_alt else None
-                ax.scatter(sub["t"], sub[metric], color=color,
-                           label=legend_lbl, **style)
-
+                ax.scatter(sub["t"], sub[metric], color=color, label=legend_lbl, **style)
 
     for ax, metric in zip(flat_axes, metrics):
         ax.set_xlabel("Time (days)")
@@ -329,8 +342,7 @@ def plot_metrics(
         seen: dict[str, object] = {}
         for h, l in zip(handles, lbls):
             seen.setdefault(l, h)
-        ax.legend(seen.values(), seen.keys(), fontsize=7,
-                  ncol=2, loc="best", framealpha=0.85)
+        ax.legend(seen.values(), seen.keys(), fontsize=7, ncol=2, loc="best", framealpha=0.85)
 
     for ax in flat_axes[n:]:
         ax.set_visible(False)
@@ -346,9 +358,9 @@ def plot_metrics(
 # ---------------------------------------------------------------------------
 
 _TRANSITION_STYLE = {
-    "Storm":    dict(color="#d62728", label="PostStorm", fill="#ffcccc"),
-    "Recovery": dict(color="#2ca02c", label="PreStorm",  fill="#ccf5cc"),
-    "Erosion":  dict(color="#5b7aad", label="PreStorm",  fill="#d0ddf0"),
+    "Storm": dict(color="#d62728", label="PostStorm", fill="#ffcccc"),
+    "Recovery": dict(color="#2ca02c", label="PreStorm", fill="#ccf5cc"),
+    "Erosion": dict(color="#5b7aad", label="PreStorm", fill="#d0ddf0"),
 }
 
 
@@ -366,25 +378,25 @@ def _build_transitions(
       Recovery : PostStorm_t → PreStorm_{t_next}
     """
     transitions: list[dict] = []
-    pre_rows  = snaps[snaps["label"] == "PreStorm"].sort_values("t").reset_index(drop=True)
+    pre_rows = snaps[snaps["label"] == "PreStorm"].sort_values("t").reset_index(drop=True)
     post_rows = snaps[snaps["label"] == "PostStorm"].sort_values("t").reset_index(drop=True)
-    rec_rows  = snaps[snaps["label"] == "REC"].sort_values("t").reset_index(drop=True)
+    rec_rows = snaps[snaps["label"] == "REC"].sort_values("t").reset_index(drop=True)
     init_rows = snaps[snaps["label"] == "INIT"].sort_values("t").reset_index(drop=True)
-    end_rows  = snaps[snaps["label"] == "EndIteration"].sort_values("t").reset_index(drop=True)
+    end_rows = snaps[snaps["label"] == "EndIteration"].sort_values("t").reset_index(drop=True)
 
     # --- Erosion transitions ---
     if include_erosion and not pre_rows.empty:
         # INIT → first PreStorm (both on the raw-profile grid)
         if not init_rows.empty:
-            transitions.append({"type": "Erosion",
-                                 "before": init_rows.iloc[0], "after": pre_rows.iloc[0]})
+            transitions.append(
+                {"type": "Erosion", "before": init_rows.iloc[0], "after": pre_rows.iloc[0]}
+            )
 
         # REC_t → next PreStorm (both on CSHORE grid)
         for _, rec in rec_rows.iterrows():
             later_pre = pre_rows[pre_rows["t"] > rec["t"]]
             if not later_pre.empty:
-                transitions.append({"type": "Erosion",
-                                     "before": rec, "after": later_pre.iloc[0]})
+                transitions.append({"type": "Erosion", "before": rec, "after": later_pre.iloc[0]})
 
     # --- Storm + Recovery transitions ---
     for i, pre in pre_rows.iterrows():
@@ -400,11 +412,13 @@ def _build_transitions(
 
     # Final EndIteration as last recovery if present
     if include_recovery and not post_rows.empty and not end_rows.empty:
-        transitions.append({
-            "type": "Recovery",
-            "before": post_rows.iloc[-1],
-            "after":  end_rows.iloc[-1],
-        })
+        transitions.append(
+            {
+                "type": "Recovery",
+                "before": post_rows.iloc[-1],
+                "after": end_rows.iloc[-1],
+            }
+        )
 
     return transitions
 
@@ -471,34 +485,40 @@ def generate_event_transition_frames(
     needed: set[tuple] = set()
     for tr in transitions:
         needed.add((tr["before"]["label"], tr["before"]["t"]))
-        needed.add((tr["after"]["label"],  tr["after"]["t"]))
+        needed.add((tr["after"]["label"], tr["after"]["t"]))
     xy_cache: dict[tuple, tuple[np.ndarray, np.ndarray] | None] = {
-        key: _get_profile_snapshot(df, profile_id, key[0], key[1])
-        for key in needed
+        key: _get_profile_snapshot(df, profile_id, key[0], key[1]) for key in needed
     }
 
     # Build figure with static elements
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_xlim(xlim); ax.set_ylim(ylim)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
     ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
     ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
     ax.set_xlabel("Cross-shore position (m, offshore→landward)")
     ax.set_ylabel("Elevation (m)")
     ax.grid(True, alpha=0.25)
 
-    before_line, = ax.plot([], [], color="#888888", lw=1.2, ls="--", zorder=3, label="before")
-    after_line,  = ax.plot([], [], lw=2.2, zorder=5, label="after")
-    fill_poly    = [None]  # mutable container so inner loop can replace it
-    title_text   = ax.set_title("")
-    annot        = ax.text(
-        0.02, 0.97, "", transform=ax.transAxes,
-        va="top", ha="left", fontsize=9, family="monospace",
+    (before_line,) = ax.plot([], [], color="#888888", lw=1.2, ls="--", zorder=3, label="before")
+    (after_line,) = ax.plot([], [], lw=2.2, zorder=5, label="after")
+    fill_poly = [None]  # mutable container so inner loop can replace it
+    title_text = ax.set_title("")
+    annot = ax.text(
+        0.02,
+        0.97,
+        "",
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        family="monospace",
         bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#cccccc", alpha=0.9),
     )
     ax.legend(fontsize=8, loc="upper right")
 
     for i, tr in enumerate(transitions):
-        style  = _TRANSITION_STYLE[tr["type"]]
+        style = _TRANSITION_STYLE[tr["type"]]
         b_row, a_row = tr["before"], tr["after"]
         xy_b = xy_cache.get((b_row["label"], b_row["t"]))
         xy_a = xy_cache.get((a_row["label"], a_row["t"]))
@@ -517,34 +537,38 @@ def generate_event_transition_frames(
             # Interpolate before onto after x-grid for fill
             z_b_interp = np.interp(xy_a[0], xy_b[0], xy_b[1])
             fill_poly[0] = ax.fill_between(
-                xy_a[0], z_b_interp, xy_a[1],
+                xy_a[0],
+                z_b_interp,
+                xy_a[1],
                 where=(xy_a[0] >= xlim[0]) & (xy_a[0] <= xlim[1]),
-                color=style["fill"], alpha=0.4, zorder=2,
+                color=style["fill"],
+                alpha=0.4,
+                zorder=2,
             )
 
-        title_text.set_text(
-            f"{run.reach_id} / {run.alt_id} — {profile_id}  |  {tr['type']}"
-        )
+        title_text.set_text(f"{run.reach_id} / {run.alt_id} — {profile_id}  |  {tr['type']}")
         annot.set_text(
             f"{tr['type']:<10}\n"
             f"t: {b_row['t']:.0f}d → {a_row['t']:.0f}d\n"
             f"{b_row['label']} → {a_row['label']}"
         )
 
-        fig.savefig(os.path.join(out_dir, f"frame_{i:05d}.png"),
-                    dpi=dpi, bbox_inches="tight")
+        fig.savefig(os.path.join(out_dir, f"frame_{i:05d}.png"), dpi=dpi, bbox_inches="tight")
 
     plt.close(fig)
     n = len(transitions)
     print(f"Event frames: {n} → {out_dir}/frame_NNNNN.png")
-    print(f"  ffmpeg -r 1 -i '{out_dir}/frame_%05d.png' "
-          f"-vcodec libx264 -pix_fmt yuv420p '{out_dir}/../{profile_id}_{run.alt_id}_events.mp4'")
+    print(
+        f"  ffmpeg -r 1 -i '{out_dir}/frame_%05d.png' "
+        f"-vcodec libx264 -pix_fmt yuv420p '{out_dir}/../{profile_id}_{run.alt_id}_events.mp4'"
+    )
     return n
 
 
 # ---------------------------------------------------------------------------
 # Plot 3b — single-line snapshot series for ffmpeg
 # ---------------------------------------------------------------------------
+
 
 def generate_profile_frames(
     run: RunResult,
@@ -579,9 +603,9 @@ def generate_profile_frames(
 
     # Drop snapshots on incompatible (pre-CSHORE) x grid
     snap_xmax = {
-        (r["label"], r["t"]): df[
-            (df["label"] == r["label"]) & np.isclose(df["t"], r["t"])
-        ]["x"].max()
+        (r["label"], r["t"]): df[(df["label"] == r["label"]) & np.isclose(df["t"], r["t"])][
+            "x"
+        ].max()
         for _, r in snaps.iterrows()
     }
     if not snap_xmax:
@@ -601,8 +625,13 @@ def generate_profile_frames(
     if zoom_x:
         xlim = zoom_x
     elif zoom_beach:
-        xlim = _beach_zoom(compat_df[compat_df.apply(
-            lambda r: snap_xmax.get((r["label"], r["t"]), 0) >= 0.8 * ref_xmax, axis=1)])
+        xlim = _beach_zoom(
+            compat_df[
+                compat_df.apply(
+                    lambda r: snap_xmax.get((r["label"], r["t"]), 0) >= 0.8 * ref_xmax, axis=1
+                )
+            ]
+        )
     else:
         xlim = (compat_df["x"].min(), compat_df["x"].max())
 
@@ -611,15 +640,15 @@ def generate_profile_frames(
 
     # Pre-fetch snapshot arrays
     snap_xy: list[tuple[np.ndarray, np.ndarray] | None] = [
-        _get_profile_snapshot(df, profile_id, r["label"], r["t"])
-        for _, r in snaps.iterrows()
+        _get_profile_snapshot(df, profile_id, r["label"], r["t"]) for _, r in snaps.iterrows()
     ]
     ref_xy = next((xy for xy in snap_xy if xy is not None), None)
-    ref_t  = snaps.iloc[0]["t"]
+    ref_t = snaps.iloc[0]["t"]
 
     # Build figure — static elements drawn once
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_xlim(xlim); ax.set_ylim(ylim)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
     ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
     ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
     ax.set_xlabel("Cross-shore position (m, offshore→landward)")
@@ -630,10 +659,16 @@ def generate_profile_frames(
     if ref_xy is not None:
         ax.plot(ref_xy[0], ref_xy[1], color="#aaaaaa", lw=1.0, ls="--", zorder=1)
 
-    current_line, = ax.plot([], [], color=line_color, lw=2.2, zorder=5)
+    (current_line,) = ax.plot([], [], color=line_color, lw=2.2, zorder=5)
     time_text = ax.text(
-        0.02, 0.97, "", transform=ax.transAxes,
-        va="top", ha="left", fontsize=9, family="monospace",
+        0.02,
+        0.97,
+        "",
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        family="monospace",
         bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#cccccc", alpha=0.9),
     )
 
@@ -642,21 +677,18 @@ def generate_profile_frames(
         xy = snap_xy[i]
         if xy is not None:
             current_line.set_data(xy[0], xy[1])
-        time_text.set_text(
-            f"t = {row['t']:>6.1f} d\n"
-            f"{row['label']:<14}\n"
-            f"ref: t={ref_t:.0f}d  ---"
-        )
-        fig.savefig(os.path.join(out_dir, f"frame_{i:05d}.png"),
-                    dpi=dpi, bbox_inches="tight")
+        time_text.set_text(f"t = {row['t']:>6.1f} d\n{row['label']:<14}\nref: t={ref_t:.0f}d  ---")
+        fig.savefig(os.path.join(out_dir, f"frame_{i:05d}.png"), dpi=dpi, bbox_inches="tight")
 
     plt.close(fig)
 
     n = len(snaps)
     print(f"Frames written: {n} → {out_dir}/frame_NNNNN.png")
-    print(f"ffmpeg (adjust -r for playback speed):")
-    print(f"  ffmpeg -r 2 -i '{out_dir}/frame_%05d.png' "
-          f"-vcodec libx264 -pix_fmt yuv420p '{out_dir}/../{profile_id}_{run.alt_id}.mp4'")
+    print("ffmpeg (adjust -r for playback speed):")
+    print(
+        f"  ffmpeg -r 2 -i '{out_dir}/frame_%05d.png' "
+        f"-vcodec libx264 -pix_fmt yuv420p '{out_dir}/../{profile_id}_{run.alt_id}.mp4'"
+    )
     return n
 
 
@@ -671,18 +703,31 @@ def make_profile_video(
 ) -> None:
     """Generate frames then assemble with ffmpeg if available."""
     import subprocess
+
     frame_dir = os.path.splitext(out_path)[0] + "_frames"
     n = generate_profile_frames(
-        run, profile_id, frame_dir,
-        labels=labels, zoom_x=zoom_x, dpi=dpi,
+        run,
+        profile_id,
+        frame_dir,
+        labels=labels,
+        zoom_x=zoom_x,
+        dpi=dpi,
     )
     if n == 0:
         return
     default_fps = fps
     cmd = [
-        "ffmpeg", "-y", "-r", str(default_fps),
-        "-i", os.path.join(frame_dir, "frame_%05d.png"),
-        "-vcodec", "libx264", "-pix_fmt", "yuv420p", out_path,
+        "ffmpeg",
+        "-y",
+        "-r",
+        str(default_fps),
+        "-i",
+        os.path.join(frame_dir, "frame_%05d.png"),
+        "-vcodec",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        out_path,
     ]
     try:
         subprocess.run(cmd, check=True, capture_output=True)
@@ -695,6 +740,71 @@ def make_profile_video(
 # Debug — idealized fit overlaid on the raw profile
 # ---------------------------------------------------------------------------
 
+
+def plot_fit_overlay(
+    ax, x, zb, ideal, m, datum: float = 0.0, title_prefix: str = "", ref_zb=None
+) -> Figure:
+    """Draw a styled fit overlay on ``ax`` — idealized band, thin raw on top, the
+    residual on a twin axis, and the crest marker.  Does NO fitting: ``ideal`` is
+    an ``IdealizedProfile`` (or None) and ``m`` supplies ``morph_type``,
+    ``fit_quality``, ``dune_crest_x/elevation``, ``berm_scarp``, ``dune_scarp``,
+    ``scarp_height`` (a ProfileMetrics or any object with those attributes).
+    ``ref_zb`` (optional) overlays a reference profile — e.g. the intact
+    pre-scarp bed — as a dashed line so the cut shows as the gap to the raw.
+
+    Shared by ``plot_idealized_fit`` (fit → draw) and the gallery's
+    regenerate-from-golden path (load knots → draw) so both render identically."""
+    x = np.asarray(x, dtype=float)
+    zb = np.asarray(zb, dtype=float)
+    fig = ax.figure
+
+    ax.axhline(datum, color="0.15", lw=1.0, ls="--")  # z-datum baseline (unlabeled)
+
+    title = f"{title_prefix}morph={m.morph_type}"
+    if ideal is not None:
+        # The idealized form isn't defined below the datum, so draw it along the
+        # raw bed there: the seaward face stays continuous and its residual is zero
+        # (the submerged region is masked out of fit_quality anyway).
+        zi = np.where(zb < datum, zb, ideal.evaluate(x))
+        ax.plot(x, zi, color="C3", lw=2.4, label="idealized")
+        ax.scatter(ideal.knots_x, ideal.knots_z, color="C3", s=25, zorder=5)
+        resid = zb - zi
+        axr = ax.twinx()
+        axr.plot(x, resid, color="C0", lw=0.7, alpha=0.5, label="residual")
+        axr.set_ylabel(r"residual $z_b - z_i$ (m)", color="C0", fontsize=18)
+        axr.tick_params(labelsize=16)
+        title += rf"   $\mathrm{{RMS}}={m.fit_quality:.3f}$"
+        if m.berm_scarp or m.dune_scarp:
+            tags = [t for t, on in (("berm", m.berm_scarp), ("dune", m.dune_scarp)) if on]
+            title += rf"   scarp: {', '.join(tags)} ($h={m.scarp_height:.2f}$)"
+
+    # Raw bed as a thin black line over the thicker idealized band.
+    if ref_zb is not None:
+        ax.plot(x, ref_zb, color="tab:green", lw=1.2, ls="--", label="pre-scarp", zorder=3)
+    ax.plot(x, zb, color="black", lw=0.8, label="raw zb", zorder=4)
+
+    if not np.isnan(m.dune_crest_x):
+        ax.scatter(
+            [m.dune_crest_x],
+            [m.dune_crest_elevation],
+            marker="^",
+            color="C2",
+            s=60,
+            zorder=6,
+            label="dune crest",
+        )
+
+    ax.set_xlabel(r"$x$ (m)", fontsize=18)
+    ax.set_ylabel(r"elevation $z$ (m)", fontsize=18)
+    ax.set_title(title, fontsize=20)
+    ax.tick_params(labelsize=16)
+    ax.grid(True, which="major", color="0.85", lw=0.6)
+    ax.set_axisbelow(True)
+    ax.legend(loc="best", fontsize=15)
+    fig.tight_layout()
+    return fig
+
+
 def plot_idealized_fit(
     x: np.ndarray,
     zb: np.ndarray,
@@ -702,49 +812,16 @@ def plot_idealized_fit(
     datum: float = 0.0,
     ref=None,
     ax=None,
+    ref_zb=None,
 ) -> Figure:
-    """Overlay the idealized (fitted) profile on the raw profile for debugging.
-
-    Fits ``(x, zb)`` with ``erosion.metrics.fit_profile`` and plots: raw bed,
-    the piecewise-linear idealization, the datum, and the fit residual on a twin
-    axis.  Landmark elevations and the morphology type are annotated.
-    """
+    """Fit ``(x, zb)`` with ``erosion.metrics.fit_profile`` and draw the overlay
+    (raw bed, idealization, datum, residual) via ``plot_fit_overlay``.
+    ``ref_zb`` (optional) overlays a reference profile (e.g. the pre-scarp bed)."""
     from .metrics import fit_profile
 
     x = np.asarray(x, dtype=float)
     zb = np.asarray(zb, dtype=float)
     m, ideal = fit_profile(x, zb, design_berm_elevation, datum, ref=ref)
-
     if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 5))
-    else:
-        fig = ax.figure
-
-    ax.plot(x, zb, color="0.4", lw=1.0, label="raw zb")
-    ax.axhline(datum, color="steelblue", lw=0.8, ls=":", label="datum")
-
-    title = f"morph={m.morph_type}"
-    if ideal is not None:
-        zi = ideal.evaluate(x)
-        ax.plot(x, zi, color="C3", lw=1.8, label="idealized")
-        ax.scatter(ideal.knots_x, ideal.knots_z, color="C3", s=25, zorder=5)
-        resid = zb - zi
-        axr = ax.twinx()
-        axr.plot(x, resid, color="C0", lw=0.7, alpha=0.5)
-        axr.set_ylabel("residual (m)", color="C0")
-        axr.axhline(0.0, color="C0", lw=0.5, ls=":", alpha=0.4)
-        title += f"   fit_quality={m.fit_quality:.3f}"
-        if m.berm_scarp or m.dune_scarp:
-            tags = [t for t, on in (("berm", m.berm_scarp), ("dune", m.dune_scarp)) if on]
-            title += f"   scarp: {', '.join(tags)} (h={m.scarp_height:.2f})"
-
-    if not np.isnan(m.dune_crest_x):
-        ax.scatter([m.dune_crest_x], [m.dune_crest_elevation], marker="^",
-                   color="C2", s=60, zorder=6, label="dune crest")
-
-    ax.set_xlabel("x (m)")
-    ax.set_ylabel("elevation (m)")
-    ax.set_title(title)
-    ax.legend(loc="best", fontsize=8)
-    fig.tight_layout()
-    return fig
+        _, ax = plt.subplots(figsize=(13, 7))
+    return plot_fit_overlay(ax, x, zb, ideal, m, datum, ref_zb=ref_zb)

@@ -13,11 +13,11 @@ if TYPE_CHECKING:
 class CSHOREResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    zb: np.ndarray       # final bed elevation, meters, shape (N,)
-    x: np.ndarray        # cross-shore positions, meters, shape (N,)
-    eta: np.ndarray      # mean water level at final BC timestep (OSETUP "setup")
-    Hs: np.ndarray       # significant wave height at final BC timestep
-    runup_m: float       # 2% runup from ODOC, meters (0.0 if not reported)
+    zb: np.ndarray  # final bed elevation, meters, shape (N,)
+    x: np.ndarray  # cross-shore positions, meters, shape (N,)
+    eta: np.ndarray  # mean water level at final BC timestep (OSETUP "setup")
+    Hs: np.ndarray  # significant wave height at final BC timestep
+    runup_m: float  # 2% runup from ODOC, meters (0.0 if not reported)
 
 
 class CSHORERunner(ABC):

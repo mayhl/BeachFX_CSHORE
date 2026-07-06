@@ -1,5 +1,7 @@
 import os
+
 import numpy as np
+
 from .vfall import fall_velocity
 
 """
@@ -8,7 +10,7 @@ minor modifications by Dylan R. Sanderson (drs)
 """
 
 
-class cshoreIO(object):
+class cshoreIO:
     """This class takes care of CSHORE model input and output scripts"""
 
     def __init__(self):
@@ -131,7 +133,9 @@ class cshoreIO(object):
             "veg_dia": veg_cfg.get("dia", 0.0) if veg_enabled else 0.0,
             "veg_ht": veg_cfg.get("ht", 0.0) if veg_enabled else 0.0,
             "veg_rod": veg_cfg.get("rod", 0.0) if veg_enabled else 0.0,
-            "veg_extent": np.array(veg_cfg.get("extent", [0.0, 1.0])) if veg_enabled else np.array([0.0, 1.0]),
+            "veg_extent": np.array(veg_cfg.get("extent", [0.0, 1.0]))
+            if veg_enabled
+            else np.array([0.0, 1.0]),
             "effb": cshore_cfg["effb"],
             "efff": cshore_cfg["efff"],
             "slp": cshore_cfg["slp"],
@@ -155,9 +159,7 @@ class cshoreIO(object):
         in_dict["nwave"] = len(
             in_dict["timebc_wave"]
         )  # what is this? this is just the number of time steps I have?!?!?
-        in_dict["nsurg"] = in_dict[
-            "nwave"
-        ]  # what is this?  Why is it a separate variable
+        in_dict["nsurg"] = in_dict["nwave"]  # what is this?  Why is it a separate variable
         # open file with write privilages
         fid = open(fname, "w")
         # begin Writing file
@@ -168,15 +170,11 @@ class cshoreIO(object):
 
         fid.write("%-8i                                  ->ILINE\n" % in_dict["iline"])
         # fid.write('%-8i                                  ->IPROFL\n' % in_dict['iprofl'])
-        fid.write(
-            "%s                                       ->IPROFL\n" % in_dict["iprofl"]
-        )
+        fid.write("%s                                       ->IPROFL\n" % in_dict["iprofl"])
 
         # if in_dict['iprofl'] == 1:
         if np.floor(in_dict["iprofl"]) == 1:
-            fid.write(
-                "%-8i                                  ->ISEDAV\n" % in_dict["isedav"]
-            )
+            fid.write("%-8i                                  ->ISEDAV\n" % in_dict["isedav"])
         else:
             pass
 
@@ -184,32 +182,20 @@ class cshoreIO(object):
         fid.write("%-8i                                  ->IOVER\n" % in_dict["iover"])
 
         if in_dict["iover"]:
-            fid.write(
-                "%-8i                                  ->IWTRAN\n" % in_dict["iwtran"]
-            )
+            fid.write("%-8i                                  ->IWTRAN\n" % in_dict["iwtran"])
             if in_dict["iwtran"] == 0:
-                fid.write(
-                    "%-8i                                  ->IPOND\n" % in_dict["ipond"]
-                )
+                fid.write("%-8i                                  ->IPOND\n" % in_dict["ipond"])
             else:
                 pass
         else:
             pass
 
-        if (
-            in_dict["iover"] == 1
-            and in_dict["iperm"] == 0
-            and np.floor(in_dict["iprofl"]) == 1
-        ):
-            fid.write(
-                "%-8i                                  ->INFILT\n" % in_dict["infilt"]
-            )
+        if in_dict["iover"] == 1 and in_dict["iperm"] == 0 and np.floor(in_dict["iprofl"]) == 1:
+            fid.write("%-8i                                  ->INFILT\n" % in_dict["infilt"])
         else:
             pass
 
-        fid.write(
-            "%-8i                                  ->IWCINT\n" % in_dict["iwcint"]
-        )
+        fid.write("%-8i                                  ->IWCINT\n" % in_dict["iwcint"])
         fid.write("%-8i                                  ->IROLL \n" % in_dict["iroll"])
         fid.write("%-8i                                  ->IWIND \n" % in_dict["iwind"])
         fid.write("%-8i                                  ->ITIDE \n" % in_dict["itide"])
@@ -249,12 +235,8 @@ class cshoreIO(object):
         fid.write("%-8i                                  ->ILAB\n" % in_dict["ilab"])
 
         if in_dict["ilab"] == 1:
-            fid.write(
-                "%-8i                                  ->NWAVE \n" % in_dict["nwave"]
-            )
-            fid.write(
-                "%-8i                                  ->NSURGE \n" % in_dict["nsurg"]
-            )
+            fid.write("%-8i                                  ->NWAVE \n" % in_dict["nwave"])
+            fid.write("%-8i                                  ->NSURGE \n" % in_dict["nsurg"])
             for ii in range(0, len(BC_dict["Hs"])):
                 # fid.write('%11.2f%11.4f%11.4f%11.4f%11.4f%11.4f\n' % (BC_dict['timebc_wave'][ii], BC_dict['Tp'][ii], (np.sqrt(2)/2.0)*BC_dict['Hs'][ii], BC_dict['Wsetup'][ii], BC_dict['swlbc'][ii], BC_dict['angle'][ii]))
                 fid.write(
@@ -270,12 +252,10 @@ class cshoreIO(object):
                 )  # note: drs modified this to read Hrms
         else:
             fid.write(
-                "%-8i                                  ->NWAVE \n"
-                % int(in_dict["nwave"] - 1)
+                "%-8i                                  ->NWAVE \n" % int(in_dict["nwave"] - 1)
             )
             fid.write(
-                "%-8i                                  ->NSURGE \n"
-                % int(in_dict["nsurg"] - 1)
+                "%-8i                                  ->NSURGE \n" % int(in_dict["nsurg"] - 1)
             )
             for ii in range(0, len(BC_dict["Hs"])):
                 # fid.write('%11.2f%11.4f%11.4f%11.4f\n' % (BC_dict['timebc_wave'][ii], BC_dict['Tp'][ii], (np.sqrt(2)/2.0)*BC_dict['Hs'][ii], BC_dict['angle'][ii]))
@@ -289,10 +269,7 @@ class cshoreIO(object):
                     )
                 )  # note: drs modified this to read Hrms
             for ii in range(0, len(BC_dict["swlbc"])):
-                fid.write(
-                    "%11.2f%11.4f\n"
-                    % (in_dict["timebc_surg"][ii], BC_dict["swlbc"][ii])
-                )
+                fid.write("%11.2f%11.4f\n" % (in_dict["timebc_surg"][ii], BC_dict["swlbc"][ii]))
 
             # interp zb to cshore grid; use linspace for deterministic grid size
             x = BC_dict["x"]
@@ -324,14 +301,11 @@ class cshoreIO(object):
             pass
 
         if in_dict["iveg"] == 1:
-            fid.write(
-                "%5.3f                                ->VEGCD\n" % in_dict["veg_Cd"]
-            )
+            fid.write("%5.3f                                ->VEGCD\n" % in_dict["veg_Cd"])
             for ii in range(0, len(BC_dict["x"])):
                 if (
                     BC_dict["x"][ii] >= np.max(BC_dict["x"]) * in_dict["veg_extent"][0]
-                    and BC_dict["x"][ii]
-                    <= np.max(BC_dict["x"]) * in_dict["veg_extent"][1]
+                    and BC_dict["x"][ii] <= np.max(BC_dict["x"]) * in_dict["veg_extent"][1]
                 ):
                     fid.write(
                         "%11.3f%11.3f%11.3f%11.3f\n"
@@ -362,7 +336,7 @@ class cshoreIO(object):
         """
         temp_file_name = os.path.join(path, "ODOC")
         # with open(path + '/ODOC', 'r') as fid:
-        with open(temp_file_name, "r") as fid:
+        with open(temp_file_name) as fid:
             tot = fid.readlines()
         fid.close()
         tot = np.asarray(list(map(lambda s: s.strip(), tot)))
@@ -420,9 +394,7 @@ class cshoreIO(object):
         # get wave conditions at SB
         row_ind = np.asarray(np.argwhere(["INPUT WAVE" in s for s in tot])).flatten()
         ind_start = row_ind[0] + 4
-        row_ind = np.asarray(
-            np.argwhere(["INPUT BEACH AND STRUCTURE" in s for s in tot])
-        ).flatten()
+        row_ind = np.asarray(np.argwhere(["INPUT BEACH AND STRUCTURE" in s for s in tot])).flatten()
         ind_end = row_ind[0] - 1
         wave_cond = tot[ind_start:ind_end]
         time_offshore = np.zeros(len(wave_cond)) * np.nan
@@ -516,9 +488,7 @@ class cshoreIO(object):
             self.ODOC_dict["jr"] = jr
 
         # swash zone bottom slope
-        row_ind = np.asarray(
-            np.argwhere(["Swash zone bottom slope" in s for s in tot])
-        ).flatten()
+        row_ind = np.asarray(np.argwhere(["Swash zone bottom slope" in s for s in tot])).flatten()
         dum_slp = tot[row_ind]
         dum_x1 = tot[row_ind + 1]
         dum_x2 = tot[row_ind + 2]
@@ -559,7 +529,7 @@ class cshoreIO(object):
         """
         temp_file_name = os.path.join(path, "infile")
         # with open(path + '\\infile', 'r') as fid:
-        with open(temp_file_name, "r") as fid:
+        with open(temp_file_name) as fid:
             tot = fid.readlines()
         fid.close()
         tot = np.asarray(list(map(lambda s: s.strip(), tot)))
@@ -661,7 +631,7 @@ class cshoreIO(object):
         """
         temp_file_name = os.path.join(path, "OBPROF")
         # with open(path + '\\OBPROF', 'r') as fid:
-        with open(temp_file_name, "r") as fid:
+        with open(temp_file_name) as fid:
             tot = fid.readlines()
         fid.close()
         tot = np.asarray(list(map(lambda s: s.strip(), tot)))
@@ -690,16 +660,9 @@ class cshoreIO(object):
                 N = int(N)
                 tme = float(row1.split()[1])
 
-            if (
-                self.readIF_dict["iveg"] > 1
-                and ii > 0
-                and self.ODOC_dict["isedav"] == 0
-            ):
+            if self.readIF_dict["iveg"] > 1 and ii > 0 and self.ODOC_dict["isedav"] == 0:
                 dum = tot[
-                    (self.ODOC_dict["nbinp"] + 1) * ii + 1 : (
-                        self.ODOC_dict["nbinp"] + 1
-                    )
-                    * ii
+                    (self.ODOC_dict["nbinp"] + 1) * ii + 1 : (self.ODOC_dict["nbinp"] + 1) * ii
                     + N
                     + 1
                 ]
@@ -717,10 +680,7 @@ class cshoreIO(object):
                 self.OBPROF_dict["morph%s" % str(ii + 1)]["time"] = tme
             elif self.ODOC_dict["isedav"] == 1:
                 dum = tot[
-                    (self.ODOC_dict["nbinp"] + 1) * ii + 1 : (
-                        self.ODOC_dict["nbinp"] + 1
-                    )
-                    * ii
+                    (self.ODOC_dict["nbinp"] + 1) * ii + 1 : (self.ODOC_dict["nbinp"] + 1) * ii
                     + N
                     + 1
                 ]
@@ -738,9 +698,7 @@ class cshoreIO(object):
                 self.OBPROF_dict["morph%s" % str(ii + 1)]["time"] = tme
             else:
                 # dum = tot[(self.ODOC_dict['nbinp'] + 1) * ii + 1:(self.ODOC_dict['nbinp'] + 1) * ii + N + 1]
-                dum = tot[
-                    (N + 1) * ii + 1 : (N + 1) * ii + N + 1
-                ]  # note: drs added this.
+                dum = tot[(N + 1) * ii + 1 : (N + 1) * ii + N + 1]  # note: drs added this.
                 x = np.zeros(N)
                 zb = np.zeros(N)
                 for ss in range(0, N):
@@ -765,7 +723,7 @@ class cshoreIO(object):
         """
         temp_file_name = os.path.join(path, "OSETUP")
         # with open(path + '/OSETUP', 'r') as fid:
-        with open(temp_file_name, "r") as fid:
+        with open(temp_file_name) as fid:
             tot = fid.readlines()
         fid.close()
         tot = np.asarray(list(map(lambda s: s.strip(), tot)))
@@ -937,7 +895,7 @@ class cshoreIO(object):
             time[ii] = temp_dict_prof["time"]
             # Guard against 1-point grid variation between chained storms
             n = min(x.shape[1], len(temp_dict_prof["x"]))
-            x[ii, :n]  = temp_dict_prof["x"][:n]
+            x[ii, :n] = temp_dict_prof["x"][:n]
             zb[ii, :n] = temp_dict_prof["zb"][:n]
             if len(temp_dict_prof["zb_p"]) > 0:
                 zb_p[ii] = temp_dict_long["zb_p"]

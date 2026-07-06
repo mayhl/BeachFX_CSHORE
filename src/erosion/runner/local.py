@@ -7,12 +7,11 @@ import sys
 import uuid
 
 import numpy as np
-
 from pydantic import BaseModel
 
+from ..profile import Profile
 from .base import CSHOREResult, CSHORERunner
 from .cshore_io import cshoreIO
-from ..profile import Profile
 
 
 class CSHOREParams(BaseModel):
@@ -23,41 +22,43 @@ class CSHOREParams(BaseModel):
     ``cshoreIO.make_CSHORE_infile()``.  Defaults are taken from the
     project reference ``config.json``.
     """
+
     # SOW calibration parameters
-    d50: float = 0.3        # median grain size (mm); used as reach-wide default for profile init
-    blp: float = 0.001      # bedload parameter
-    effb: float = 0.002     # suspension efficiency due to breaking
-    gamma: float = 0.7      # shallow-water wave height to depth ratio
+    d50: float = 0.3  # median grain size (mm); used as reach-wide default for profile init
+    blp: float = 0.001  # bedload parameter
+    effb: float = 0.002  # suspension efficiency due to breaking
+    gamma: float = 0.7  # shallow-water wave height to depth ratio
 
     # Additional CSHORE parameters (commonly adjusted during calibration)
-    efff: float = 0.005     # suspension efficiency due to friction
-    slp: float = 0.5        # suspended load parameter
-    slpot: float = 0.1      # overtopping suspended load parameter
-    tanphi: float = 0.63    # tangent of sediment friction angle
-    dx: float = 1.0         # profile node spacing (m)
-    rwh: float = 0.02       # numerical runup wire height (m)
-    fw: float = 0.015       # bed friction
+    efff: float = 0.005  # suspension efficiency due to friction
+    slp: float = 0.5  # suspended load parameter
+    slpot: float = 0.1  # overtopping suspended load parameter
+    tanphi: float = 0.63  # tangent of sediment friction angle
+    dx: float = 1.0  # profile node spacing (m)
+    rwh: float = 0.02  # numerical runup wire height (m)
+    fw: float = 0.015  # bed friction
 
     # Physical constants (rarely changed)
-    sg: float = 2.65        # specific gravity of sand
-    sporo: float = 0.4      # sediment porosity
-    temp: float = 20.0      # water temperature (°C)
-    salin: float = 0.0      # salinity (ppt)
+    sg: float = 2.65  # specific gravity of sand
+    sporo: float = 0.4  # sediment porosity
+    temp: float = 20.0  # water temperature (°C)
+    salin: float = 0.0  # salinity (ppt)
 
     # CSHORE model logic flags
-    iline: int = 1          # wave transformation flag
-    iprofl: float = 1.1     # profile change flag (1.1 = mobile bed)
-    isedav: int = 0         # unlimited sediment
-    iperm: int = 0          # no permeability
-    iover: int = 1          # allow overwash
-    infilt: int = 0         # no infiltration
-    iwtran: int = 0         # no wave transmission
-    ipond: int = 0          # no ponding
-    iwcint: int = 0         # no wave-current interaction
-    iroll: int = 0          # no roller model
-    iwind: int = 0          # no wind
-    itide: int = 0          # no tide
-    ilab: int = 0           # natural conditions (0=field, 1=lab)
+    iline: int = 1  # wave transformation flag
+    iprofl: float = 1.1  # profile change flag (1.1 = mobile bed)
+    isedav: int = 0  # unlimited sediment
+    iperm: int = 0  # no permeability
+    iover: int = 1  # allow overwash
+    infilt: int = 0  # no infiltration
+    iwtran: int = 0  # no wave transmission
+    ipond: int = 0  # no ponding
+    iwcint: int = 0  # no wave-current interaction
+    iroll: int = 0  # no roller model
+    iwind: int = 0  # no wind
+    itide: int = 0  # no tide
+    ilab: int = 0  # natural conditions (0=field, 1=lab)
+
 
 _EXE_NAMES = {
     "darwin": "cshore_usace_macos.out",

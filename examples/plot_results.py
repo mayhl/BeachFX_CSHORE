@@ -15,6 +15,7 @@ Usage
 # Animate one profile:
     python examples/plot_results.py output/ex4 --reach Reach1 --profile Reach1_p0 --video
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,25 +25,31 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from erosion.viz import (load_runs, plot_metrics, plot_profile_evolution,
-                           generate_profile_frames, generate_event_transition_frames,
-                           make_profile_video)
-
 import matplotlib
 import matplotlib.pyplot as plt
+
+from erosion.viz import (
+    generate_event_transition_frames,
+    generate_profile_frames,
+    load_runs,
+    plot_metrics,
+    plot_profile_evolution,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot BeachFX pipeline results")
-    parser.add_argument("output_root",             help="Pipeline output root (e.g. output/ex4)")
-    parser.add_argument("--reach",   default=None, help="Reach ID (auto-detected if only one)")
+    parser.add_argument("output_root", help="Pipeline output root (e.g. output/ex4)")
+    parser.add_argument("--reach", default=None, help="Reach ID (auto-detected if only one)")
     parser.add_argument("--profile", default=None, help="Profile ID to plot (default: all)")
-    parser.add_argument("--lc",      type=int, default=0, help="Lifecycle index (default: 0)")
-    parser.add_argument("--out",     default=None, help="Directory to save plots (default: show)")
-    parser.add_argument("--video", action="store_true",
-                        help="Generate single-line snapshot frame series for ffmpeg")
-    parser.add_argument("--events", action="store_true",
-                        help="Generate before/after event transition frame series")
+    parser.add_argument("--lc", type=int, default=0, help="Lifecycle index (default: 0)")
+    parser.add_argument("--out", default=None, help="Directory to save plots (default: show)")
+    parser.add_argument(
+        "--video", action="store_true", help="Generate single-line snapshot frame series for ffmpeg"
+    )
+    parser.add_argument(
+        "--events", action="store_true", help="Generate before/after event transition frame series"
+    )
     args = parser.parse_args()
 
     root = os.path.abspath(args.output_root)
@@ -53,8 +60,11 @@ def main() -> None:
     # Auto-detect reach
     reach_id = args.reach
     if reach_id is None:
-        candidates = [d for d in os.listdir(root)
-                      if os.path.isdir(os.path.join(root, d)) and not d.endswith(".csv")]
+        candidates = [
+            d
+            for d in os.listdir(root)
+            if os.path.isdir(os.path.join(root, d)) and not d.endswith(".csv")
+        ]
         if len(candidates) == 1:
             reach_id = candidates[0]
         else:

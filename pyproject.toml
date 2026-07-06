@@ -29,3 +29,19 @@ packages = ["src/erosion"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle (E/W), pyflakes (F), isort (I), pyupgrade (UP)
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E741",  # ambiguous single-letter names (e.g. l) — used in short math expressions
+]

@@ -21,50 +21,51 @@ All factors convert to a canonical base for each dimension:
   2-D volume   → m²/m    (cy/ft  = 0.7646 m³ / 0.3048 m = 2.5083 m²/m)
   2-D vol rate → m²/m/d  (cy/ft/day, same linear factor as cy/ft)
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator
 
-_CY_TO_M3: float = 0.7646          # 1 yd³ = 27 ft³ × 0.3048³ m³/ft³
+_CY_TO_M3: float = 0.7646  # 1 yd³ = 27 ft³ × 0.3048³ m³/ft³
 
 _FACTORS: dict[str, float] = {
     # length
-    "m":           1.0,
-    "ft":          0.3048,
-    "mm":          0.001,
-    "cm":          0.01,
+    "m": 1.0,
+    "ft": 0.3048,
+    "mm": 0.001,
+    "cm": 0.01,
     # time
-    "days":        1.0,
-    "hours":       1.0 / 24.0,
+    "days": 1.0,
+    "hours": 1.0 / 24.0,
     # 3-D volume
-    "m3":          1.0,
-    "cy":          _CY_TO_M3,         # cubic yards → m³
+    "m3": 1.0,
+    "cy": _CY_TO_M3,  # cubic yards → m³
     # 3-D volume rate (canonical base: m³/day)
-    "m3/day":      1.0,
-    "cy/day":      _CY_TO_M3,
-    "m3/yr":       1.0 / 365.25,
-    "cy/yr":       _CY_TO_M3 / 365.25,
+    "m3/day": 1.0,
+    "cy/day": _CY_TO_M3,
+    "m3/yr": 1.0 / 365.25,
+    "cy/yr": _CY_TO_M3 / 365.25,
     # 2-D volume (area per longshore length)
-    "m2/m":        1.0,
-    "cy/ft":       _CY_TO_M3 / 0.3048,   # ≈ 2.5083
+    "m2/m": 1.0,
+    "cy/ft": _CY_TO_M3 / 0.3048,  # ≈ 2.5083
     # 2-D volume rate
-    "m2/m/day":    1.0,
-    "cy/ft/day":   _CY_TO_M3 / 0.3048,
+    "m2/m/day": 1.0,
+    "cy/ft/day": _CY_TO_M3 / 0.3048,
 }
 
 # When context "input_units" == "m", map ft-default units to their SI equivalents.
 _CONTEXT_EQUIV: dict[str, str] = {
-    "ft":        "m",
-    "cy":        "m3",
-    "cy/day":    "m3/day",
-    "cy/yr":     "m3/yr",
-    "cy/ft":     "m2/m",
+    "ft": "m",
+    "cy": "m3",
+    "cy/day": "m3/day",
+    "cy/yr": "m3/yr",
+    "cy/ft": "m2/m",
     "cy/ft/day": "m2/m/day",
 }
 
-M_TO_FT: float = 1.0 / 0.3048   # 3.28084 ft/m
+M_TO_FT: float = 1.0 / 0.3048  # 3.28084 ft/m
 
 
 def _convert(value: float, from_unit: str, to_unit: str) -> float:
@@ -74,7 +75,10 @@ def _convert(value: float, from_unit: str, to_unit: str) -> float:
 
 
 def _coerce(
-    v: Any, internal: str, default_input: str | None, ctx_units: str | None,
+    v: Any,
+    internal: str,
+    default_input: str | None,
+    ctx_units: str | None,
 ) -> float:
     """Core unit coercion shared by the pydantic validator and ``parse_ufloat``.
 
@@ -88,15 +92,14 @@ def _coerce(
     elif isinstance(v, (int, float)):
         raw = float(v)
         if default_input is None:
-            return raw          # context-immune
+            return raw  # context-immune
         if ctx_units == "m" and default_input in _CONTEXT_EQUIV:
             unit = _CONTEXT_EQUIV[default_input]
         else:
             unit = default_input
     else:
         raise ValueError(
-            f'expected float or {{"value": ..., "units": ...}} dict, '
-            f"got {type(v).__name__}"
+            f'expected float or {{"value": ..., "units": ...}} dict, got {type(v).__name__}'
         )
     return _convert(raw, unit, internal)
 
@@ -114,6 +117,7 @@ def ufloat(internal: str, default_input: str | None = None) -> Any:
         a pydantic validation context ``{"input_units": "m"}`` can override this
         default at model-validate time.
     """
+
     def _parse(v: Any, info: Any) -> float:
         ctx = getattr(info, "context", None) or {}
         return _coerce(v, internal, default_input, ctx.get("input_units"))

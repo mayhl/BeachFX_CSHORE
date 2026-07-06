@@ -6,6 +6,7 @@ from explicit parameters and returns the ground-truth feature values, so
 (triangular / trapezoidal / gaussian) and perturbations (noise, scarp) can be
 layered on so the tests exercise robustness, not just self-consistency.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,12 +16,12 @@ import numpy as np
 
 @dataclass
 class DuneSpec:
-    shape: str = "triangular"      # "triangular" | "trapezoidal" | "gaussian"
+    shape: str = "triangular"  # "triangular" | "trapezoidal" | "gaussian"
     crest_elevation: float = 5.0
     front_width: float = 15.0
     back_width: float = 15.0
-    top_width: float = 0.0         # trapezoidal plateau width
-    sigma: float = 6.0             # gaussian width
+    top_width: float = 0.0  # trapezoidal plateau width
+    sigma: float = 6.0  # gaussian width
 
 
 @dataclass
@@ -55,7 +56,7 @@ def make_profile(
     x_max: float = 320.0,
     datum: float = 0.0,
     noise: float = 0.0,
-    scarp: tuple[float, float] | None = None,   # (x_location, drop_height)
+    scarp: tuple[float, float] | None = None,  # (face_x, face_height): erode seaward of face_x
     seed: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, Truth]:
     """Return ``(x, z, truth)``.  ``design_BE`` defaults to ``berm_elevation``."""
@@ -99,7 +100,7 @@ def make_profile(
     if gauss is not None:
         x0, sigma = gauss
         amp = dune.crest_elevation - float(np.interp(x0, kx, kz))
-        z = z + amp * np.exp(-((x - x0) ** 2) / (2.0 * sigma ** 2))
+        z = z + amp * np.exp(-((x - x0) ** 2) / (2.0 * sigma**2))
 
     # Truth dune width = footprint on the CLEAN profile: seaward toe at the berm
     # edge, landward toe at the first descent to (upland + band).  The band keeps
@@ -108,20 +109,29 @@ def make_profile(
     if has_dune:
         ci = int(np.argmin(np.abs(x - crest_x)))
         band = 0.2
-        land = next((x[i] for i in range(ci, len(x))
-                     if z[i] <= upland_elevation + band), x[-1])
+        land = next((x[i] for i in range(ci, len(x)) if z[i] <= upland_elevation + band), x[-1])
         dune_width = float(land - berm_end)
 
     truth = Truth(
-        shoreline_x=shoreline_x, berm_elevation=berm_elevation, berm_width=berm_width,
-        upland_elevation=upland_elevation, has_dune=has_dune,
-        dune_crest_elevation=DE, dune_crest_x=crest_x, dune_width=dune_width,
+        shoreline_x=shoreline_x,
+        berm_elevation=berm_elevation,
+        berm_width=berm_width,
+        upland_elevation=upland_elevation,
+        has_dune=has_dune,
+        dune_crest_elevation=DE,
+        dune_crest_x=crest_x,
+        dune_width=dune_width,
         morph_type=_classify(upland_elevation, BE, DE),
     )
 
     if scarp is not None:
         xc, drop = scarp
-        z = z - drop * (x >= xc)        # vertical step down landward of xc
+        # Localized erosional scarp: waves cut the beach/dune back from seaward,
+        # leaving an eroded bench SEAWARD of a steep face at xc with the profile
+        # LANDWARD of it intact.  The face height is ``drop``.  (Not a global
+        # offset — the dune/upland behind the scarp are unchanged.)
+        eroded = float(np.interp(xc, x, z)) - drop
+        z = np.where(x < xc, np.minimum(z, eroded), z)
 
     if noise > 0.0:
         z = z + np.random.default_rng(seed).normal(0.0, noise, size=len(x))

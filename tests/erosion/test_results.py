@@ -1,4 +1,5 @@
 """Unit tests for ParquetResultsSink and RunMeta."""
+
 import json
 import os
 from datetime import datetime
@@ -12,15 +13,21 @@ from tests.builders import SIM_START, profile, run
 
 def _make_sink(out_root: str, n_storms: int = 2) -> ParquetResultsSink:
     sink = ParquetResultsSink(out_root, "R1", "FWOP", lifecycle=0)
-    run([profile("p0", n=50), profile("p1", n=50)], n_storms,
-        sink=sink, reach_id="R1", alternative_id="FWOP")
+    run(
+        [profile("p0", n=50), profile("p1", n=50)],
+        n_storms,
+        sink=sink,
+        reach_id="R1",
+        alternative_id="FWOP",
+    )
     return sink
 
 
 class TestRunMeta:
     def test_fields(self):
-        m = RunMeta(reach_id="R", alternative_id="FWOP",
-                    sim_start=datetime(2030, 1, 1), lifecycle=3)
+        m = RunMeta(
+            reach_id="R", alternative_id="FWOP", sim_start=datetime(2030, 1, 1), lifecycle=3
+        )
         assert m.reach_id == "R"
         assert m.alternative_id == "FWOP"
         assert m.lifecycle == 3
@@ -52,23 +59,34 @@ def out_dir(tmp_path_factory) -> str:
 
 class TestParquetResultsSinkOutputFiles:
     def test_expected_files_written(self, out_dir):
-        for fname in ("profiles.parquet", "storm_hazard.parquet",
-                      "profile_events.parquet", "segment_events.csv",
-                      "run_metadata.json", "run_summary.txt"):
+        for fname in (
+            "profiles.parquet",
+            "storm_hazard.parquet",
+            "profile_events.parquet",
+            "segment_events.csv",
+            "run_metadata.json",
+            "run_summary.txt",
+        ):
             assert os.path.isfile(os.path.join(out_dir, fname)), f"missing {fname}"
 
-    @pytest.mark.parametrize("fname, expected", [
-        ("profiles.parquet",       {"profile_id", "label", "t", "node_idx", "x", "zb"}),
-        ("profile_events.parquet", {"profile_id", "label", "t", "storm_response_type"}),
-    ])
+    @pytest.mark.parametrize(
+        "fname, expected",
+        [
+            ("profiles.parquet", {"profile_id", "label", "t", "node_idx", "x", "zb"}),
+            ("profile_events.parquet", {"profile_id", "label", "t", "storm_response_type"}),
+        ],
+    )
     def test_exact_columns(self, out_dir, fname, expected):
         df = pd.read_parquet(os.path.join(out_dir, fname))
         assert set(df.columns) == expected
 
-    @pytest.mark.parametrize("fname, absent", [
-        ("profiles.parquet", "zbe"),
-        ("storm_hazard.parquet", "jdry"),
-    ])
+    @pytest.mark.parametrize(
+        "fname, absent",
+        [
+            ("profiles.parquet", "zbe"),
+            ("storm_hazard.parquet", "jdry"),
+        ],
+    )
     def test_absent_columns(self, out_dir, fname, absent):
         df = pd.read_parquet(os.path.join(out_dir, fname))
         assert absent not in df.columns
@@ -89,8 +107,9 @@ class TestParquetResultsSinkOutputFiles:
 
     def test_segment_events_csv_columns(self, out_dir):
         df = pd.read_csv(os.path.join(out_dir, "segment_events.csv"))
-        assert {"event_type", "profile_id", "t_start", "t_end",
-                "volume_m3", "volume_cy"}.issubset(set(df.columns))
+        assert {"event_type", "profile_id", "t_start", "t_end", "volume_m3", "volume_cy"}.issubset(
+            set(df.columns)
+        )
 
     def test_segment_events_empty_when_no_nourishment(self, out_dir):
         df = pd.read_csv(os.path.join(out_dir, "segment_events.csv"))
@@ -124,8 +143,7 @@ class TestRecordNourishment:
         sink = ParquetResultsSink(str(tmp_path), "R1", "FWOP", lifecycle=0)
         sink.record_nourishment("p0", 10.0, 15.0, 500.0, "FullNourishment")
         sink.record_nourishment("p1", 15.0, 20.0, 300.0, "PartialNourishment")
-        meta = RunMeta(reach_id="R1", alternative_id="FWOP",
-                       sim_start=SIM_START, lifecycle=0)
+        meta = RunMeta(reach_id="R1", alternative_id="FWOP", sim_start=SIM_START, lifecycle=0)
         sink.flush([], meta)
         df = pd.read_csv(os.path.join(sink.out_dir, "segment_events.csv"))
         assert len(df) == 2

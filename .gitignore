@@ -43,6 +43,7 @@ data/EventDate_LC.parquet
 
 # Generated artifacts
 examples/storm_recovery_experiment.png
+tests/_artifacts/
 
 # coverage
 .coverage

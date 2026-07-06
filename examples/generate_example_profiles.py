@@ -21,6 +21,7 @@ Usage:
     python examples/generate_example_profiles.py
     python examples/generate_example_profiles.py --out-dir data/profiles
 """
+
 from __future__ import annotations
 
 import argparse
@@ -86,7 +87,7 @@ def make_profile(
     beach_len = berm_z_ft / beach_face_slope
     mask = (x > c) & (x <= c + beach_len)
     z[mask] = berm_z_ft - beach_face_slope * (x[mask] - c)
-    sl_x = c + beach_len   # shoreline position
+    sl_x = c + beach_len  # shoreline position
     c = sl_x
 
     # 6. Nearshore: gentle slope + Gaussian bar
@@ -118,11 +119,15 @@ def write_csv(path: str, x: np.ndarray, z: np.ndarray, label: str) -> None:
 def main(out_dir: str) -> None:
     os.makedirs(out_dir, exist_ok=True)
     print(f"Output directory: {out_dir}\n")
-    print(f"  {'Profile':<12}  {'Type':<14}  {'UE':>6}  {'DE':>6}  {'BE':>6}  {'BW':>6}  {'berm_elevation (m)':>20}")
-    print(f"  {'-'*12}  {'-'*14}  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*20}")
+    print(
+        f"  {'Profile':<12}  {'Type':<14}  {'UE':>6}  {'DE':>6}  {'BE':>6}  {'BW':>6}  {'berm_elevation (m)':>20}"
+    )
+    print(f"  {'-' * 12}  {'-' * 14}  {'-' * 6}  {'-' * 6}  {'-' * 6}  {'-' * 6}  {'-' * 20}")
 
     def row(pid, morph, ue, de, be, bw):
-        print(f"  {pid:<12}  {morph:<14}  {ue:>5.1f}\'  {de:>5.1f}\'  {be:>5.1f}\'  {bw:>5.0f}\'  {be * FT_TO_M:>17.3f} m")
+        print(
+            f"  {pid:<12}  {morph:<14}  {ue:>5.1f}'  {de:>5.1f}'  {be:>5.1f}'  {bw:>5.0f}'  {be * FT_TO_M:>17.3f} m"
+        )
 
     # ------------------------------------------------------------------
     # Reach 1 — one profile per morphology type
@@ -130,27 +135,42 @@ def main(out_dir: str) -> None:
     print("\nReach 1 — one profile per BeachFX morphology type")
 
     # p0: LOW_UPLAND  (DE=14ft > BE=8ft > UE=6ft)
-    x, z = make_profile(upland_z_ft=6.0, dune_height_ft=14.0,
-                         dune_back_width_ft=80.0, dune_front_width_ft=50.0,
-                         berm_z_ft=8.0, berm_width_ft=120.0, beach_face_slope=0.10)
-    write_csv(os.path.join(out_dir, "reach1_p0.csv"), x, z,
-              "reach1_p0  LOW_UPLAND")
+    x, z = make_profile(
+        upland_z_ft=6.0,
+        dune_height_ft=14.0,
+        dune_back_width_ft=80.0,
+        dune_front_width_ft=50.0,
+        berm_z_ft=8.0,
+        berm_width_ft=120.0,
+        beach_face_slope=0.10,
+    )
+    write_csv(os.path.join(out_dir, "reach1_p0.csv"), x, z, "reach1_p0  LOW_UPLAND")
     row("reach1_p0", "LOW_UPLAND", 6.0, 14.0, 8.0, 120)
 
     # p1: LOW_BERM  (DE=14ft > UE=9ft, BE=6ft ≤ UE)
-    x, z = make_profile(upland_z_ft=9.0, dune_height_ft=14.0,
-                         dune_back_width_ft=60.0, dune_front_width_ft=40.0,
-                         berm_z_ft=6.0, berm_width_ft=80.0, beach_face_slope=0.10)
-    write_csv(os.path.join(out_dir, "reach1_p1.csv"), x, z,
-              "reach1_p1  LOW_BERM")
+    x, z = make_profile(
+        upland_z_ft=9.0,
+        dune_height_ft=14.0,
+        dune_back_width_ft=60.0,
+        dune_front_width_ft=40.0,
+        berm_z_ft=6.0,
+        berm_width_ft=80.0,
+        beach_face_slope=0.10,
+    )
+    write_csv(os.path.join(out_dir, "reach1_p1.csv"), x, z, "reach1_p1  LOW_BERM")
     row("reach1_p1", "LOW_BERM", 9.0, 14.0, 6.0, 80)
 
     # p2: HIGH_UPLAND  (UE=15ft ≥ DE=15ft — bluff, no distinct dune above upland)
-    x, z = make_profile(upland_z_ft=15.0, dune_height_ft=15.0,
-                         dune_back_width_ft=0.0, dune_front_width_ft=60.0,
-                         berm_z_ft=8.0, berm_width_ft=100.0, beach_face_slope=0.10)
-    write_csv(os.path.join(out_dir, "reach1_p2.csv"), x, z,
-              "reach1_p2  HIGH_UPLAND")
+    x, z = make_profile(
+        upland_z_ft=15.0,
+        dune_height_ft=15.0,
+        dune_back_width_ft=0.0,
+        dune_front_width_ft=60.0,
+        berm_z_ft=8.0,
+        berm_width_ft=100.0,
+        beach_face_slope=0.10,
+    )
+    write_csv(os.path.join(out_dir, "reach1_p2.csv"), x, z, "reach1_p2  HIGH_UPLAND")
     row("reach1_p2", "HIGH_UPLAND", 15.0, 15.0, 8.0, 100)
 
     # ------------------------------------------------------------------
@@ -159,11 +179,16 @@ def main(out_dir: str) -> None:
     print("\nReach 2 — LOW_UPLAND, steeper beach face")
 
     for pid, bw, slope in [("p0", 120, 0.14), ("p1", 90, 0.13), ("p2", 60, 0.12)]:
-        x, z = make_profile(upland_z_ft=6.0, dune_height_ft=13.0,
-                             dune_back_width_ft=70.0, dune_front_width_ft=45.0,
-                             berm_z_ft=7.5, berm_width_ft=bw, beach_face_slope=slope)
-        write_csv(os.path.join(out_dir, f"reach2_{pid}.csv"), x, z,
-                  f"reach2_{pid}  LOW_UPLAND")
+        x, z = make_profile(
+            upland_z_ft=6.0,
+            dune_height_ft=13.0,
+            dune_back_width_ft=70.0,
+            dune_front_width_ft=45.0,
+            berm_z_ft=7.5,
+            berm_width_ft=bw,
+            beach_face_slope=slope,
+        )
+        write_csv(os.path.join(out_dir, f"reach2_{pid}.csv"), x, z, f"reach2_{pid}  LOW_UPLAND")
         row(f"reach2_{pid}", "LOW_UPLAND", 6.0, 13.0, 7.5, bw)
 
     # ------------------------------------------------------------------
@@ -172,12 +197,17 @@ def main(out_dir: str) -> None:
     print("\nReach 3 — LOW_BERM, dissipative beach")
 
     for pid, bw, ue, de in [("p0", 80, 8.0, 12.0), ("p1", 60, 9.0, 11.0)]:
-        x, z = make_profile(upland_z_ft=ue, dune_height_ft=de,
-                             dune_back_width_ft=60.0, dune_front_width_ft=40.0,
-                             berm_z_ft=6.0, berm_width_ft=bw,
-                             beach_face_slope=0.07, offshore_slope=0.009)
-        write_csv(os.path.join(out_dir, f"reach3_{pid}.csv"), x, z,
-                  f"reach3_{pid}  LOW_BERM")
+        x, z = make_profile(
+            upland_z_ft=ue,
+            dune_height_ft=de,
+            dune_back_width_ft=60.0,
+            dune_front_width_ft=40.0,
+            berm_z_ft=6.0,
+            berm_width_ft=bw,
+            beach_face_slope=0.07,
+            offshore_slope=0.009,
+        )
+        write_csv(os.path.join(out_dir, f"reach3_{pid}.csv"), x, z, f"reach3_{pid}  LOW_BERM")
         row(f"reach3_{pid}", "LOW_BERM", ue, de, 6.0, bw)
 
     n_total = 3 + 3 + 2

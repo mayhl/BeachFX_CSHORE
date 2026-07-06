@@ -23,14 +23,15 @@ log = logging.getLogger(__name__)
 # Run context — identity + results sink + reach geometry for run_lifecycle
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReachContext:
-    reach_id:         str
-    alternative_id:   str
-    results:          ResultsSink
-    sim_start:        datetime
-    cfg:              ReachConfig    = field(default_factory=ReachConfig)
-    longshore_widths: list[float]   = field(default_factory=list)
+    reach_id: str
+    alternative_id: str
+    results: ResultsSink
+    sim_start: datetime
+    cfg: ReachConfig = field(default_factory=ReachConfig)
+    longshore_widths: list[float] = field(default_factory=list)
 
     @classmethod
     def minimal(cls, cfg: ReachConfig | None = None) -> ReachContext:
@@ -47,15 +48,17 @@ class ReachContext:
 # Interval-loop state
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReachState:
-    t:                float                  = 0.0
-    active_campaign:  ActiveCampaign | None  = None
+    t: float = 0.0
+    active_campaign: ActiveCampaign | None = None
 
 
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
+
 
 def run_lifecycle(
     profiles: list[Profile],
@@ -78,15 +81,15 @@ def run_lifecycle(
     from .nourishment import run_campaign
     from .storm import build_storm_schedule, run_parallel_cshore
 
-    state    = ReachState()
-    widths   = ctx.longshore_widths or None
+    state = ReachState()
+    widths = ctx.longshore_widths or None
 
     # INIT snapshot
     for p in profiles:
         p.snapshot(SnapshotLabel.INIT, 0.0)
 
     schedule = build_storm_schedule(storms_df, sim_start, cfg, lifecycle=lifecycle)
-    n        = len(schedule)
+    n = len(schedule)
 
     for i, storm in enumerate(schedule):
         t_next = schedule[i + 1].t if i + 1 < n else sim_end
@@ -96,7 +99,11 @@ def run_lifecycle(
 
         # Phase 2 — CSHORE (all profiles in parallel)
         results, zb_pre_new = run_parallel_cshore(
-            profiles, storm.t, storm.forcing, runner, cfg,
+            profiles,
+            storm.t,
+            storm.forcing,
+            runner,
+            cfg,
         )
         for p, r in zip(profiles, results):
             if r is not None:
@@ -104,7 +111,11 @@ def run_lifecycle(
 
         # Phase 3 — campaign
         state.t, state.active_campaign = run_campaign(
-            profiles, zb_pre_new, storm.t, t_next, cfg,
+            profiles,
+            zb_pre_new,
+            storm.t,
+            t_next,
+            cfg,
             ctx.results,
             longshore_widths=widths,
             prior=state.active_campaign,
@@ -121,5 +132,9 @@ def run_lifecycle(
         lifecycle=lifecycle,
     )
     ctx.results.flush(profiles, meta)
-    log.info("run_lifecycle complete — reach=%s alt=%s lc=%d",
-             ctx.reach_id, ctx.alternative_id, lifecycle)
+    log.info(
+        "run_lifecycle complete — reach=%s alt=%s lc=%d",
+        ctx.reach_id,
+        ctx.alternative_id,
+        lifecycle,
+    )

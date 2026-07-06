@@ -28,8 +28,10 @@ def _shoreline_x(x: np.ndarray, z: np.ndarray, datum: float = 0.0) -> float:
 
 
 def _shoreline_shift(
-    x_old: np.ndarray, z_old: np.ndarray,
-    x_new: np.ndarray, z_new: np.ndarray,
+    x_old: np.ndarray,
+    z_old: np.ndarray,
+    x_new: np.ndarray,
+    z_new: np.ndarray,
     datum: float = 0.0,
 ) -> float:
     """Landward shift in shoreline position between old and new grids (m)."""
@@ -40,6 +42,7 @@ def _shoreline_shift(
 # Per-profile geometry reference (immutable throughout the simulation)
 # ---------------------------------------------------------------------------
 
+
 class ProfileGeometryConfig(BaseModel):
     """Immutable geometry reference for one cross-shore profile transect.
 
@@ -49,6 +52,7 @@ class ProfileGeometryConfig(BaseModel):
     ``recovery_duration`` overrides ``StormConfig.T_recover`` for this profile;
     ``None`` means use the reach-wide default.
     """
+
     berm_elevation: ufloat("m", "ft")
     datum: float = 0.0
     recovery_duration: ufloat("days") | None = None
@@ -57,6 +61,7 @@ class ProfileGeometryConfig(BaseModel):
 # ---------------------------------------------------------------------------
 # Profile: pure data + snapshot()
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ProfileSnapshot:
@@ -82,13 +87,18 @@ class Profile:
         metrics = None
         if self.geometry is not None:
             metrics, _ideal = fit_profile(
-                self.x, self.zb,
+                self.x,
+                self.zb,
                 self.geometry.berm_elevation,
                 self.geometry.datum,
                 ref=self.ref_metrics,
             )
         snap = ProfileSnapshot(
-            label=label, x=self.x.copy(), zb=self.zb.copy(), t=t, metrics=metrics,
+            label=label,
+            x=self.x.copy(),
+            zb=self.zb.copy(),
+            t=t,
+            metrics=metrics,
         )
         self.snapshots.append(snap)
         # Pin ref_metrics to the INIT snapshot — constrains dune search in all subsequent fits
@@ -99,6 +109,7 @@ class Profile:
 # ---------------------------------------------------------------------------
 # ProfileEvent ABC
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ProfileEvent(ABC):
@@ -112,11 +123,13 @@ class ProfileEvent(ABC):
 # Concrete events
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ErosionTick(ProfileEvent):
     """Lower bed by erosion + SLC during the inter-storm interval."""
+
     dz_erosion: float | np.ndarray = 0.0
-    dz_slc:     float | np.ndarray = 0.0
+    dz_slc: float | np.ndarray = 0.0
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb - (self.dz_erosion + self.dz_slc)
@@ -130,12 +143,16 @@ class StormResponse(ProfileEvent):
     ``profile.x`` is never changed; CSHORE output is re-sampled onto the
     original fixed grid so every snapshot shares the same x-axis.
     """
+
     result: CSHOREResult
 
     def apply(self, profile: Profile) -> None:
         profile.zb = np.interp(
-            profile.x, self.result.x, self.result.zb,
-            left=self.result.zb[0], right=self.result.zb[-1],
+            profile.x,
+            self.result.x,
+            self.result.zb,
+            left=self.result.zb[0],
+            right=self.result.zb[-1],
         )
         profile.snapshot(SnapshotLabel.PostStorm, self.t)
 
@@ -148,10 +165,11 @@ class Recovery(ProfileEvent):
     (shifted by shoreline offset) by the phase runner before constructing this event.
     Only nodes below ``z_berm`` are blended; nodes at or above are left unchanged.
     """
-    fraction:      float
+
+    fraction: float
     zb_post_storm: np.ndarray
-    zb_pre_storm:  np.ndarray
-    z_berm:        float | None = None
+    zb_pre_storm: np.ndarray
+    z_berm: float | None = None
 
     def apply(self, profile: Profile) -> None:
         blend = self.zb_post_storm + self.fraction * (self.zb_pre_storm - self.zb_post_storm)
@@ -168,6 +186,7 @@ class Recovery(ProfileEvent):
 @dataclass
 class FullNourishment(ProfileEvent):
     """Place complete nourishment template (campaign reaches this profile fully)."""
+
     template_zb: np.ndarray
 
     def apply(self, profile: Profile) -> None:
@@ -182,8 +201,9 @@ class FullNourishment(ProfileEvent):
 @dataclass
 class PartialNourishment(ProfileEvent):
     """Place partial nourishment toward template (campaign interrupted before completion)."""
+
     template_zb: np.ndarray
-    fraction:    float
+    fraction: float
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb + self.fraction * (self.template_zb - profile.zb)

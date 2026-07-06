@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
@@ -13,8 +13,8 @@ from .types import SnapshotLabel
 from .units import ufloat
 
 if TYPE_CHECKING:
-    from .profile import Profile
     from .config import ReachConfig
+    from .profile import Profile
     from .results import ResultsSink
 
 log = logging.getLogger(__name__)
@@ -24,26 +24,31 @@ log = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
+
 class NourishmentConfig(BaseModel):
     """Reach-level nourishment policy parameters."""
 
     # Template profile
-    template_x: list[ufloat("m", "ft")]        # cross-shore positions (CSHORE convention, landward-positive)
-    template_z: list[ufloat("m", "ft")]        # bed elevations (m NAVD internally)
+    template_x: list[
+        ufloat("m", "ft")
+    ]  # cross-shore positions (CSHORE convention, landward-positive)
+    template_z: list[ufloat("m", "ft")]  # bed elevations (m NAVD internally)
 
     # Trigger + production
-    volume_trigger: ufloat("m3", "cy")         # reach-level volume deficit (m³) to launch a campaign
-    production_rate: ufloat("m3/day", "cy/yr") # dredge/pump output rate (m³/day)
+    volume_trigger: ufloat("m3", "cy")  # reach-level volume deficit (m³) to launch a campaign
+    production_rate: ufloat("m3/day", "cy/yr")  # dredge/pump output rate (m³/day)
 
     # Cost accounting
-    cost_per_cy: float = 0.0                   # unit material cost ($/cy placed)
-    mobilization_cost: float = 0.0             # fixed contractor mobilization cost ($)
-    mobilization_threshold: float = 0.0        # minimum total campaign cost ($) to proceed
-    mobilization_days: float = 0.0             # lead-time days before crew is on-site
+    cost_per_cy: float = 0.0  # unit material cost ($/cy placed)
+    mobilization_cost: float = 0.0  # fixed contractor mobilization cost ($)
+    mobilization_threshold: float = 0.0  # minimum total campaign cost ($) to proceed
+    mobilization_days: float = 0.0  # lead-time days before crew is on-site
 
     # Campaign scheduling
     strategy: Literal["equal_spacing", "zone_priority", "emergency"] = "equal_spacing"
-    blackout_windows: list[tuple[float, float]] = Field(default_factory=list)  # (t_start_days, t_end_days)
+    blackout_windows: list[tuple[float, float]] = Field(
+        default_factory=list
+    )  # (t_start_days, t_end_days)
 
     # Output tagging
     alternative_id: str = "FWP"
@@ -69,25 +74,28 @@ class NourishmentConfig(BaseModel):
 # Nourishment plan + campaign state
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProfileNourishmentPlan:
-    profile_id:     str
-    volume_m3:      float           # volume deficit (m³/m × width)
-    template_zb:    np.ndarray      # template interpolated onto profile grid
-    priority_score: float           # higher = nourish first
+    profile_id: str
+    volume_m3: float  # volume deficit (m³/m × width)
+    template_zb: np.ndarray  # template interpolated onto profile grid
+    priority_score: float  # higher = nourish first
 
 
 @dataclass
 class ActiveCampaign:
     """Carry-forward state when a nourishment campaign is interrupted by a storm."""
-    crew_on_site:   bool
-    priority_order: list[str]       # profile IDs in remaining campaign order
-    placed:         dict[str, float] = field(default_factory=dict)  # volume placed so far (m³)
+
+    crew_on_site: bool
+    priority_order: list[str]  # profile IDs in remaining campaign order
+    placed: dict[str, float] = field(default_factory=dict)  # volume placed so far (m³)
 
 
 # ---------------------------------------------------------------------------
 # Nourishment strategies
 # ---------------------------------------------------------------------------
+
 
 class NourishmentStrategy(ABC):
     @abstractmethod
@@ -115,8 +123,8 @@ class EqualSpacingStrategy(NourishmentStrategy):
     def plan(self, profile, ncfg, width_m):
         template_zb = _interp_template(profile, ncfg)
         datum = profile.geometry.datum if profile.geometry else 0.0
-        v_now = _volume_above_datum(profile.x, profile.zb,   datum, width_m)
-        v_tpl = _volume_above_datum(profile.x, template_zb,  datum, width_m)
+        v_now = _volume_above_datum(profile.x, profile.zb, datum, width_m)
+        v_tpl = _volume_above_datum(profile.x, template_zb, datum, width_m)
         deficit = max(0.0, v_tpl - v_now)
         if deficit <= 0:
             return None
@@ -135,14 +143,14 @@ class ZonePriorityStrategy(NourishmentStrategy):
         template_zb = _interp_template(profile, ncfg)
         datum = profile.geometry.datum if profile.geometry else 0.0
         berm_elev = profile.geometry.berm_elevation if profile.geometry else 0.0
-        v_now = _volume_above_datum(profile.x, profile.zb,  datum, width_m)
+        v_now = _volume_above_datum(profile.x, profile.zb, datum, width_m)
         v_tpl = _volume_above_datum(profile.x, template_zb, datum, width_m)
         deficit = max(0.0, v_tpl - v_now)
         if deficit <= 0:
             return None
 
         # Dune score: deficit of bed above berm_elevation
-        v_dune_now = _volume_above_datum(profile.x, profile.zb,  berm_elev, width_m)
+        v_dune_now = _volume_above_datum(profile.x, profile.zb, berm_elev, width_m)
         v_dune_tpl = _volume_above_datum(profile.x, template_zb, berm_elev, width_m)
         dune_deficit = max(0.0, v_dune_tpl - v_dune_now)
 
@@ -176,14 +184,15 @@ class EmergencyStrategy(NourishmentStrategy):
 
 _STRATEGIES: dict[str, NourishmentStrategy] = {
     "equal_spacing": EqualSpacingStrategy(),
-    "zone_priority":  ZonePriorityStrategy(),
-    "emergency":      EmergencyStrategy(),
+    "zone_priority": ZonePriorityStrategy(),
+    "emergency": EmergencyStrategy(),
 }
 
 
 # ---------------------------------------------------------------------------
 # Scheduling helpers
 # ---------------------------------------------------------------------------
+
 
 def _next_available(
     t: float,
@@ -193,8 +202,7 @@ def _next_available(
     """Return earliest start ≥ t such that [start, start+duration) doesn't overlap any blackout."""
     while True:
         blocking = next(
-            (bw_end for bw_start, bw_end in blackouts
-             if t < bw_end and t + duration > bw_start),
+            (bw_end for bw_start, bw_end in blackouts if t < bw_end and t + duration > bw_start),
             None,
         )
         if blocking is None:
@@ -236,6 +244,7 @@ def _apply_recovery_one(
 # Phase 3 runner
 # ---------------------------------------------------------------------------
 
+
 def run_campaign(
     profiles: list[Profile],
     zb_pre_new: list[np.ndarray],
@@ -257,7 +266,7 @@ def run_campaign(
     """
     from .profile import FullNourishment, PartialNourishment
 
-    ncfg   = cfg.nourishment
+    ncfg = cfg.nourishment
     widths = longshore_widths or [1.0] * len(profiles)
 
     # Capture post-storm zb BEFORE any recovery is applied
@@ -284,7 +293,9 @@ def run_campaign(
         if total_deficit < ncfg.volume_trigger:
             log.info(
                 "Campaign at t=%.1fd: deficit %.0f m³ < trigger %.0f m³ — skipping",
-                t_storm, total_deficit, ncfg.volume_trigger,
+                t_storm,
+                total_deficit,
+                ncfg.volume_trigger,
             )
             for i, p in enumerate(profiles):
                 _apply_recovery_one(p, zb_post[i], zb_pre_new[i], t_storm, t_next, cfg)
@@ -292,37 +303,37 @@ def run_campaign(
 
     # --- Sort by priority (highest first) ---
     sorted_plans: list[tuple[int, ProfileNourishmentPlan]] = sorted(
-        plans.items(), key=lambda x: -x[1].priority_score,
+        plans.items(),
+        key=lambda x: -x[1].priority_score,
     )
 
     # --- If resuming a prior campaign, prepend remaining profiles in previous order ---
     if prior is not None:
-        id_to_idx   = {p.id: i for i, p in enumerate(profiles)}
-        prev_ids    = [pid for pid in prior.priority_order if pid in id_to_idx]
-        prev_set    = set(prev_ids)
-        rank        = {pid: pos for pos, pid in enumerate(prev_ids)}
-        remaining   = sorted(
+        id_to_idx = {p.id: i for i, p in enumerate(profiles)}
+        prev_ids = [pid for pid in prior.priority_order if pid in id_to_idx]
+        prev_set = set(prev_ids)
+        rank = {pid: pos for pos, pid in enumerate(prev_ids)}
+        remaining = sorted(
             [(i, pl) for i, pl in sorted_plans if profiles[i].id in prev_set],
             key=lambda x: rank.get(profiles[x[0]].id, 999),
         )
-        new_ones    = [(i, pl) for i, pl in sorted_plans if profiles[i].id not in prev_set]
+        new_ones = [(i, pl) for i, pl in sorted_plans if profiles[i].id not in prev_set]
         sorted_plans = remaining + new_ones
-        t_crew = t_storm   # crew already on site
+        t_crew = t_storm  # crew already on site
     else:
         t_crew = t_storm + ncfg.mobilization_days
 
-    recovery_done: dict[int, float] = {}   # idx → time through which recovery was applied
+    recovery_done: dict[int, float] = {}  # idx → time through which recovery was applied
     active_campaign: ActiveCampaign | None = None
 
     for i, plan in sorted_plans:
-        p        = profiles[i]
-        duration = plan.volume_m3 / ncfg.production_rate   # days
-        t_start  = _next_available(t_crew, duration, list(ncfg.blackout_windows))
+        p = profiles[i]
+        duration = plan.volume_m3 / ncfg.production_rate  # days
+        t_start = _next_available(t_crew, duration, list(ncfg.blackout_windows))
 
         if t_start >= t_next:
             # Can't start before next storm — queue this and all subsequent profiles
-            remaining_ids = [profiles[j].id for j, _ in sorted_plans
-                             if j not in recovery_done]
+            remaining_ids = [profiles[j].id for j, _ in sorted_plans if j not in recovery_done]
             if active_campaign is None:
                 active_campaign = ActiveCampaign(
                     crew_on_site=False,
@@ -343,15 +354,18 @@ def run_campaign(
             # Storm interrupts nourishment — partial placement
             fraction = (t_next - t_start) / duration
             PartialNourishment(
-                t=t_next, template_zb=plan.template_zb, fraction=fraction,
+                t=t_next,
+                template_zb=plan.template_zb,
+                fraction=fraction,
             ).apply(p)
-            sink.record_nourishment(p.id, t_start, t_next, plan.volume_m3 * fraction, "PartialNourishment")
+            sink.record_nourishment(
+                p.id, t_start, t_next, plan.volume_m3 * fraction, "PartialNourishment"
+            )
             recovery_done[i] = t_next
             t_crew = t_next
 
             remaining_ids = [
-                profiles[j].id for j, _ in sorted_plans
-                if j not in recovery_done or j == i
+                profiles[j].id for j, _ in sorted_plans if j not in recovery_done or j == i
             ]
             active_campaign = ActiveCampaign(
                 crew_on_site=True,

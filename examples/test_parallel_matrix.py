@@ -8,6 +8,7 @@ combination and reports wall-clock time in a table.
 Usage:
     python examples/test_parallel_matrix.py [--lifecycles N] [--config PATH]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # Default matrix — rows=workers, cols=profile_workers
 # Adjust to taste or pass --workers / --profile-workers on the CLI.
 # ---------------------------------------------------------------------------
-DEFAULT_WORKERS         = [1, 2, 4, 8]
+DEFAULT_WORKERS = [1, 2, 4, 8]
 DEFAULT_PROFILE_WORKERS = [1, 2, 3]
 
 # Number of lifecycle copies to generate so there are enough jobs to expose
@@ -57,8 +58,10 @@ def _run_once(
         sys.executable,
         os.path.join(ROOT, "examples", "run_pipeline.py"),
         config_path,
-        "--workers",         str(workers),
-        "--profile-workers", str(profile_workers),
+        "--workers",
+        str(workers),
+        "--profile-workers",
+        str(profile_workers),
     ]
 
     t0 = time.perf_counter()
@@ -108,7 +111,9 @@ def run(
             json.dump(patched_cfg, f)
 
         print(f"\nConfig: {base_config}")
-        print(f"Lifecycles: {n_lifecycles}  →  ~{2 * n_lifecycles} jobs (2 alts × {n_lifecycles} lc)")
+        print(
+            f"Lifecycles: {n_lifecycles}  →  ~{2 * n_lifecycles} jobs (2 alts × {n_lifecycles} lc)"
+        )
         print(f"Workers grid:          {workers_list}")
         print(f"Profile-workers grid:  {profile_workers_list}")
         print()
@@ -126,14 +131,14 @@ def run(
                 print(f"  Running workers={w:>2}, profile_workers={pw:>2} … ", end="", flush=True)
                 elapsed = _run_once(cfg_path, w, pw, out_root)
                 results[(w, pw)] = elapsed
-                if elapsed != elapsed:   # nan
+                if elapsed != elapsed:  # nan
                     row_times.append("  FAIL")
                 else:
                     row_times.append(f"{elapsed:6.1f}s")
                 print(row_times[-1].strip())
 
             cells = "  ".join(f"{t:>6}" for t in row_times)
-            print(f"{'w='+str(w):>8}  {cells}")
+            print(f"{'w=' + str(w):>8}  {cells}")
 
         # --- Summary table ---
         print("\n=== Summary (wall-clock seconds) ===")
@@ -141,11 +146,10 @@ def run(
         print("-" * (10 + 8 * len(profile_workers_list)))
         for w in workers_list:
             cells = "  ".join(
-                f"{results[(w,pw)]:6.1f}s" if results[(w,pw)] == results[(w,pw)]
-                else "  FAIL"
+                f"{results[(w, pw)]:6.1f}s" if results[(w, pw)] == results[(w, pw)] else "  FAIL"
                 for pw in profile_workers_list
             )
-            print(f"{'w='+str(w):>8}  {cells}")
+            print(f"{'w=' + str(w):>8}  {cells}")
 
         # --- Best combo ---
         valid = {k: v for k, v in results.items() if v == v}
@@ -157,16 +161,27 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config", default=os.path.join(ROOT, "examples/configs/ex4_multi_profile_multi_alt.json"),
+        "--config",
+        default=os.path.join(ROOT, "examples/configs/ex4_multi_profile_multi_alt.json"),
         help="Base config JSON (storms path will be overridden)",
     )
-    parser.add_argument("--lifecycles", type=int, default=DEFAULT_LIFECYCLES,
-                        help=f"Number of lifecycle copies to generate (default: {DEFAULT_LIFECYCLES})")
-    parser.add_argument("--workers", type=int, nargs="+", default=DEFAULT_WORKERS,
-                        help="Dask worker counts to test")
-    parser.add_argument("--profile-workers", dest="profile_workers", type=int, nargs="+",
-                        default=DEFAULT_PROFILE_WORKERS,
-                        help="Profile-thread counts to test")
+    parser.add_argument(
+        "--lifecycles",
+        type=int,
+        default=DEFAULT_LIFECYCLES,
+        help=f"Number of lifecycle copies to generate (default: {DEFAULT_LIFECYCLES})",
+    )
+    parser.add_argument(
+        "--workers", type=int, nargs="+", default=DEFAULT_WORKERS, help="Dask worker counts to test"
+    )
+    parser.add_argument(
+        "--profile-workers",
+        dest="profile_workers",
+        type=int,
+        nargs="+",
+        default=DEFAULT_PROFILE_WORKERS,
+        help="Profile-thread counts to test",
+    )
     args = parser.parse_args()
 
     run(

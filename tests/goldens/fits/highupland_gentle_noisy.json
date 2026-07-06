@@ -1,0 +1,50 @@
+{
+  "datum": 0.0,
+  "design_BE": 2.0,
+  "knots_x": [
+    19.29240333306649,
+    199.0,
+    256.0,
+    300.0,
+    320.0
+  ],
+  "knots_z": [
+    0.0,
+    2.3477916253824134,
+    2.3477916253824134,
+    2.4646231877652975,
+    2.4646231877652975
+  ],
+  "metrics": {
+    "berm_elevation": 2.3477916253824134,
+    "berm_scarp": false,
+    "berm_width": 57.0,
+    "dune_back_relief": NaN,
+    "dune_back_slope": NaN,
+    "dune_back_width": 0.0,
+    "dune_crest_elevation": NaN,
+    "dune_crest_x": NaN,
+    "dune_front_relief": NaN,
+    "dune_front_slope": NaN,
+    "dune_front_width": 0.0,
+    "dune_scarp": false,
+    "dune_top_width": 0.0,
+    "dune_width": 0.0,
+    "fit_quality": 0.7391269314322337,
+    "foreshore_slope": 0.005164533283722992,
+    "morph_type": "HIGH_UPLAND",
+    "n_upland_nodes": 21,
+    "scarp_height": NaN,
+    "shoreline_x": 19.29240333306649,
+    "upland_elevation": 2.4646231877652975,
+    "volume_above_datum": 642.4639708924005
+  },
+  "name": "highupland_gentle_noisy",
+  "spec": {
+    "berm_elevation": 2.0,
+    "dune": null,
+    "noise": 0.05,
+    "seed": 13,
+    "upland_elevation": 2.5
+  }
+}

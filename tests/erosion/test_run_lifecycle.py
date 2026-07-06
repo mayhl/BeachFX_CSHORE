@@ -1,4 +1,5 @@
 """Integration-lite tests: run_lifecycle end-to-end with MockCSHORERunner."""
+
 from __future__ import annotations
 
 import os
@@ -12,17 +13,23 @@ from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
 from erosion.results import ParquetResultsSink
 from erosion.types import SnapshotLabel
-from tests.builders import SIM_START, profile, run
+from tests.builders import profile, run
 
 
 def _p(pid: str = "p0", n: int = 100):
     return profile(pid=pid, n=n, x_max=200.0, zb="ramp")
 
 
-def _run(n_storms: int = 3, n_profiles: int = 2, cfg: ReachConfig | None = None,
-         sink=None, lifecycle: int = 0):
-    profiles, _ = run([_p(f"p{i}") for i in range(n_profiles)], n_storms,
-                      cfg=cfg, sink=sink, lifecycle=lifecycle)
+def _run(
+    n_storms: int = 3,
+    n_profiles: int = 2,
+    cfg: ReachConfig | None = None,
+    sink=None,
+    lifecycle: int = 0,
+):
+    profiles, _ = run(
+        [_p(f"p{i}") for i in range(n_profiles)], n_storms, cfg=cfg, sink=sink, lifecycle=lifecycle
+    )
     return profiles
 
 
@@ -59,7 +66,7 @@ class TestSnapshotSequence:
     def test_prestorm_before_poststorm(self):
         profiles = _run(n_storms=2)
         for p in profiles:
-            pre_ts  = [s.t for s in p.snapshots if s.label == SnapshotLabel.PreStorm]
+            pre_ts = [s.t for s in p.snapshots if s.label == SnapshotLabel.PreStorm]
             post_ts = [s.t for s in p.snapshots if s.label == SnapshotLabel.PostStorm]
             for pre, post in zip(pre_ts, post_ts):
                 assert pre <= post
@@ -100,5 +107,5 @@ class TestWithErosionConfig:
         profiles = _run(n_storms=1, cfg=cfg)
         for p in profiles:
             init_zb = p.snapshots[0].zb
-            pre_zb  = next(s.zb for s in p.snapshots if s.label == SnapshotLabel.PreStorm)
+            pre_zb = next(s.zb for s in p.snapshots if s.label == SnapshotLabel.PreStorm)
             assert np.mean(pre_zb) < np.mean(init_zb)

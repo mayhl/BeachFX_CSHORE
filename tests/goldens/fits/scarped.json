@@ -1,0 +1,57 @@
+{
+  "datum": 0.0,
+  "design_BE": 2.0,
+  "knots_x": [
+    19.71608832807571,
+    39.0,
+    69.99999728620767,
+    73.00000490478857,
+    93.00000837045656,
+    320.0
+  ],
+  "knots_z": [
+    0.0,
+    2.0,
+    1.999999999999994,
+    4.999995406528206,
+    0.9999999999999983,
+    1.0
+  ],
+  "metrics": {
+    "berm_elevation": 2.0,
+    "berm_scarp": false,
+    "berm_width": 30.0,
+    "dune_back_relief": 3.999995406528206,
+    "dune_back_slope": 0.19999973566977633,
+    "dune_back_width": 20.000003465667987,
+    "dune_crest_elevation": 4.999995406528206,
+    "dune_crest_x": 73.00000490478857,
+    "dune_front_relief": 2.999995406528206,
+    "dune_front_slope": 0.9999959293261099,
+    "dune_front_width": 3.000007618580895,
+    "dune_scarp": true,
+    "dune_top_width": 0.0,
+    "dune_width": 23.000011084248882,
+    "fit_quality": 0.01751984402337961,
+    "foreshore_slope": 0.1,
+    "morph_type": "LOW_UPLAND",
+    "n_upland_nodes": 226,
+    "scarp_height": 3.0,
+    "shoreline_x": 19.71608832807571,
+    "upland_elevation": 1.0,
+    "volume_above_datum": 377.5
+  },
+  "name": "scarped",
+  "spec": {
+    "berm_elevation": 2.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 5.0,
+      "front_width": 3.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "upland_elevation": 1.0
+  }
+}

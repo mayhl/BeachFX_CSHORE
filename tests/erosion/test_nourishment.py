@@ -1,14 +1,17 @@
 """Unit tests for campaign runner: _next_available and run_campaign."""
+
+import tempfile
+
 import numpy as np
 import pytest
-import tempfile
 
 from erosion.config import ReachConfig
 from erosion.nourishment import ActiveCampaign, _next_available, run_campaign
 from erosion.profile import Profile
 from erosion.results import NullResultsSink, ParquetResultsSink
 from erosion.types import SnapshotLabel
-from tests.builders import ncfg as _ncfg, profile as _p
+from tests.builders import ncfg as _ncfg
+from tests.builders import profile as _p
 
 
 def _cfg(nourishment=None) -> ReachConfig:
@@ -42,8 +45,9 @@ class TestNextAvailable:
 class TestRunCampaignNoNourishment:
     def test_returns_t_next(self):
         p = _p()
-        t, campaign = run_campaign([p], _zb_pre([p]), t_storm=10.0, t_next=30.0,
-                                   cfg=_cfg(), sink=NullResultsSink())
+        t, campaign = run_campaign(
+            [p], _zb_pre([p]), t_storm=10.0, t_next=30.0, cfg=_cfg(), sink=NullResultsSink()
+        )
         assert t == pytest.approx(30.0)
         assert campaign is None
 
@@ -53,16 +57,14 @@ class TestRunCampaignNoNourishment:
         zb_pre = [np.ones(50) * 1.0]
         cfg = _cfg()
         cfg.storm.T_recover = 20.0
-        run_campaign([p], zb_pre, t_storm=10.0, t_next=30.0, cfg=cfg,
-                     sink=NullResultsSink())
+        run_campaign([p], zb_pre, t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink())
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-12)
 
     def test_rec_snapshot_taken(self):
         p = _p()
         cfg = _cfg()
         cfg.storm.T_recover = 20.0
-        run_campaign([p], _zb_pre([p]), t_storm=0.0, t_next=20.0, cfg=cfg,
-                     sink=NullResultsSink())
+        run_campaign([p], _zb_pre([p]), t_storm=0.0, t_next=20.0, cfg=cfg, sink=NullResultsSink())
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.REC in labels
 
@@ -71,8 +73,9 @@ class TestRunCampaignBelowTrigger:
     def test_below_trigger_skips_nourishment(self):
         p = _p()
         cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9))
-        t, campaign = run_campaign([p], _zb_pre([p]), t_storm=10.0, t_next=30.0,
-                                   cfg=cfg, sink=NullResultsSink())
+        t, campaign = run_campaign(
+            [p], _zb_pre([p]), t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
+        )
         assert campaign is None
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.ESN not in labels
@@ -82,8 +85,7 @@ class TestRunCampaignBelowTrigger:
         cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9))
         cfg.storm.T_recover = 20.0
         zb_pre = [np.ones(50)]
-        run_campaign([p], zb_pre, t_storm=0.0, t_next=20.0, cfg=cfg,
-                     sink=NullResultsSink())
+        run_campaign([p], zb_pre, t_storm=0.0, t_next=20.0, cfg=cfg, sink=NullResultsSink())
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-12)
 
 
@@ -92,8 +94,15 @@ class TestRunCampaignWithNourishment:
         p = _p()
         cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
         cfg.storm.T_recover = 21.0
-        run_campaign([p], [np.zeros(50)], t_storm=0.0, t_next=200.0, cfg=cfg,
-                     sink=NullResultsSink(), longshore_widths=[50.0])
+        run_campaign(
+            [p],
+            [np.zeros(50)],
+            t_storm=0.0,
+            t_next=200.0,
+            cfg=cfg,
+            sink=NullResultsSink(),
+            longshore_widths=[50.0],
+        )
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.ESN in labels
 
@@ -101,8 +110,15 @@ class TestRunCampaignWithNourishment:
         p = _p()
         cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
         cfg.storm.T_recover = 21.0
-        run_campaign([p], [np.zeros(50)], t_storm=0.0, t_next=200.0, cfg=cfg,
-                     sink=NullResultsSink(), longshore_widths=[50.0])
+        run_campaign(
+            [p],
+            [np.zeros(50)],
+            t_storm=0.0,
+            t_next=200.0,
+            cfg=cfg,
+            sink=NullResultsSink(),
+            longshore_widths=[50.0],
+        )
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.SSN in labels
 
@@ -112,8 +128,15 @@ class TestRunCampaignWithNourishment:
             p = _p()
             cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
             cfg.storm.T_recover = 21.0
-            run_campaign([p], [np.zeros(50)], t_storm=0.0, t_next=200.0, cfg=cfg,
-                         sink=sink, longshore_widths=[50.0])
+            run_campaign(
+                [p],
+                [np.zeros(50)],
+                t_storm=0.0,
+                t_next=200.0,
+                cfg=cfg,
+                sink=sink,
+                longshore_widths=[50.0],
+            )
             assert len(sink._nourishment_rows) >= 1
             assert sink._nourishment_rows[0]["event_type"] == "FullNourishment"
 
@@ -125,8 +148,15 @@ class TestRunCampaignStormInterrupt:
         ncfg = _ncfg(volume_trigger=0.001, production_rate=0.001)  # near-zero → interrupted
         cfg = _cfg(nourishment=ncfg)
         cfg.storm.T_recover = 21.0
-        run_campaign([p], [np.zeros(50)], t_storm=0.0, t_next=0.001,
-                     cfg=cfg, sink=NullResultsSink(), longshore_widths=[50.0])
+        run_campaign(
+            [p],
+            [np.zeros(50)],
+            t_storm=0.0,
+            t_next=0.001,
+            cfg=cfg,
+            sink=NullResultsSink(),
+            longshore_widths=[50.0],
+        )
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.SSN in labels
 
@@ -136,9 +166,14 @@ class TestRunCampaignStormInterrupt:
         cfg = _cfg(nourishment=ncfg)
         cfg.storm.T_recover = 21.0
         t, campaign = run_campaign(
-            [p0, p1], [np.zeros(50), np.zeros(50)],
-            t_storm=0.0, t_next=0.001,
-            cfg=cfg, sink=NullResultsSink(), longshore_widths=[50.0, 50.0])
+            [p0, p1],
+            [np.zeros(50), np.zeros(50)],
+            t_storm=0.0,
+            t_next=0.001,
+            cfg=cfg,
+            sink=NullResultsSink(),
+            longshore_widths=[50.0, 50.0],
+        )
         assert campaign is not None
 
 
@@ -149,7 +184,15 @@ class TestRunCampaignCrewOnSite:
         cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9, production_rate=500.0))
         cfg.storm.T_recover = 21.0
         prior = ActiveCampaign(crew_on_site=True, priority_order=["p0"])
-        run_campaign([p], [np.zeros(50)], t_storm=0.0, t_next=200.0,
-                     cfg=cfg, sink=NullResultsSink(), longshore_widths=[50.0], prior=prior)
+        run_campaign(
+            [p],
+            [np.zeros(50)],
+            t_storm=0.0,
+            t_next=200.0,
+            cfg=cfg,
+            sink=NullResultsSink(),
+            longshore_widths=[50.0],
+            prior=prior,
+        )
         labels = [s.label for s in p.snapshots]
         assert SnapshotLabel.ESN in labels

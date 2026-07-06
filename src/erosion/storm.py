@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import math
 import logging
+import math
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Literal, NamedTuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -15,8 +15,8 @@ from .types import SnapshotLabel, StormResponseType
 from .units import ufloat
 
 if TYPE_CHECKING:
-    from .profile import Profile
     from .config import ReachConfig
+    from .profile import Profile
     from .runner.base import CSHOREResult, CSHORERunner
 
 log = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 class StormConfig(BaseModel):
     """Parameters governing both storm response and post-storm recovery.
@@ -35,20 +36,22 @@ class StormConfig(BaseModel):
     Per-profile ``recovery_duration`` in ``ProfileGeometryConfig`` overrides
     this reach-wide default when set.
     """
+
     T_recover: ufloat("days") = 21.0
     recovery_model: Literal["linear", "exponential"] = "linear"
-    z_berm: ufloat("m", "ft") | None = None     # below-berm mask; None = blend all nodes
-    hydro_dt: ufloat("hours") | None = None     # resample hydrograph; None = raw CHS intervals
+    z_berm: ufloat("m", "ft") | None = None  # below-berm mask; None = blend all nodes
+    hydro_dt: ufloat("hours") | None = None  # resample hydrograph; None = raw CHS intervals
 
 
 # ---------------------------------------------------------------------------
 # Storm schedule
 # ---------------------------------------------------------------------------
 
+
 class StormRecord(NamedTuple):
-    t:        float   # days since sim_start
+    t: float  # days since sim_start
     storm_id: str
-    forcing:  dict    # CSHORE BC dict (timebc_wave, Hs, Hrms, Tp, Wsetup, swlbc, angle)
+    forcing: dict  # CSHORE BC dict (timebc_wave, Hs, Hrms, Tp, Wsetup, swlbc, angle)
 
 
 def build_storm_schedule(
@@ -75,8 +78,8 @@ def build_storm_schedule(
 
         t_in_storm = (group["date"] - first_date).dt.total_seconds().values.astype(float)
         raw = {
-            "Hs":    group["wave_height"].values.astype(float),
-            "Tp":    group["wave_peak_period"].values.astype(float),
+            "Hs": group["wave_height"].values.astype(float),
+            "Tp": group["wave_peak_period"].values.astype(float),
             "swlbc": group["water_elevation"].values.astype(float),
             "angle": group["wave_direction"].values.astype(float),
         }
@@ -90,12 +93,12 @@ def build_storm_schedule(
         Hs = raw["Hs"]
         forcing = {
             "timebc_wave": t_in_storm,
-            "Hs":          Hs,
-            "Hrms":        Hs / np.sqrt(2.0),
-            "Tp":          raw["Tp"],
-            "Wsetup":      np.zeros(len(t_in_storm)),
-            "swlbc":       raw["swlbc"],
-            "angle":       raw["angle"],
+            "Hs": Hs,
+            "Hrms": Hs / np.sqrt(2.0),
+            "Tp": raw["Tp"],
+            "Wsetup": np.zeros(len(t_in_storm)),
+            "swlbc": raw["swlbc"],
+            "angle": raw["angle"],
         }
         records.append(StormRecord(t=t_days, storm_id=str(storm_id), forcing=forcing))
 
@@ -105,6 +108,7 @@ def build_storm_schedule(
 # ---------------------------------------------------------------------------
 # Storm response classification
 # ---------------------------------------------------------------------------
+
 
 def classify_storm_response(
     m_pre: ProfileMetrics,
@@ -120,20 +124,25 @@ def classify_storm_response(
       CAT_TOTAL     — LOW_UPLAND pre-storm; dune and berm both gone (BW == 0)
     """
     from .metrics import MorphType
+
     min_dune_elev = max(float(m_post.upland_elevation), float(BE))
     if float(m_post.dune_crest_elevation) > min_dune_elev:
         return StormResponseType.NORMAL
     if m_pre.morph_type == MorphType.LOW_BERM.value:
         return StormResponseType.CAT_DUNE_LOST
     if m_pre.morph_type == MorphType.LOW_UPLAND.value:
-        return (StormResponseType.CAT_PARTIAL
-                if m_post.berm_width > 0.0 else StormResponseType.CAT_TOTAL)
-    return StormResponseType.NORMAL   # HIGH_UPLAND — no dune to categorically lose
+        return (
+            StormResponseType.CAT_PARTIAL
+            if m_post.berm_width > 0.0
+            else StormResponseType.CAT_TOTAL
+        )
+    return StormResponseType.NORMAL  # HIGH_UPLAND — no dune to categorically lose
 
 
 # ---------------------------------------------------------------------------
 # Phase 2 runner
 # ---------------------------------------------------------------------------
+
 
 def run_parallel_cshore(
     profiles: list[Profile],
@@ -159,7 +168,7 @@ def run_parallel_cshore(
     from .profile import StormResponse, _shoreline_shift
 
     # Capture pre-storm state and take PreStorm snapshots
-    x_pre  = [p.x.copy()  for p in profiles]
+    x_pre = [p.x.copy() for p in profiles]
     zb_pre = [p.zb.copy() for p in profiles]
     for p in profiles:
         p.snapshot(SnapshotLabel.PreStorm, t_storm)
@@ -177,12 +186,12 @@ def run_parallel_cshore(
     # real parallelism — but cap workers at the CPU count to avoid oversubscription.
     max_workers = min(len(profiles), os.cpu_count() or len(profiles))
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futs    = [ex.submit(_run_safe, p) for p in profiles]
-        raw     = [f.result() for f in futs]
+        futs = [ex.submit(_run_safe, p) for p in profiles]
+        raw = [f.result() for f in futs]
 
     # Apply results; compute zb_pre_new on the original fixed grid
-    results:     list[CSHOREResult | None] = []
-    zb_pre_new:  list[np.ndarray]          = []
+    results: list[CSHOREResult | None] = []
+    zb_pre_new: list[np.ndarray] = []
 
     for p, r, zb_p, x_p in zip(profiles, raw, zb_pre, x_pre):
         if r is None:
@@ -196,33 +205,45 @@ def run_parallel_cshore(
         # Shift-register pre-storm profile to post-storm shoreline position,
         # keeping everything on the original fixed x-grid.
         dx = _shoreline_shift(x_p, zb_p, r.x, r.zb)
-        zb_pre_new.append(np.interp(
-            x_p - dx, x_p, zb_p, left=zb_p[0], right=zb_p[-1],
-        ))
-        StormResponse(t=t_storm, result=r).apply(p)   # interpolates onto x_p, takes PostStorm
+        zb_pre_new.append(
+            np.interp(
+                x_p - dx,
+                x_p,
+                zb_p,
+                left=zb_p[0],
+                right=zb_p[-1],
+            )
+        )
+        StormResponse(t=t_storm, result=r).apply(p)  # interpolates onto x_p, takes PostStorm
 
         # Attach storm response classification when geometry metrics are available
         if p.geometry is not None:
-            pre_snap  = next(
-                (s for s in reversed(p.snapshots[:-1])
-                 if s.label == SnapshotLabel.PreStorm), None
+            pre_snap = next(
+                (s for s in reversed(p.snapshots[:-1]) if s.label == SnapshotLabel.PreStorm), None
             )
             post_snap = p.snapshots[-1]
             if pre_snap and pre_snap.metrics and post_snap.metrics:
                 post_snap.storm_response_type = classify_storm_response(
-                    pre_snap.metrics, post_snap.metrics, p.geometry.berm_elevation,
+                    pre_snap.metrics,
+                    post_snap.metrics,
+                    p.geometry.berm_elevation,
                 )
 
         results.append(r)
 
-    log.info("Storm t=%.1fd — done (%d ok, %d failed)",
-             t_storm, sum(r is not None for r in results), sum(r is None for r in results))
+    log.info(
+        "Storm t=%.1fd — done (%d ok, %d failed)",
+        t_storm,
+        sum(r is not None for r in results),
+        sum(r is None for r in results),
+    )
     return results, zb_pre_new
 
 
 # ---------------------------------------------------------------------------
 # Recovery fraction
 # ---------------------------------------------------------------------------
+
 
 def _recovery_fraction(dt: float, T_recover: float, model: str) -> float:
     """Fraction of recovery completed after ``dt`` days.
@@ -233,6 +254,6 @@ def _recovery_fraction(dt: float, T_recover: float, model: str) -> float:
     if dt <= 0 or T_recover <= 0:
         return 0.0
     if model == "exponential":
-        k = -math.log(0.1) / T_recover   # T90 convention
+        k = -math.log(0.1) / T_recover  # T90 convention
         return float(1.0 - math.exp(-k * dt))
-    return min(dt / T_recover, 1.0)       # linear
+    return min(dt / T_recover, 1.0)  # linear

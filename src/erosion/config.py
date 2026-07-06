@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Annotated, Union
-
 from pydantic import BaseModel, Field
 
 from .interstorm import ErosionConfig, GenCadeErosionConfig, SLCConfig, UniformErosionConfig
@@ -25,8 +23,9 @@ __all__ = [
 
 class ReachConfig(BaseModel):
     """All policy parameters for one reach."""
-    storm:       StormConfig         = Field(default_factory=StormConfig)
-    cshore:      CSHOREParams        = Field(default_factory=CSHOREParams)
-    erosion:     ErosionConfig | None = None
-    slc:         SLCConfig | None    = None
+
+    storm: StormConfig = Field(default_factory=StormConfig)
+    cshore: CSHOREParams = Field(default_factory=CSHOREParams)
+    erosion: ErosionConfig | None = None
+    slc: SLCConfig | None = None
     nourishment: NourishmentConfig | None = None
