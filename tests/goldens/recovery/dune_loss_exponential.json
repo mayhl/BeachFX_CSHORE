@@ -1,0 +1,46 @@
+{
+  "T_recover": 21.0,
+  "fractions": [
+    0.0,
+    0.535841116638722,
+    0.7845565309968117,
+    0.9,
+    0.99
+  ],
+  "model": "exponential",
+  "name": "dune_loss_exponential",
+  "post_spec": {
+    "berm_elevation": 1.0,
+    "berm_width": 12.0,
+    "dune": null,
+    "upland_elevation": 3.0
+  },
+  "pre_spec": {
+    "berm_elevation": 2.5,
+    "berm_width": 40.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 5.0,
+      "front_width": 15.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "upland_elevation": 3.0
+  },
+  "sample_days": [
+    0.0,
+    7.0,
+    14.0,
+    21.0,
+    42.0
+  ],
+  "volumes": [
+    573.0,
+    730.8052088501037,
+    804.0518983785611,
+    838.0500000000001,
+    864.555
+  ],
+  "z_berm": null
+}

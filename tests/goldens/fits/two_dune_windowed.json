@@ -1,0 +1,68 @@
+{
+  "datum": 0.0,
+  "design_BE": 2.0,
+  "knots_x": [
+    19.71608832807571,
+    39.0,
+    69.99997379022585,
+    84.99998892872101,
+    104.91448468419557,
+    151.0
+  ],
+  "knots_z": [
+    0.0,
+    2.0,
+    1.9999999999600375,
+    4.999986179323453,
+    2.012835530523977,
+    2.0
+  ],
+  "metrics": {
+    "berm_elevation": 2.0,
+    "berm_scarp": false,
+    "berm_width": 31.0,
+    "dune_back_relief": 2.999986179323453,
+    "dune_back_slope": 0.14999880918291883,
+    "dune_back_width": 19.91449575547456,
+    "dune_crest_elevation": 4.999986179323453,
+    "dune_crest_x": 84.99998892872101,
+    "dune_front_relief": 2.999986179323453,
+    "dune_front_slope": 0.1999988767787592,
+    "dune_front_width": 15.000015138495158,
+    "dune_scarp": false,
+    "dune_top_width": 0.0,
+    "dune_width": 34.91451089396972,
+    "fit_quality": 0.2237875750348066,
+    "foreshore_slope": 0.1,
+    "morph_type": "LOW_BERM",
+    "n_upland_nodes": 21,
+    "scarp_height": NaN,
+    "shoreline_x": 19.71608832807571,
+    "upland_elevation": 2.0,
+    "volume_above_datum": 299.29999999999995
+  },
+  "name": "two_dune_windowed",
+  "spec": {
+    "berm_elevation": 2.0,
+    "berm_width": 30.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 5.0,
+      "front_width": 15.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "dune2": {
+      "back_width": 20.0,
+      "crest_elevation": 6.0,
+      "front_width": 15.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "dune2_gap": 40.0,
+    "upland_elevation": 2.0,
+    "x_max": 400.0
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "T_recover": 21.0,
+  "fractions": [
+    0.0,
+    0.3333333333333333,
+    0.6666666666666666,
+    1.0,
+    1.0
+  ],
+  "model": "linear",
+  "name": "masked_beach_rebuild",
+  "post_spec": {
+    "berm_elevation": 1.0,
+    "berm_width": 15.0,
+    "dune": null,
+    "upland_elevation": 3.0
+  },
+  "pre_spec": {
+    "berm_elevation": 2.5,
+    "berm_width": 45.0,
+    "dune": {
+      "back_width": 20.0,
+      "crest_elevation": 5.0,
+      "front_width": 15.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "upland_elevation": 3.0
+  },
+  "sample_days": [
+    0.0,
+    7.0,
+    14.0,
+    21.0,
+    42.0
+  ],
+  "volumes": [
+    570.0,
+    645.4169696969697,
+    720.8339393939393,
+    796.2509090909091,
+    796.2509090909091
+  ],
+  "z_berm": 2.0
+}

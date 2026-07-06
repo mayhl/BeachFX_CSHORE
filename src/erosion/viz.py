@@ -825,3 +825,65 @@ def plot_idealized_fit(
     if ax is None:
         _, ax = plt.subplots(figsize=(13, 7))
     return plot_fit_overlay(ax, x, zb, ideal, m, datum, ref_zb=ref_zb)
+
+
+def plot_recovery(
+    ax,
+    x,
+    zb_pre,
+    zb_post,
+    fractions,
+    z_berm: float | None = None,
+    datum: float = 0.0,
+    day_labels=None,
+    model: str = "linear",
+    title_prefix: str = "",
+) -> Figure:
+    """Draw a post-storm → pre-storm recovery fan on ``ax``.
+
+    The eroded post-storm bed (start) and the pre-storm bed (recovery target) are
+    drawn as endpoints; each ``fraction`` renders the intermediate bed via the
+    real ``profile.recovered_bed`` blend, coloured light→dark along the fan.  With
+    ``z_berm`` set, the below-berm mask is drawn as a dotted line and only nodes
+    below it move.  ``day_labels`` (optional, one per fraction) labels the curves
+    by elapsed day; otherwise they are labelled by fraction."""
+    from .profile import recovered_bed
+
+    x = np.asarray(x, dtype=float)
+    zb_pre = np.asarray(zb_pre, dtype=float)
+    zb_post = np.asarray(zb_post, dtype=float)
+    fig = ax.figure
+
+    ax.axhline(datum, color="0.15", lw=1.0, ls="--")  # z-datum baseline (unlabeled)
+
+    # Endpoints: eroded start (red) and pre-storm target (green dashed).
+    ax.plot(x, zb_post, color="C3", lw=2.4, label="post-storm (start)", zorder=6)
+    ax.plot(x, zb_pre, color="tab:green", lw=2.0, ls="--", label="pre-storm (target)", zorder=6)
+
+    # Intermediate beds, light→dark along the recovery fan.  Skip fraction≈0
+    # (identical to the post-storm start already drawn).
+    cmap = plt.get_cmap("viridis")
+    interior = [(i, f) for i, f in enumerate(fractions) if f > 1e-9]
+    for j, (i, f) in enumerate(interior):
+        rec = recovered_bed(zb_post, zb_pre, f, z_berm)
+        shade = cmap(0.1 + 0.75 * (j / max(len(interior) - 1, 1)))
+        if day_labels is not None:
+            lbl = rf"$t={day_labels[i]:g}$ d ($f={f:.2f}$)"
+        else:
+            lbl = rf"$f={f:.2f}$"
+        ax.plot(x, rec, color=shade, lw=1.4, alpha=0.9, label=lbl, zorder=4)
+
+    if z_berm is not None:
+        ax.axhline(z_berm, color="0.4", lw=1.2, ls=":", label=r"$z_{\mathrm{berm}}$ mask")
+
+    title = rf"{title_prefix}recovery ({model}), $z_{{\mathrm{{berm}}}}=$"
+    title += "none" if z_berm is None else rf"${z_berm:g}$ m"
+    ax.set_xlabel(r"$x$ (m)", fontsize=18)
+    ax.set_ylabel(r"elevation $z$ (m)", fontsize=18)
+    ax.set_title(title, fontsize=20)
+    ax.tick_params(labelsize=16)
+    ax.grid(True, which="major", color="0.85", lw=0.6)
+    ax.set_axisbelow(True)
+    ax.legend(loc="best", fontsize=13, ncol=2)
+    fig.tight_layout()
+    return fig

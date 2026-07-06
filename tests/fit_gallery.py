@@ -236,6 +236,22 @@ _SCENARIOS: list[tuple[str, dict, float]] = [
         ),
         3.0,
     ),
+    # Two dunes across a swale: the seaward (primary) dune is SHORTER than the
+    # landward one, so without the analysis window the fitter grabs the taller
+    # landward crest; the auto window crops at the swale and isolates the primary.
+    (
+        "two_dune_windowed",
+        dict(
+            berm_elevation=2.0,
+            berm_width=30.0,
+            upland_elevation=2.0,
+            x_max=400.0,
+            dune=DuneSpec("triangular", crest_elevation=5.0, front_width=15.0, back_width=20.0),
+            dune2=DuneSpec("triangular", crest_elevation=6.0, front_width=15.0, back_width=20.0),
+            dune2_gap=40.0,
+        ),
+        2.0,
+    ),
 ]
 
 CASES: list[FitCase] = []
@@ -258,15 +274,17 @@ def run_case(case: FitCase):
 
 def _spec_to_json(spec: dict) -> dict:
     out = dict(spec)
-    dune = out.get("dune")
-    out["dune"] = dataclasses.asdict(dune) if dune is not None else None
+    for key in ("dune", "dune2"):
+        if key in out:
+            out[key] = dataclasses.asdict(out[key]) if out[key] is not None else None
     return out
 
 
 def _spec_from_json(spec: dict) -> dict:
     out = dict(spec)
-    dune = out.get("dune")
-    out["dune"] = DuneSpec(**dune) if dune is not None else None
+    for key in ("dune", "dune2"):
+        if key in out:
+            out[key] = DuneSpec(**out[key]) if out[key] is not None else None
     return out
 
 

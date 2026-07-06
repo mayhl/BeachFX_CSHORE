@@ -1,0 +1,46 @@
+{
+  "T_recover": 21.0,
+  "fractions": [
+    0.0,
+    0.535841116638722,
+    0.7845565309968117,
+    0.9,
+    0.99
+  ],
+  "model": "exponential",
+  "name": "masked_deep_exponential",
+  "post_spec": {
+    "berm_elevation": 0.8,
+    "berm_width": 10.0,
+    "dune": null,
+    "upland_elevation": 3.5
+  },
+  "pre_spec": {
+    "berm_elevation": 3.0,
+    "berm_width": 45.0,
+    "dune": {
+      "back_width": 22.0,
+      "crest_elevation": 6.5,
+      "front_width": 18.0,
+      "shape": "triangular",
+      "sigma": 6.0,
+      "top_width": 0.0
+    },
+    "upland_elevation": 3.5
+  },
+  "sample_days": [
+    0.0,
+    7.0,
+    14.0,
+    21.0,
+    42.0
+  ],
+  "volumes": [
+    617.5,
+    806.7716233591009,
+    894.6237287094377,
+    935.4010638297873,
+    967.191170212766
+  ],
+  "z_berm": 2.5
+}

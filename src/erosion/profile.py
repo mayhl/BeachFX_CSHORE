@@ -157,6 +157,30 @@ class StormResponse(ProfileEvent):
         profile.snapshot(SnapshotLabel.PostStorm, self.t)
 
 
+def recovered_bed(
+    zb_post: np.ndarray,
+    zb_pre: np.ndarray,
+    fraction: float,
+    z_berm: float | None = None,
+    base_zb: np.ndarray | None = None,
+) -> np.ndarray:
+    """Bed after applying ``fraction`` of recovery from post- toward pre-storm.
+
+    ``blend = zb_post + fraction·(zb_pre − zb_post)``.  With ``z_berm`` set, only
+    nodes where ``zb_post < z_berm`` are blended; the rest keep ``base_zb`` (the
+    bed the recovery is applied on top of, defaulting to ``zb_post``).  Pure
+    function shared by ``Recovery.apply`` and the recovery gallery.
+    """
+    blend = zb_post + fraction * (zb_pre - zb_post)
+    if z_berm is None:
+        return blend
+    base = zb_post if base_zb is None else base_zb
+    out = np.asarray(base, dtype=float).copy()
+    mask = zb_post < z_berm
+    out[mask] = blend[mask]
+    return out
+
+
 @dataclass
 class Recovery(ProfileEvent):
     """Blend profile from post-storm shape toward pre-storm shape by fraction.
@@ -172,14 +196,9 @@ class Recovery(ProfileEvent):
     z_berm: float | None = None
 
     def apply(self, profile: Profile) -> None:
-        blend = self.zb_post_storm + self.fraction * (self.zb_pre_storm - self.zb_post_storm)
-        if self.z_berm is not None:
-            new_zb = profile.zb.copy()
-            mask = self.zb_post_storm < self.z_berm
-            new_zb[mask] = blend[mask]
-            profile.zb = new_zb
-        else:
-            profile.zb = blend
+        profile.zb = recovered_bed(
+            self.zb_post_storm, self.zb_pre_storm, self.fraction, self.z_berm, base_zb=profile.zb
+        )
         profile.snapshot(SnapshotLabel.REC, self.t)
 
 

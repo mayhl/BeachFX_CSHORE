@@ -35,7 +35,7 @@ from enum import Enum
 
 import numpy as np
 from scipy.optimize import least_squares
-from scipy.signal import savgol_filter
+from scipy.signal import find_peaks, savgol_filter
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ _LEVEL_TOL: float = 0.15  # elevation tolerance (m) for level-set crossings
 _REF_WIN_M: float = 30.0  # ± window (m) for ref-constrained crest search
 _CREST_EPS: float = 0.05  # elevation band (m) defining the crest plateau
 _MIN_PLATEAU_M: float = 3.0  # crest plateau wider than this idealizes as a flat top
+_GAUSS_MIN_NODES: int = 5  # minimum dune-region nodes before attempting a gaussian fit
 _DUNE_MIN_PROMINENCE: float = 0.5  # crest must clear the upland by this to count as a dune
 _BENCH_MIN_STEP: float = 0.5  # a mid-bench terrace must be set off from berm AND upland by this
 _TOP_FRAC: float = 0.90  # fraction of relief defining the crest "top" width
@@ -145,6 +146,31 @@ class IdealizedProfile:
             left=float(self.knots_z[0]),
             right=float(self.knots_z[-1]),
         )
+
+
+@dataclass
+class _FormFit:
+    """A fitted dune-form candidate carried through form selection: the idealized
+    profile, its RMS misfit, its free-parameter count ``k`` (crest-shape DOF, used
+    by the BIC), and the 10-tuple dune geometry read back from it."""
+
+    ideal: IdealizedProfile
+    rms: float
+    k: int
+    geom: tuple
+
+
+def _bic(rms: float, n: int, k: int) -> float:
+    """Bayesian Information Criterion for a least-squares form fit under a Gaussian
+    error model: ``n·ln(σ̂²) + k·ln n`` with ``σ̂² = rms²`` (dropped additive
+    constants are common to every candidate over the same ``n`` points, so they
+    cancel in the argmin).  Lower wins.  ``k`` is the crest-shape DOF that
+    distinguishes the forms (triangle 2 < trapezoid 3 < gaussian 4); the base/toe
+    knots they share add a constant that cancels."""
+    if n <= 0:
+        return float("inf")
+    var = max(rms * rms, 1e-12)  # floor a (near-)perfect fit off −∞
+    return float(n * np.log(var) + k * np.log(n))
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +303,53 @@ def _landward_crop(zs: np.ndarray, dx: float, n: int) -> tuple[int, int]:
     return n - 1 - K, n - 1  # no trailing plateau: fall back to rear window
 
 
+def _analysis_cap(
+    x: np.ndarray,
+    zs: np.ndarray,
+    dx: float,
+    n: int,
+    datum: float,
+    mode: float | str | None,
+) -> int | None:
+    """Landward node index to crop the fit at (exclusive), or ``None`` for no crop.
+
+    ``mode`` is ``"auto"`` (crop behind the seaward-most dune when a second dune
+    follows — see ``_auto_cap``), an explicit window length in metres landward of
+    the shoreline, or ``None`` (never crop)."""
+    if mode is None:
+        return None
+    _, s0 = last_wet_dry_crossing(x, zs, datum)
+    if s0 is None:
+        return None
+    if mode == "auto":
+        return _auto_cap(zs, dx, n, s0, datum)
+    return min(n, s0 + int(round(float(mode) / dx)) + 1)
+
+
+def _auto_cap(zs: np.ndarray, dx: float, n: int, s0: int, datum: float) -> int | None:
+    """Auto analysis window: when a second dune rises landward of the seaward-most
+    one *across a real swale*, crop at the saddle between them (plus an upland
+    margin) so the fit sees a single beach+dune.  Returns ``None`` (no crop) for
+    the single-dune / no-dune case, left untouched.
+
+    Two peaks count as *separate* dunes only when the saddle between them falls at
+    least halfway from the lower crest down toward the datum — a genuine swale.
+    Minor dips on one broad or bumpy dune complex (and the two shoulders of a
+    single flat-topped dune) do not clear that bar, so they are not split."""
+    dry = zs[s0:]
+    peaks, _ = find_peaks(dry, prominence=_DUNE_MIN_PROMINENCE)
+    margin = int(round(_UPLAND_WIN_M / dx))  # keep some upland to measure UE
+    for a, b in zip(peaks, peaks[1:]):
+        a, b = int(a), int(b)
+        saddle = a + int(np.argmin(dry[a : b + 1]))  # low point between the pair
+        lower = min(dry[a], dry[b])
+        valley = lower - dry[saddle]
+        if valley >= _DUNE_MIN_PROMINENCE and valley >= 0.5 * (lower - datum):
+            cap = s0 + min(saddle + margin, (saddle + b) // 2)  # never reach dune 2
+            return min(n, cap + 1)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -288,6 +361,7 @@ def fit_profile(
     berm_elevation: float,
     datum: float = 0.0,
     ref: ProfileMetrics | None = None,
+    max_feature_length: float | str | None = "auto",
 ) -> tuple[ProfileMetrics, IdealizedProfile | None]:
     """Extract morphology metrics and an idealized profile from raw ``(x, zb)``.
 
@@ -295,6 +369,17 @@ def fit_profile(
     classification; the berm elevation is otherwise *measured* from the profile.
     ``ref`` (optional) constrains the dune-crest search to ±30 m around
     ``ref.dune_crest_x`` to avoid spurious post-storm peaks.
+
+    ``max_feature_length`` bounds the fit to the primary beach+dune system so
+    far-landward terrain (a second dune, back-barrier) on a long cross-shore
+    profile is not folded into a single idealized dune:
+
+    * ``"auto"`` (default) — unattended: crop at the saddle behind the seaward-most
+      dune when a *second* prominent dune follows it, otherwise fit the whole
+      profile.  A no-op on single-dune / no-dune profiles, so it does not disturb
+      a clean fit.
+    * ``float`` (m) — an explicit window that many metres landward of the shoreline.
+    * ``None`` — off; always fit the whole profile.
 
     Returns ``(metrics, idealized)``; ``idealized`` is ``None`` for
     INDETERMINATE fits.
@@ -309,6 +394,15 @@ def fit_profile(
 
     dx = _dx_of(x)
     zs = _smooth(zb, dx)
+
+    # Analysis window: cap the fit at a beach-scale span landward of the shoreline
+    # so distant terrain does not distort the crop / upland / idealization.
+    # Seaward (submerged) nodes are kept — they sit below the datum and are
+    # ignored by feature detection anyway.
+    cap = _analysis_cap(x, zs, dx, n, datum, max_feature_length)
+    if cap is not None and cap >= _MIN_NODES:
+        x, zb, zs, n = x[:cap], zb[:cap], zs[:cap], cap
+
     vol = volume_above_datum(x, zb, datum)
     # Landward crop: fit against the beach+dune+near-upland window, taking the
     # upland from the settled plateau rather than the fixed trailing window so
@@ -453,28 +547,64 @@ def fit_profile(
             landward_toe_idx = i + 1
             break
 
-    # --- Idealized dune form, then least-squares refined against the raw ---
-    plateau = top_width >= _MIN_PLATEAU_M
-    ideal = _ideal_dune(
-        x,
-        datum,
-        x_shore,
-        berm_present,
-        berm_start_idx,
-        berm_end_idx,
-        berm_elev_meas,
-        crest_x0 if plateau else crest_x,
-        DE,
-        UE,
-        upland_start,
-        landward_toe_idx,
-        seaward_toe_idx,
-        crest_x_end=crest_x1 if plateau else None,
-        seaward_toe_z=seaward_base,
-    )
-    ideal = _refine_dune(x, zb, ideal.knots_x, ideal.knots_z, datum)
+    # --- Idealized dune form: fit candidate forms, select by BIC ---
+    # A triangular apex, a trapezoidal flat top (broad/multi-crest massif), and a
+    # skew-gaussian bump (rounded crest, independent front/back slopes).  Each is
+    # least-squares fit against the raw; the winner minimizes the BIC, which trades
+    # misfit against the crest-shape DOF (triangle 2 < trapezoid 3 < gaussian 4) so
+    # a genuinely peaked dune is not given a spurious flat top, and a rounded dune
+    # is not forced into a sharp apex, without a hand-tuned RMS margin.
+    def _knot_candidate(cx, cz, cx_end, k):
+        idl = _ideal_dune(
+            x,
+            datum,
+            x_shore,
+            berm_present,
+            berm_start_idx,
+            berm_end_idx,
+            berm_elev_meas,
+            cx,
+            cz,
+            UE,
+            upland_start,
+            landward_toe_idx,
+            seaward_toe_idx,
+            crest_x_end=cx_end,
+            seaward_toe_z=seaward_base,
+        )
+        # Keep a trapezoid's two top knots at a shared elevation through the fit.
+        flat_top = None
+        if cx_end is not None:
+            tops = np.where(np.abs(idl.knots_z - cz) < 1e-9)[0]
+            if len(tops) == 2:
+                flat_top = (int(tops[0]), int(tops[1]))
+        idl = _refine_dune(x, zb, idl.knots_x, idl.knots_z, datum, flat_top=flat_top)
+        geom = _dune_geom_from_knots(idl.knots_x, idl.knots_z, berm_elev_meas, BE, berm_present, UE)
+        return _FormFit(idl, _fit_quality(x, zb, idl, datum), k, geom)
 
-    # Read dune geometry back from the refined form.
+    nwet = int(np.sum(zb > datum))
+    cands = [_knot_candidate(crest_x, DE, None, 2)]  # triangle
+
+    # Trapezoidal candidate: the broad near-crest band (a relief fraction below the
+    # apex), leveled at its median so a bumpy multi-crest top idealizes flat.
+    top_tol = max(_CREST_EPS, (1.0 - _TOP_FRAC) * (DE - seaward_base))
+    band = np.arange(seaward_toe_idx, landward_toe_idx + 1)
+    band = band[zb[band] >= DE - top_tol]
+    if len(band) >= 2 and (x[band[-1]] - x[band[0]]) >= _MIN_PLATEAU_M:
+        cands.append(
+            _knot_candidate(float(x[band[0]]), float(np.median(zb[band])), float(x[band[-1]]), 3)
+        )
+
+    gauss = _gaussian_candidate(
+        x, zb, datum, dx, seaward_toe_idx, landward_toe_idx, crest_x, DE,
+        seaward_base, UE, berm_present, berm_start_idx, berm_end_idx,
+        berm_elev_meas, x_shore,
+    )
+    if gauss is not None:
+        cands.append(gauss)
+
+    best = min(cands, key=lambda c: _bic(c.rms, nwet, c.k))
+    ideal = best.ideal
     (
         DE,
         crest_x,
@@ -486,8 +616,8 @@ def fit_profile(
         dune_back_relief,
         dune_front_slope,
         dune_back_slope,
-    ) = _dune_geom_from_knots(ideal.knots_x, ideal.knots_z, berm_elev_meas, BE, berm_present, UE)
-    fit_quality = _fit_quality(x, zb, ideal, datum)
+    ) = best.geom
+    fit_quality = best.rms
 
     # --- Scarp detection (steep run OR idealized residual, per zone) ---
 
@@ -660,7 +790,7 @@ def _ideal_dune(
     return _knots_to_ideal(kx, kz)
 
 
-def _refine_dune(x, zb, kx, kz, datum, win: float = 8.0) -> IdealizedProfile:
+def _refine_dune(x, zb, kx, kz, datum, win: float = 8.0, flat_top=None) -> IdealizedProfile:
     """Least-squares refine of the interior dune knots (seaward toe → landward
     toe) against the raw profile, starting from the detected idealization.
 
@@ -668,7 +798,10 @@ def _refine_dune(x, zb, kx, kz, datum, win: float = 8.0) -> IdealizedProfile:
     ``[datum, max(zb)]`` so the crest can only be pulled DOWN toward the data,
     never pushed above it — which corrects a noise-inflated sharp apex while
     leaving a rounded (gaussian) crest at its detected height.  Shoreline, berm,
-    and upland knots stay fixed."""
+    and upland knots stay fixed.  ``flat_top=(i, j)`` ties knot ``j``'s elevation
+    to knot ``i``'s so a trapezoidal top stays flat (a genuine plateau, with a
+    well-defined crest and width) instead of tilting into a general quadrilateral
+    under the fit."""
     kx = np.asarray(kx, dtype=float).copy()
     kz = np.asarray(kz, dtype=float).copy()
     free = list(range(2, len(kx) - 1))  # interior: seaward toe → landward toe
@@ -682,6 +815,8 @@ def _refine_dune(x, zb, kx, kz, datum, win: float = 8.0) -> IdealizedProfile:
         kx2, kz2 = kx.copy(), kz.copy()
         kx2[free] = np.sort(p[:nf])
         kz2[free] = p[nf:]
+        if flat_top is not None:
+            kz2[flat_top[1]] = kz2[flat_top[0]]
         return (zb - np.interp(x, kx2, kz2, left=kz2[0], right=kz2[-1]))[wet]
 
     lo = np.concatenate([kx[free] - win, np.full(nf, datum)])
@@ -691,9 +826,121 @@ def _refine_dune(x, zb, kx, kz, datum, win: float = 8.0) -> IdealizedProfile:
         sol = least_squares(resid, p0, bounds=(lo, hi), max_nfev=2000)
         kx[free] = np.sort(sol.x[:nf])
         kz[free] = sol.x[nf:]
+        if flat_top is not None:
+            kz[flat_top[1]] = kz[flat_top[0]]
     except Exception:
         pass
     return IdealizedProfile(kx, kz)
+
+
+def _gaussian_candidate(
+    x,
+    zb,
+    datum,
+    dx,
+    seaward_toe_idx,
+    landward_toe_idx,
+    crest_x,
+    DE,
+    seaward_base,
+    UE,
+    berm_present,
+    berm_start_idx,
+    berm_end_idx,
+    berm_elev_meas,
+    x_shore,
+) -> _FormFit | None:
+    """Skew-gaussian dune candidate: a bump ``A·exp(−½((x−x₀)/σ)²)`` with
+    *independent* front/back scales ``σ_f, σ_b`` riding on the linear two-sided toe
+    baseline (seaward toe on the berm, landward toe on the upland).  Bounded
+    least-squares against the raw profile over the dune region.  The fitted curve
+    is sampled at the profile nodes into a piecewise-linear ``IdealizedProfile`` (so
+    ``evaluate``/scarp/viz/golden are unchanged), with the outer shore/berm/upland
+    knots stitched on.  Returns ``None`` if the region is too short or the fit
+    fails.  Unlike the knot forms, the smooth flanks do not trip the residual scarp,
+    so a rounded dune stops false-flagging a front scarp."""
+    lo, hi = int(seaward_toe_idx), int(landward_toe_idx)
+    if hi - lo + 1 < _GAUSS_MIN_NODES:
+        return None
+    xs, xl = float(x[lo]), float(x[hi])
+    if xl <= xs:
+        return None
+    reg = slice(lo, hi + 1)
+    xr, zr = x[reg], zb[reg]
+    span = xl - xs
+
+    def baseline(xx):  # linear two-sided base connecting the toes
+        return seaward_base + (UE - seaward_base) * (xx - xs) / span
+
+    base_r = baseline(xr)
+
+    def curve(p):
+        A, x0, sf, sb = p
+        sig = np.where(xr <= x0, sf, sb)
+        return base_r + A * np.exp(-0.5 * ((xr - x0) / np.maximum(sig, 1e-6)) ** 2)
+
+    zceil = float(np.max(zb))
+    A0 = max(DE - float(baseline(crest_x)), 0.1)
+    p0 = [A0, float(crest_x), max((crest_x - xs) / 2.0, dx), max((xl - crest_x) / 2.0, dx)]
+    lo_b = [0.0, xs, dx, dx]
+    hi_b = [max(zceil - min(seaward_base, UE), 0.1), xl, span, span]
+    p0 = np.clip(p0, lo_b, hi_b)
+    try:
+        sol = least_squares(lambda p: curve(p) - zr, p0, bounds=(lo_b, hi_b), max_nfev=2000)
+    except Exception:
+        return None
+    A, x0, sf, sb = (float(v) for v in sol.x)
+    # Keep the crest under the data, like the knot refinement's z-ceiling.
+    if float(baseline(x0)) + A > zceil:
+        A = zceil - float(baseline(x0))
+
+    # Sample the fitted curve to knots; pin the toe endpoints to the baseline so
+    # the dune segment meets the berm/upland cleanly.
+    z_samp = baseline(xr) + A * np.exp(
+        -0.5 * ((xr - x0) / np.maximum(np.where(xr <= x0, sf, sb), 1e-6)) ** 2
+    )
+    z_samp = z_samp.copy()
+    z_samp[0], z_samp[-1] = seaward_base, UE
+
+    kx: list[float] = [float(x_shore)]
+    kz: list[float] = [float(datum)]
+    if berm_present:
+        berm_land = seaward_toe_idx if seaward_toe_idx > berm_end_idx else berm_end_idx
+        kx += [float(x[berm_start_idx]), float(x[berm_land])]
+        kz += [float(berm_elev_meas), float(berm_elev_meas)]
+    kx += [float(v) for v in xr]
+    kz += [float(v) for v in z_samp]
+    kx.append(float(x[-1]))
+    kz.append(float(UE))
+    ideal = _knots_to_ideal(kx, kz)
+
+    rms = _fit_quality(x, zb, ideal, datum)
+    geom = _gaussian_geom(A, x0, sf, sb, xs, xl, seaward_base, UE, baseline)
+    return _FormFit(ideal, rms, 4, geom)
+
+
+def _gaussian_geom(A, x0, sf, sb, xs, xl, seaward_base, UE, baseline):
+    """Dune geometry from the skew-gaussian parameters (crest from ``x₀/A``; widths
+    are toe→crest footprints, slopes toe-to-crest secants — the same shape-agnostic
+    definitions the knot forms use).  A gaussian has no plateau, so top width = 0."""
+    crest_x = float(np.clip(x0, xs, xl))
+    DE = float(baseline(crest_x) + A)
+    front_width = crest_x - xs
+    back_width = xl - crest_x
+    front_relief = DE - seaward_base
+    back_relief = DE - UE
+    return (
+        DE,
+        crest_x,
+        0.0,  # top width (peaked, no plateau)
+        front_width,
+        back_width,
+        xl - xs,
+        front_relief,
+        back_relief,
+        max(0.0, front_relief / max(front_width, 1e-9)),
+        max(0.0, back_relief / max(back_width, 1e-9)),
+    )
 
 
 def _dune_geom_from_knots(kx, kz, berm_elev, BE, berm_present, UE):
@@ -750,3 +997,80 @@ def _scarp(
     resid_max = float(np.max(np.abs(zs - ideal.evaluate(xs)))) if residual else 0.0
     present = (steep_h >= _SCARP_MIN_H) or (resid_max >= _SCARP_RESID)
     return present, max(steep_h, resid_max) if present else _NAN
+
+
+# ---------------------------------------------------------------------------
+# Profile review — flag fits that a human should classify by hand
+# ---------------------------------------------------------------------------
+
+_REVIEW_RMS_TOL: float = 0.30  # idealized RMS (m) above which a fit is low-confidence
+_REVIEW_MARGIN: float = 0.25  # elevation band (m) around a class threshold = marginal
+
+
+class ReviewFlag(str, Enum):
+    """Reasons a fitted profile is flagged for manual classification."""
+
+    INDETERMINATE = "indeterminate"  # fit failed / landmark ordering inconsistent
+    MULTI_DUNE = "multi_dune"  # >=2 prominent dunes: multi-dune vs eroded-dune ambiguity
+    LOW_FIT_CONFIDENCE = "low_fit_confidence"  # idealized RMS above tolerance
+    MARGINAL_CLASS = "marginal_class"  # classification sits on a threshold (flips under noise)
+    AMBIGUOUS_SHORELINE = "ambiguous_shoreline"  # more than one wet->dry crossing
+
+
+@dataclass
+class ProfileReview:
+    """Outcome of :func:`review_profile`.  ``needs_review`` is true when any flag
+    fired; ``flags`` lists the reasons (``ReviewFlag`` values)."""
+
+    needs_review: bool
+    flags: list[str]
+    fit_quality: float
+
+
+def review_profile(
+    x: np.ndarray,
+    zb: np.ndarray,
+    m: ProfileMetrics,
+    ideal: IdealizedProfile | None,
+    datum: float = 0.0,
+    rms_tol: float = _REVIEW_RMS_TOL,
+) -> ProfileReview:
+    """Flag a fitted profile whose automatic classification is unreliable.
+
+    Real survey profiles are not always the clean single-dune form the fitter
+    idealizes; this QC pass routes the ambiguous ones to a human instead of
+    trusting a low-confidence fit.  Takes the raw profile and its fit
+    (``m``, ``ideal`` from :func:`fit_profile`).
+    """
+    x = np.asarray(x, dtype=float)
+    zb = np.asarray(zb, dtype=float)
+
+    if ideal is None or m.morph_type in ("", MorphType.INDETERMINATE.value):
+        return ProfileReview(True, [ReviewFlag.INDETERMINATE.value], float(m.fit_quality))
+
+    flags: list[str] = []
+    dx = _dx_of(x)
+    zs = _smooth(zb, dx)
+    _, s0 = last_wet_dry_crossing(x, zs, datum)
+    if s0 is not None:
+        # Multiple prominent dunes: which is the design dune is a judgment call.
+        peaks, _ = find_peaks(zs[s0:], prominence=_DUNE_MIN_PROMINENCE)
+        if len(peaks) >= 2:
+            flags.append(ReviewFlag.MULTI_DUNE.value)
+        # More than one wet->dry crossing seaward of the upland = ambiguous shoreline.
+        crossings = np.where(np.diff((zs[: s0 + 1] > datum).astype(int)) > 0)[0]
+        if len(crossings) > 1:
+            flags.append(ReviewFlag.AMBIGUOUS_SHORELINE.value)
+
+    if not np.isnan(m.fit_quality) and m.fit_quality > rms_tol:
+        flags.append(ReviewFlag.LOW_FIT_CONFIDENCE.value)
+
+    # Marginal classification: the crest barely clears the upland, so the
+    # dune / no-dune decision (HIGH_UPLAND vs LOW_*) would flip under a hair of
+    # noise.  (The LOW_BERM/LOW_UPLAND split turns on the per-reach *design* berm,
+    # not measured here, so it is left to a caller that has that value.)
+    UE, DE = m.upland_elevation, m.dune_crest_elevation
+    if not np.isnan(DE) and abs((DE - UE) - _DUNE_MIN_PROMINENCE) < _REVIEW_MARGIN:
+        flags.append(ReviewFlag.MARGINAL_CLASS.value)
+
+    return ProfileReview(bool(flags), flags, float(m.fit_quality))

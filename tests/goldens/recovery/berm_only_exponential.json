@@ -1,0 +1,39 @@
+{
+  "T_recover": 21.0,
+  "fractions": [
+    0.0,
+    0.535841116638722,
+    0.7845565309968117,
+    0.9,
+    0.99
+  ],
+  "model": "exponential",
+  "name": "berm_only_exponential",
+  "post_spec": {
+    "berm_elevation": 1.2,
+    "berm_width": 18.0,
+    "dune": null,
+    "upland_elevation": 3.0
+  },
+  "pre_spec": {
+    "berm_elevation": 2.5,
+    "berm_width": 50.0,
+    "dune": null,
+    "upland_elevation": 3.0
+  },
+  "sample_days": [
+    0.0,
+    7.0,
+    14.0,
+    21.0,
+    42.0
+  ],
+  "volumes": [
+    595.8,
+    691.822728101659,
+    736.3925303546287,
+    757.08,
+    773.208
+  ],
+  "z_berm": null
+}

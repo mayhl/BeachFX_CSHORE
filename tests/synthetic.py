@@ -50,6 +50,8 @@ def make_profile(
     berm_elevation: float = 2.0,
     berm_width: float = 30.0,
     dune: DuneSpec | None = None,
+    dune2: DuneSpec | None = None,  # a second dune, landward of the first across a swale
+    dune2_gap: float = 40.0,  # upland-level swale (m) between the two dunes' toes
     upland_elevation: float = 3.0,
     design_BE: float | None = None,
     dx: float = 1.0,
@@ -93,6 +95,17 @@ def make_profile(
         crest_x = x0
         DE = dune.crest_elevation
         gauss = (x0, dune.sigma)
+    # Optional distant second dune (landward of the first, across an upland swale).
+    # Truth still describes the primary (seaward) dune; the analysis window is
+    # meant to isolate it and ignore this one.
+    if dune2 is not None and has_dune:
+        d0 = land_toe + dune2_gap
+        e0 = d0 + dune2.front_width
+        etop = dune2.top_width if dune2.shape == "trapezoidal" else 0.0
+        e1 = e0 + etop
+        d_land = e1 + dune2.back_width
+        kx += [d0, e0, e1, d_land]
+        kz += [upland_elevation, dune2.crest_elevation, dune2.crest_elevation, upland_elevation]
     kx.append(float(x_max))
     kz.append(upland_elevation)
     z = np.interp(x, kx, kz)
