@@ -26,3 +26,16 @@ class SnapshotLabel(Enum):
     EEN = "EEN"
     EndIteration = "EndIteration"
     Periodic = "Periodic"
+
+
+class DecisionKind(Enum):
+    """Reach/SIM-scope orchestrator *decisions* — distinct from the profile-scope
+    morphology ``SnapshotLabel``s. Unified only at the event log's ``event_id``.
+    """
+
+    NOURISH_TRIGGER = "NOURISH_TRIGGER"  # reach deficit ≥ trigger → launch campaign
+    NOURISH_SKIP = "NOURISH_SKIP"  # deficit < trigger → recovery only
+    MOBILIZE = "MOBILIZE"  # crew lead-time before it can start
+    BLACKOUT_DEFER = "BLACKOUT_DEFER"  # placement start pushed past a blackout window
+    INTERRUPT = "INTERRUPT"  # next storm cut the campaign (partial placement)
+    WINDOW_EXTENDED = "WINDOW_EXTENDED"  # sim window extended to finish a campaign

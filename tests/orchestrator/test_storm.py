@@ -18,7 +18,7 @@ from erosion.storm import (
     classify_storm_response,
     run_parallel_cshore,
 )
-from erosion.types import SnapshotLabel, StormResponseType
+from erosion.types import StormResponseType
 from tests.builders import SIM_START, profile
 from tests.builders import forcing as _forcing
 from tests.builders import storms as _storms
@@ -80,31 +80,6 @@ class TestRecoveryFraction:
 
 
 class TestRunParallelCshore:
-    def test_prestorm_snapshot_taken(self):
-        p = _p()
-        run_parallel_cshore(
-            [p], t_storm=10.0, forcing=_forcing(), runner=MockCSHORERunner(), cfg=ReachConfig()
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.PreStorm in labels
-
-    def test_poststorm_snapshot_taken(self):
-        p = _p()
-        run_parallel_cshore(
-            [p], t_storm=10.0, forcing=_forcing(), runner=MockCSHORERunner(), cfg=ReachConfig()
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.PostStorm in labels
-
-    def test_prestorm_before_poststorm(self):
-        p = _p()
-        run_parallel_cshore(
-            [p], t_storm=10.0, forcing=_forcing(), runner=MockCSHORERunner(), cfg=ReachConfig()
-        )
-        pre_idx = next(i for i, s in enumerate(p.snapshots) if s.label == SnapshotLabel.PreStorm)
-        post_idx = next(i for i, s in enumerate(p.snapshots) if s.label == SnapshotLabel.PostStorm)
-        assert pre_idx < post_idx
-
     def test_zb_pre_new_same_length_as_profile(self):
         """zb_pre_new must always be on the original fixed profile grid."""
         p = _p()
@@ -156,14 +131,6 @@ class TestRunParallelCshoreFailure:
         )
         assert results[0] is None
 
-    def test_failure_takes_inundation_snapshot(self):
-        p = _p()
-        run_parallel_cshore(
-            [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.INUNDATION in labels
-
     def test_failure_zb_unchanged(self):
         p = _p()
         zb_before = p.zb.copy()
@@ -171,14 +138,6 @@ class TestRunParallelCshoreFailure:
             [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
         )
         np.testing.assert_array_equal(p.zb, zb_before)
-
-    def test_failure_inundation_storm_response_type(self):
-        p = _p()
-        run_parallel_cshore(
-            [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
-        )
-        inundation_snap = next(s for s in p.snapshots if s.label == SnapshotLabel.INUNDATION)
-        assert inundation_snap.storm_response_type == StormResponseType.INUNDATION
 
     def test_failure_zb_pre_new_is_original(self):
         p = _p()

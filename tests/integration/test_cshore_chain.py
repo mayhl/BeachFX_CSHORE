@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from erosion.config import ReachConfig
 from erosion.profile import Profile
-from erosion.reach import ReachContext, run_lifecycle
+from erosion.reach import Reach
 from erosion.results import NullResultsSink
 from erosion.runner.local import LocalCSHORERunner
 from erosion.types import SnapshotLabel
@@ -71,10 +71,14 @@ def test_three_storm_chain_completes(cshore_params, real_profile):
         )
 
         sim_start = datetime(2030, 1, 1)
-        ctx = ReachContext(
-            reach_id="Reach1", alternative_id="FWOP", results=NullResultsSink(), sim_start=sim_start
-        )
-        run_lifecycle([p], _storms_df(3), sim_start, 35.0, ReachConfig(), runner, ctx, lifecycle=0)
+        Reach(
+            profiles=[p],
+            cfg=ReachConfig(),
+            results=NullResultsSink(),
+            runner=runner,
+            sim_start=sim_start,
+            reach_id="Reach1",
+        ).run(_storms_df(3), 35.0)
 
         labels = [s.label for s in p.snapshots]
         assert labels[0] == SnapshotLabel.INIT
@@ -104,10 +108,14 @@ def test_three_storm_chain_no_nans(cshore_params, real_profile):
         )
 
         sim_start = datetime(2030, 1, 1)
-        ctx = ReachContext(
-            reach_id="Reach1", alternative_id="FWOP", results=NullResultsSink(), sim_start=sim_start
-        )
-        run_lifecycle([p], _storms_df(3), sim_start, 35.0, ReachConfig(), runner, ctx, lifecycle=0)
+        Reach(
+            profiles=[p],
+            cfg=ReachConfig(),
+            results=NullResultsSink(),
+            runner=runner,
+            sim_start=sim_start,
+            reach_id="Reach1",
+        ).run(_storms_df(3), 35.0)
 
         assert not np.any(np.isnan(p.zb)), "NaN in final zb"
         assert not np.any(np.isnan(p.x)), "NaN in x grid"

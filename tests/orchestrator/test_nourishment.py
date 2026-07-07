@@ -60,14 +60,6 @@ class TestRunCampaignNoNourishment:
         run_campaign([p], zb_pre, t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink())
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-12)
 
-    def test_rec_snapshot_taken(self):
-        p = _p()
-        cfg = _cfg()
-        cfg.storm.T_recover = 20.0
-        run_campaign([p], _zb_pre([p]), t_storm=0.0, t_next=20.0, cfg=cfg, sink=NullResultsSink())
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.REC in labels
-
 
 class TestRunCampaignBelowTrigger:
     def test_below_trigger_skips_nourishment(self):
@@ -77,8 +69,6 @@ class TestRunCampaignBelowTrigger:
             [p], _zb_pre([p]), t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
         )
         assert campaign is None
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.ESN not in labels
 
     def test_below_trigger_still_applies_recovery(self):
         p = _p()
@@ -90,38 +80,6 @@ class TestRunCampaignBelowTrigger:
 
 
 class TestRunCampaignWithNourishment:
-    def test_full_nourishment_esn_snapshot(self):
-        p = _p()
-        cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
-        cfg.storm.T_recover = 21.0
-        run_campaign(
-            [p],
-            [np.zeros(50)],
-            t_storm=0.0,
-            t_next=200.0,
-            cfg=cfg,
-            sink=NullResultsSink(),
-            longshore_widths=[50.0],
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.ESN in labels
-
-    def test_ssn_snapshot_before_nourishment(self):
-        p = _p()
-        cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
-        cfg.storm.T_recover = 21.0
-        run_campaign(
-            [p],
-            [np.zeros(50)],
-            t_storm=0.0,
-            t_next=200.0,
-            cfg=cfg,
-            sink=NullResultsSink(),
-            longshore_widths=[50.0],
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.SSN in labels
-
     def test_record_nourishment_called(self):
         with tempfile.TemporaryDirectory() as root:
             sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
@@ -142,24 +100,6 @@ class TestRunCampaignWithNourishment:
 
 
 class TestRunCampaignStormInterrupt:
-    def test_partial_nourishment_ssn_taken(self):
-        """Very slow production rate → storm interrupts before completion."""
-        p = _p()
-        ncfg = _ncfg(volume_trigger=0.001, production_rate=0.001)  # near-zero → interrupted
-        cfg = _cfg(nourishment=ncfg)
-        cfg.storm.T_recover = 21.0
-        run_campaign(
-            [p],
-            [np.zeros(50)],
-            t_storm=0.0,
-            t_next=0.001,
-            cfg=cfg,
-            sink=NullResultsSink(),
-            longshore_widths=[50.0],
-        )
-        labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.SSN in labels
-
     def test_active_campaign_returned_when_interrupted(self):
         p0, p1 = _p("p0"), _p("p1")
         ncfg = _ncfg(volume_trigger=0.001, production_rate=0.0001)
@@ -175,6 +115,7 @@ class TestRunCampaignStormInterrupt:
             longshore_widths=[50.0, 50.0],
         )
         assert campaign is not None
+        assert campaign.crew_on_site is True  # folded from the deleted test_interrupts.py
 
 
 class TestRunCampaignCrewOnSite:

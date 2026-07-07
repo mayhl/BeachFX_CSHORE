@@ -15,11 +15,25 @@ import pandas as pd
 from erosion.config import ReachConfig
 from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
-from erosion.reach import ReachContext, run_lifecycle
+from erosion.reach import Reach
 from erosion.results import NullResultsSink
 from erosion.runner.mock import MockCSHORERunner
 
 SIM_START = datetime(2030, 1, 1)
+
+
+class RecordingSink(NullResultsSink):
+    """Test sink that captures reach/SIM-scope decisions in memory."""
+
+    def __init__(self):
+        self.decisions: list[tuple] = []  # (kind, t, profile_id, payload)
+
+    def record_decision(self, kind, t, profile_id=None, **payload):
+        self.decisions.append((kind, t, profile_id, payload))
+
+    @property
+    def decision_kinds(self):
+        return [d[0] for d in self.decisions]
 
 
 def profile(pid: str = "p0", n: int = 50, x_max: float = 100.0, zb=None) -> Profile:
@@ -68,6 +82,45 @@ def storms(
     return pd.DataFrame(rows)
 
 
+def storms_at(
+    times,
+    *,
+    wave_height: float = 1.2,
+    water_elevation: float = 0.3,
+    peak_period: float = 10.0,
+    sim_start: datetime = SIM_START,
+    lifecycle: int = 0,
+) -> pd.DataFrame:
+    """Storms placed at explicit day offsets — for engineering event sequences.
+
+    Unlike ``storms(n)`` (rigid 20-day spacing), ``times`` gives exact control
+    over storm timing so interrupt / blackout scenarios can be built.  Each entry
+    is either a day offset (float) or a ``(day, wave_height)`` pair to vary
+    intensity per storm.  Three hydrograph rows per storm, as in ``storms``.
+    """
+    rows = []
+    t0 = pd.Timestamp(sim_start)
+    for i, spec in enumerate(times):
+        if isinstance(spec, (tuple, list)):
+            day, hs = spec
+        else:
+            day, hs = spec, wave_height
+        for dt_h in range(0, 13, 6):
+            rows.append(
+                dict(
+                    lifecycle=lifecycle,
+                    storm_id=f"S{i:02d}",
+                    hydro_tstp=dt_h,
+                    date=t0 + pd.Timedelta(days=float(day), hours=dt_h),
+                    wave_height=hs,
+                    wave_peak_period=peak_period,
+                    water_elevation=water_elevation,
+                    wave_direction=0.0,
+                )
+            )
+    return pd.DataFrame(rows)
+
+
 def forcing(hs=(1.0, 2.0)) -> dict:
     """Single-storm CSHORE BC dict for run_parallel_cshore tests."""
     hs = np.asarray(hs, dtype=float)
@@ -83,43 +136,79 @@ def forcing(hs=(1.0, 2.0)) -> dict:
     }
 
 
+_TEMPLATE_X = np.linspace(0, 100, 50)
+_TEMPLATE_Z = np.linspace(-0.5, 3.0, 50)
+
+
 def ncfg(
-    volume_trigger: float = 0.001, production_rate: float = 500.0, n: int = 50
+    volume_trigger: float = 0.001,
+    production_rate: float = 500.0,
+    n: int = 50,
+    strategy: str = "equal_spacing",
 ) -> NourishmentConfig:
-    """A nourishment config with a simple linear template."""
-    return NourishmentConfig(
-        template_x=list(np.linspace(0, 100, n)),
-        template_z=list(np.linspace(-0.5, 3.0, n)),
-        volume_trigger={"value": volume_trigger, "units": "m3"},
-        production_rate={"value": production_rate, "units": "m3/day"},
+    """A nourishment config whose template matches ``template_profile``.
+
+    Validated with an ``input_units="m"`` context so the template stays in metres
+    (the ``ufloat("m","ft")`` fields would otherwise ft→m convert the raw values,
+    putting the template on a different scale than ``template_profile``).
+    """
+    return NourishmentConfig.model_validate(
+        {
+            "template_x": list(np.linspace(0, 100, n)),
+            "template_z": list(np.linspace(-0.5, 3.0, n)),
+            "volume_trigger": {"value": volume_trigger, "units": "m3"},
+            "production_rate": {"value": production_rate, "units": "m3/day"},
+            "strategy": strategy,
+        },
+        context={"input_units": "m"},
     )
+
+
+def template_profile(pid: str = "p0") -> Profile:
+    """A profile sitting exactly on the ``ncfg`` design template (deficit = 0).
+
+    Pair with ``MockCSStorm(depth)``: a small chunk leaves a sub-trigger deficit
+    (→ recovery), a large chunk a super-trigger deficit (→ nourishment).
+    """
+    return Profile(id=pid, x=_TEMPLATE_X.copy(), zb=_TEMPLATE_Z.copy(), d50=0.3)
 
 
 def run(
     profiles,
     n_storms: int = 3,
     *,
+    storms_df: pd.DataFrame | None = None,
+    sim_end: float | None = None,
     cfg: ReachConfig | None = None,
+    runner=None,
     sink=None,
     lifecycle: int = 0,
     sim_start: datetime = SIM_START,
     reach_id: str = "test",
     alternative_id: str = "FWOP",
 ):
-    """Run one lifecycle with the mock runner; return ``(profiles, sink)``."""
+    """Run one lifecycle with the mock runner; return ``(profiles, sink)``.
+
+    Pass ``storms_df`` (e.g. from ``storms_at``) to drive a custom schedule;
+    otherwise the default ``storms(n_storms)`` (20-day spacing) is used.  When
+    ``sim_end`` is omitted it is derived as the last storm day + 60-day tail so a
+    post-storm campaign has room to complete.
+    """
     cfg = cfg or ReachConfig()
     sink = sink if sink is not None else NullResultsSink()
-    ctx = ReachContext(
-        reach_id=reach_id, alternative_id=alternative_id, results=sink, sim_start=sim_start, cfg=cfg
-    )
-    run_lifecycle(
-        profiles,
-        storms(n_storms, lifecycle=lifecycle),
-        sim_start,
-        (n_storms + 1) * 20 + 10.0,
-        cfg,
-        MockCSHORERunner(),
-        ctx,
+    sdf = storms_df if storms_df is not None else storms(n_storms, lifecycle=lifecycle)
+    if sim_end is None:
+        last_day = (pd.to_datetime(sdf["date"]).max() - pd.Timestamp(sim_start)).total_seconds()
+        sim_end = last_day / 86400.0 + 60.0
+    reach = Reach(
+        profiles=profiles,
+        cfg=cfg,
+        results=sink,
+        runner=runner if runner is not None else MockCSHORERunner(),
+        sim_start=sim_start,
+        reach_id=reach_id,
+        alternative_id=alternative_id,
         lifecycle=lifecycle,
     )
-    return profiles, sink
+    reach.run(sdf, sim_end)
+    return reach.profiles, sink

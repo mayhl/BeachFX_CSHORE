@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from .metrics import volume_above_datum
-from .types import SnapshotLabel
+from .types import DecisionKind, SnapshotLabel
 from .units import ufloat
 
 if TYPE_CHECKING:
@@ -90,6 +91,29 @@ class ActiveCampaign:
     crew_on_site: bool
     priority_order: list[str]  # profile IDs in remaining campaign order
     placed: dict[str, float] = field(default_factory=dict)  # volume placed so far (m³)
+
+
+@dataclass
+class _Work:
+    """Per-profile run-local bundle for one campaign — bundles the profile with its
+    captured post-storm bed, recovery target, width, plan, and recovered flag so the
+    campaign loop iterates objects instead of parallel arrays indexed by position.
+    """
+
+    profile: Profile
+    zb_post: np.ndarray
+    zb_pre: np.ndarray  # zb_pre_new (recovery target on the fixed grid)
+    width: float
+    plan: ProfileNourishmentPlan | None = None
+    recovered: bool = False
+
+
+class _Outcome(Enum):
+    """Result of placing one profile within a campaign window."""
+
+    COMPLETED = "completed"  # placed fully, crew moves on
+    BLOCKED = "blocked"  # couldn't start before the next storm
+    INTERRUPTED = "interrupted"  # next storm cut it mid-placement
 
 
 # ---------------------------------------------------------------------------
@@ -254,11 +278,17 @@ def run_campaign(
     sink: ResultsSink,
     longshore_widths: list[float] | None = None,
     prior: ActiveCampaign | None = None,
+    inundated: set[str] | None = None,
 ) -> tuple[float, ActiveCampaign | None]:
     """Run the post-storm campaign: recovery + (optionally) nourishment.
 
     Applies one Recovery event per profile at the appropriate time, then
     schedules nourishment sequentially by priority order.
+
+    ``inundated`` is the set of profile IDs whose storm response was INUNDATION
+    (CSHORE failed).  HACK (interim, group decision pending): the storm outcome
+    is unknown for these, so we skip Phase 3 entirely for them — no recovery and
+    no nourishment — and let the profile carry forward unchanged.
 
     Returns (t_next, active_campaign):
         active_campaign is non-None only if the campaign was interrupted by
@@ -268,120 +298,125 @@ def run_campaign(
 
     ncfg = cfg.nourishment
     widths = longshore_widths or [1.0] * len(profiles)
+    skip = inundated or set()
 
-    # Capture post-storm zb BEFORE any recovery is applied
-    zb_post = [p.zb.copy() for p in profiles]
+    def _decide(kind: DecisionKind, t: float, **payload) -> None:
+        """Log (operational console) AND record (structured audit) a decision."""
+        sink.record_decision(kind, t, **payload)
+        log.info("campaign t=%.1fd — %s %s", t, kind.value, payload)
+
+    # Active (non-inundated) work items — bundle each profile's run-local data so the
+    # rest of the campaign iterates objects, not parallel arrays indexed by position.
+    active = [
+        _Work(p, p.zb.copy(), zb_pre_new[i], widths[i])
+        for i, p in enumerate(profiles)
+        if p.id not in skip
+    ]
+
+    def _recover(w: _Work, t_apply: float) -> None:
+        _apply_recovery_one(w.profile, w.zb_post, w.zb_pre, t_storm, t_apply, cfg)
+        w.recovered = True
 
     # --- No nourishment configured: pure recovery ---
     if ncfg is None:
-        for i, p in enumerate(profiles):
-            _apply_recovery_one(p, zb_post[i], zb_pre_new[i], t_storm, t_next, cfg)
+        for w in active:
+            _recover(w, t_next)
         return t_next, None
 
-    # --- Build per-profile plans ---
+    # --- Per-profile plans, then the reach-wide trigger gate ---
     strategy = _STRATEGIES[ncfg.strategy]
-    plans: dict[int, ProfileNourishmentPlan] = {}
-    for i, p in enumerate(profiles):
-        plan = strategy.plan(p, ncfg, widths[i])
-        if plan is not None:
-            plans[i] = plan
+    for w in active:
+        w.plan = strategy.plan(w.profile, ncfg, w.width)
+    plans = [w for w in active if w.plan is not None]
+    total_deficit = sum(w.plan.volume_m3 for w in plans)
 
-    # --- Mobilization gate (skip if crew already on site) ---
     crew_on_site = prior is not None and prior.crew_on_site
-    if not crew_on_site:
-        total_deficit = sum(pl.volume_m3 for pl in plans.values())
-        if total_deficit < ncfg.volume_trigger:
-            log.info(
-                "Campaign at t=%.1fd: deficit %.0f m³ < trigger %.0f m³ — skipping",
-                t_storm,
-                total_deficit,
-                ncfg.volume_trigger,
-            )
-            for i, p in enumerate(profiles):
-                _apply_recovery_one(p, zb_post[i], zb_pre_new[i], t_storm, t_next, cfg)
-            return t_next, None
-
-    # --- Sort by priority (highest first) ---
-    sorted_plans: list[tuple[int, ProfileNourishmentPlan]] = sorted(
-        plans.items(),
-        key=lambda x: -x[1].priority_score,
-    )
-
-    # --- If resuming a prior campaign, prepend remaining profiles in previous order ---
-    if prior is not None:
-        id_to_idx = {p.id: i for i, p in enumerate(profiles)}
-        prev_ids = [pid for pid in prior.priority_order if pid in id_to_idx]
-        prev_set = set(prev_ids)
-        rank = {pid: pos for pos, pid in enumerate(prev_ids)}
-        remaining = sorted(
-            [(i, pl) for i, pl in sorted_plans if profiles[i].id in prev_set],
-            key=lambda x: rank.get(profiles[x[0]].id, 999),
+    if not crew_on_site and total_deficit < ncfg.volume_trigger:
+        _decide(
+            DecisionKind.NOURISH_SKIP,
+            t_storm,
+            deficit=total_deficit,
+            trigger=float(ncfg.volume_trigger),
         )
-        new_ones = [(i, pl) for i, pl in sorted_plans if profiles[i].id not in prev_set]
-        sorted_plans = remaining + new_ones
+        for w in active:
+            _recover(w, t_next)
+        return t_next, None
+
+    _decide(DecisionKind.NOURISH_TRIGGER, t_storm, deficit=total_deficit, resume=crew_on_site)
+
+    # --- Order: priority desc; on resume, prior-campaign profiles first (stable sort) ---
+    plans.sort(key=lambda w: -w.plan.priority_score)
+    if prior is not None:
+        rank = {pid: pos for pos, pid in enumerate(prior.priority_order)}
+        plans.sort(key=lambda w: rank.get(w.profile.id, 999))  # stable → priority kept per rank
         t_crew = t_storm  # crew already on site
     else:
         t_crew = t_storm + ncfg.mobilization_days
 
-    recovery_done: dict[int, float] = {}  # idx → time through which recovery was applied
     active_campaign: ActiveCampaign | None = None
 
-    for i, plan in sorted_plans:
-        p = profiles[i]
-        duration = plan.volume_m3 / ncfg.production_rate  # days
+    def _remaining(interrupted: _Work | None = None) -> list[str]:
+        ids = [w.profile.id for w in plans if not w.recovered]
+        if interrupted is not None and interrupted.profile.id not in ids:
+            ids.insert(0, interrupted.profile.id)
+        return ids
+
+    def _place(w: _Work, t_crew: float) -> tuple[float, _Outcome, float]:
+        """Recover up to the start, then place (full, or partial on interrupt).
+
+        Returns (new t_crew, outcome, volume placed). Emits BLACKOUT_DEFER/INTERRUPT.
+        """
+        duration = w.plan.volume_m3 / ncfg.production_rate  # days
         t_start = _next_available(t_crew, duration, list(ncfg.blackout_windows))
+        if t_start > t_crew:
+            _decide(
+                DecisionKind.BLACKOUT_DEFER,
+                t_storm,
+                profile_id=w.profile.id,
+                requested=t_crew,
+                deferred_to=t_start,
+            )
+        if t_start >= t_next:  # can't start before the next storm
+            return t_crew, _Outcome.BLOCKED, 0.0
 
-        if t_start >= t_next:
-            # Can't start before next storm — queue this and all subsequent profiles
-            remaining_ids = [profiles[j].id for j, _ in sorted_plans if j not in recovery_done]
-            if active_campaign is None:
-                active_campaign = ActiveCampaign(
-                    crew_on_site=False,
-                    priority_order=remaining_ids,
-                )
-            break
-
-        # Recovery up to nourishment start
-        _apply_recovery_one(p, zb_post[i], zb_pre_new[i], t_storm, t_start, cfg)
-        recovery_done[i] = t_start
-
-        # SSN: start of nourishment
-        p.snapshot(SnapshotLabel.SSN, t_start)
-
+        _recover(w, t_start)  # recovery up to the nourishment start
+        w.profile.snapshot(SnapshotLabel.SSN, t_start)
         t_end = t_start + duration
 
-        if t_end >= t_next:
-            # Storm interrupts nourishment — partial placement
+        if t_end >= t_next:  # storm interrupts — partial placement
             fraction = (t_next - t_start) / duration
-            PartialNourishment(
-                t=t_next,
-                template_zb=plan.template_zb,
-                fraction=fraction,
-            ).apply(p)
-            sink.record_nourishment(
-                p.id, t_start, t_next, plan.volume_m3 * fraction, "PartialNourishment"
+            placed = w.plan.volume_m3 * fraction
+            _decide(
+                DecisionKind.INTERRUPT, t_next, profile_id=w.profile.id, placed_fraction=fraction
             )
-            recovery_done[i] = t_next
-            t_crew = t_next
+            PartialNourishment(
+                t=t_next, template_zb=w.plan.template_zb, fraction=fraction
+            ).apply(w.profile)
+            sink.record_nourishment(w.profile.id, t_start, t_next, placed, "PartialNourishment")
+            w.recovered = True
+            return t_next, _Outcome.INTERRUPTED, placed
 
-            remaining_ids = [
-                profiles[j].id for j, _ in sorted_plans if j not in recovery_done or j == i
-            ]
+        FullNourishment(t=t_end, template_zb=w.plan.template_zb).apply(w.profile)
+        sink.record_nourishment(w.profile.id, t_start, t_end, w.plan.volume_m3, "FullNourishment")
+        w.recovered = True
+        return t_end, _Outcome.COMPLETED, w.plan.volume_m3
+
+    for w in plans:
+        t_crew, outcome, placed = _place(w, t_crew)
+        if outcome is _Outcome.BLOCKED:
+            active_campaign = ActiveCampaign(crew_on_site=False, priority_order=_remaining())
+            break
+        if outcome is _Outcome.INTERRUPTED:
             active_campaign = ActiveCampaign(
                 crew_on_site=True,
-                priority_order=remaining_ids,
-                placed={profiles[i].id: plan.volume_m3 * fraction},
+                priority_order=_remaining(interrupted=w),
+                placed={w.profile.id: placed},
             )
             break
-        else:
-            FullNourishment(t=t_end, template_zb=plan.template_zb).apply(p)
-            sink.record_nourishment(p.id, t_start, t_end, plan.volume_m3, "FullNourishment")
-            recovery_done[i] = t_end
-            t_crew = t_end
 
-    # Apply recovery to all profiles not yet processed
-    for i, p in enumerate(profiles):
-        if i not in recovery_done:
-            _apply_recovery_one(p, zb_post[i], zb_pre_new[i], t_storm, t_next, cfg)
+    # Recovery for any active profile the crew didn't reach
+    for w in active:
+        if not w.recovered:
+            _recover(w, t_next)
 
     return t_next, active_campaign

@@ -16,6 +16,7 @@ from .units import ufloat
 
 if TYPE_CHECKING:
     from .config import ReachConfig
+    from .metrics import ProfileMetrics
     from .profile import Profile
     from .runner.base import CSHOREResult, CSHORERunner
 
@@ -165,13 +166,14 @@ def run_parallel_cshore(
         Pre-storm zb shift-registered onto the original fixed grid, ready
         for Recovery event construction.
     """
-    from .profile import StormResponse, _shoreline_shift
+    from .profile import Profiles, StormResponse, _shoreline_shift
+
+    profiles = Profiles(profiles)  # collection sugar; a no-op for callers already passing one
 
     # Capture pre-storm state and take PreStorm snapshots
     x_pre = [p.x.copy() for p in profiles]
     zb_pre = [p.zb.copy() for p in profiles]
-    for p in profiles:
-        p.snapshot(SnapshotLabel.PreStorm, t_storm)
+    profiles.snapshot_all(SnapshotLabel.PreStorm, t_storm)
 
     # Run CSHORE in parallel with failure isolation
     def _run_safe(profile: Profile) -> CSHOREResult | None:

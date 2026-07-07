@@ -49,6 +49,15 @@ class ResultsSink:
         event_type: str,
     ) -> None: ...
 
+    def record_warning(self, profile_id: str, t: float, message: str) -> None: ...
+
+    def record_decision(self, kind, t: float, profile_id: str | None = None, **payload) -> None:
+        """Record a reach/SIM-scope orchestrator decision (NOURISH_TRIGGER, …).
+
+        No-op in the base sink; a capturing/recording sink collects them, and the
+        (future) event-log sink persists them as ``scope=REACH/SIM`` rows.
+        """
+
     def flush(self, profiles: list[Profile], meta: RunMeta) -> None: ...
 
 
@@ -78,6 +87,7 @@ class ParquetResultsSink(ResultsSink):
         self._hazard_chunks: list[dict] = []  # one array-chunk per (profile, storm)
         self._storm_times: set[float] = set()
         self._nourishment_rows: list[dict] = []
+        self._warning_rows: list[dict] = []
 
     def record_storm_hazard(self, profile_id: str, t: float, result: CSHOREResult) -> None:
         n = len(result.x)
@@ -114,12 +124,22 @@ class ParquetResultsSink(ResultsSink):
             }
         )
 
+    def record_warning(self, profile_id: str, t: float, message: str) -> None:
+        """Record a non-fatal run warning (e.g. a skipped/inundated storm).
+
+        Interim channel: how INUNDATION is ultimately handled is undecided, so
+        for now the storm is skipped, the profile reused, and the event surfaced
+        here (``warnings.csv`` + the run summary) rather than silently logged.
+        """
+        self._warning_rows.append({"profile_id": profile_id, "t": float(t), "message": message})
+
     def flush(self, profiles: list[Profile], meta: RunMeta) -> None:
         self._write_profiles(profiles)
         self._write_storm_hazard()
         self._write_profile_metrics(profiles)
         self._write_profile_events(profiles)
         self._write_segment_events()
+        self._write_warnings()
         self._write_metadata(meta, profiles)
         self._write_summary(meta, profiles)
 
@@ -224,6 +244,15 @@ class ParquetResultsSink(ResultsSink):
         )
         df.to_csv(os.path.join(self.out_dir, "segment_events.csv"), index=False)
 
+    def _write_warnings(self) -> None:
+        cols = ["profile_id", "t", "message"]
+        df = (
+            pd.DataFrame(self._warning_rows)
+            if self._warning_rows
+            else pd.DataFrame(columns=cols)
+        )
+        df.to_csv(os.path.join(self.out_dir, "warnings.csv"), index=False)
+
     def _write_metadata(self, meta: RunMeta, profiles: list[Profile]) -> None:
         data = {
             "reach_id": meta.reach_id,
@@ -233,6 +262,7 @@ class ParquetResultsSink(ResultsSink):
             "n_profiles": len(profiles),
             "n_storms": len(self._storm_times),
             "n_nourishment": len(self._nourishment_rows),
+            "n_warnings": len(self._warning_rows),
         }
         with open(os.path.join(self.out_dir, "run_metadata.json"), "w") as f:
             json.dump(data, f, indent=2)
@@ -252,3 +282,6 @@ class ParquetResultsSink(ResultsSink):
             f.write(f"Hazard rows:  {n_hazard_rows}\n")
             f.write(f"Metric rows:  {n_metrics}\n")
             f.write(f"Nourishment:  {len(self._nourishment_rows)}\n")
+            f.write(f"Warnings:     {len(self._warning_rows)}\n")
+            for w in self._warning_rows:
+                f.write(f"  ! t={w['t']:.1f}d  {w['profile_id']}: {w['message']}\n")

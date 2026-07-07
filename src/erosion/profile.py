@@ -106,6 +106,21 @@ class Profile:
             self.ref_metrics = metrics
 
 
+class Profiles(list):
+    """A ``list[Profile]`` with orchestration-level collection helpers.
+
+    It *is* a list (so every ``for p in profiles`` / ``profiles[i]`` /
+    ``zip(profiles, …)`` still works); it only adds a couple of bulk operations.
+    """
+
+    def snapshot_all(self, label: SnapshotLabel, t: float = 0.0) -> None:
+        for p in self:
+            p.snapshot(label, t)
+
+    def by_id(self, pid: str) -> Profile:
+        return next(p for p in self if p.id == pid)
+
+
 # ---------------------------------------------------------------------------
 # ProfileEvent ABC
 # ---------------------------------------------------------------------------
@@ -219,11 +234,17 @@ class FullNourishment(ProfileEvent):
 
 @dataclass
 class PartialNourishment(ProfileEvent):
-    """Place partial nourishment toward template (campaign interrupted before completion)."""
+    """Place partial nourishment toward template (campaign interrupted before completion).
+
+    Applied mid-segment after ``run_campaign`` has already emitted the ``SSN``
+    start marker, so this takes no snapshot of its own — the campaign records the
+    partial via ``record_nourishment`` and the interrupted bed is captured by the
+    next storm's ``PreStorm`` snapshot.  An ``ESN`` is emitted only on resume-to-
+    completion, so a partial segment is ``SSN`` with no matching ``ESN``.
+    """
 
     template_zb: np.ndarray
     fraction: float
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb + self.fraction * (self.template_zb - profile.zb)
-        profile.snapshot(SnapshotLabel.SSN, self.t)

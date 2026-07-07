@@ -43,7 +43,7 @@ from dask.distributed import Client, LocalCluster, as_completed
 from .config import ProfileGeometryConfig, ReachConfig
 from .geometry import load_raw_profile
 from .profile import Profile
-from .reach import ReachContext, run_lifecycle
+from .reach import Reach
 from .results import ParquetResultsSink
 from .runner.local import LocalCSHORERunner
 from .units import parse_ufloat
@@ -245,24 +245,18 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
         sink = ParquetResultsSink(job.out_root, job.reach_id, job.alt_id, lifecycle=job.lc)
         infile_dir = os.path.join(sink.out_dir, "infiles") if job.save_cshore else None
         runner = LocalCSHORERunner(params=job.cfg.cshore, work_dir=work_dir, infile_dir=infile_dir)
-        ctx = ReachContext(
+        reach = Reach(
+            profiles=profiles,
+            cfg=job.cfg,
+            results=sink,
+            runner=runner,
+            sim_start=job.sim_start,
             reach_id=job.reach_id,
             alternative_id=job.alt_id,
-            results=sink,
-            sim_start=job.sim_start,
-            cfg=job.cfg,
+            lifecycle=job.lc,
             longshore_widths=job.longshore_widths,
         )
-        run_lifecycle(
-            profiles,
-            job.storms_df,
-            job.sim_start,
-            job.sim_end,
-            job.cfg,
-            runner,
-            ctx,
-            lifecycle=job.lc,
-        )
+        reach.run(job.storms_df, job.sim_end)
 
     return job.reach_id, job.alt_id, job.lc
 

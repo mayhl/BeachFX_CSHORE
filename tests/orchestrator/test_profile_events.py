@@ -204,7 +204,8 @@ class TestPartialNourishment:
         PartialNourishment(t=10.0, template_zb=template, fraction=0.5).apply(p)
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-14)
 
-    def test_takes_ssn_snapshot(self):
+    def test_takes_no_snapshot(self):
+        """Partial placement is mid-segment; run_campaign owns the SSN start marker."""
         p = _p()
         PartialNourishment(t=10.0, template_zb=np.ones(len(p.x)), fraction=0.5).apply(p)
-        assert p.snapshots[-1].label == SnapshotLabel.SSN
+        assert p.snapshots == []
