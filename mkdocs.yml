@@ -1,0 +1,104 @@
+site_name: CHART FEAT — erosion
+site_description: Lifecycle orchestrator + CSHORE cross-shore morphology
+docs_dir: docs
+use_directory_urls: false
+
+theme:
+  name: material
+  features:
+    # layout / navigation (Typer-style)
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - navigation.tracking
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - toc.follow
+    # content
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - content.footnote.tooltips
+    # search
+    - search.suggest
+    - search.highlight
+    - search.share
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/lightbulb, name: Switch to dark }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/lightbulb-outline, name: Switch to light }
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      line_spans: __span
+      linenums_style: pymdownx-inline
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tilde
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_css:
+  - stylesheets/onedark.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - javascripts/mermaid-details.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_heading: true
+            show_source: true
+            members_order: source
+            separate_signature: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_section_style: table
+
+nav:
+  - Home: index.md
+  - Design:
+      - Nourishment model (flow + equations): design/NOURISHMENT_MODEL.md
+      - Architecture of record: design/ARCHITECTURE_nourishment.md
+  - API reference:
+      - Nourishment (Tiers 1-3): api/nourishment.md
+      - Metrics (the fitter): api/metrics.md
+      - Storm, recovery, reach: api/storm.md
+  - Reference:
+      - CSHORE I/O: CSHORE_IO_REFERENCE.md

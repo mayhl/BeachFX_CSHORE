@@ -47,3 +47,6 @@ tests/_artifacts/
 
 # coverage
 .coverage
+
+# mkdocs build output
+site/

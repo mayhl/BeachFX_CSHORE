@@ -34,6 +34,10 @@ package = true
 dev = [
     "ruff>=0.6",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,57 @@
+# Build the MkDocs site and publish it to GitHub Pages.
+#
+# Inert until GitHub Pages is enabled for the repo:
+#   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+#
+# CAVEAT — local design docs: docs/design/* are gitignored symlinks to the
+# untracked design specs (NOURISHMENT_MODEL.md, ARCHITECTURE_nourishment.md), so
+# they are ABSENT in CI. mkdocs builds anyway (non-strict): those two nav entries
+# are dropped with warnings, and the published site is API-reference-only. To
+# publish the design docs, promote them to tracked (scrub PII first) — the nav
+# then fills in automatically with no workflow change.
+name: docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docs/**
+      - src/**
+      - mkdocs.yml
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --group docs
+      - run: uv run --group docs mkdocs build --site-dir _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

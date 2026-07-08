@@ -1,0 +1,90 @@
+/* Atom One family palette for Material.
+ * Dark (slate scheme)   = One Dark
+ * Light (default scheme) = One Light
+ * Material derives the Mermaid diagram colors from these same variables, so the
+ * flowcharts re-tint and keep switching with the light/dark toggle. */
+
+/* ============================ One Dark (slate) ============================ */
+[data-md-color-scheme="slate"] {
+  --md-hue: 222;
+
+  --md-default-bg-color:           #282c34;
+  --md-default-bg-color--light:    #282c34e6;
+  --md-default-bg-color--lighter:  #282c3480;
+  --md-default-bg-color--lightest: #282c341a;
+
+  --md-default-fg-color:           #abb2bf;
+  --md-default-fg-color--light:    #abb2bfcc;
+  --md-default-fg-color--lighter:  #abb2bf66;
+  --md-default-fg-color--lightest: #abb2bf1f;
+
+  /* header / nav — a touch darker than the body */
+  --md-primary-fg-color:           #21252b;
+  --md-primary-fg-color--light:    #2c313a;
+  --md-primary-fg-color--dark:     #1b1f24;
+  --md-primary-bg-color:           #abb2bf;
+  --md-primary-bg-color--light:    #abb2bfb3;
+
+  /* interactive accent = One Dark blue */
+  --md-accent-fg-color:            #61afef;
+  --md-accent-fg-color--transparent: #61afef1a;
+
+  --md-typeset-color:              #abb2bf;
+  --md-typeset-a-color:            #61afef;
+
+  --md-code-bg-color:              #21252b;
+  --md-code-fg-color:              #abb2bf;
+
+  /* syntax highlighting (One Dark) */
+  --md-code-hl-keyword-color:      #c678dd;
+  --md-code-hl-function-color:     #61afef;
+  --md-code-hl-string-color:       #98c379;
+  --md-code-hl-number-color:       #d19a66;
+  --md-code-hl-constant-color:     #d19a66;
+  --md-code-hl-name-color:         #e06c75;
+  --md-code-hl-operator-color:     #56b6c2;
+  --md-code-hl-punctuation-color:  #abb2bf;
+  --md-code-hl-comment-color:      #5c6370;
+  --md-code-hl-variable-color:     #e06c75;
+  --md-code-hl-special-color:      #e5c07b;
+}
+
+/* ============================ One Light (default) ============================ */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color:           #fafafa;
+  --md-default-fg-color:           #383a42;
+  --md-default-fg-color--light:    #383a42cc;
+  --md-default-fg-color--lighter:  #383a4266;
+  --md-default-fg-color--lightest: #383a421f;
+
+  --md-primary-fg-color:           #eaeaeb;
+  --md-primary-fg-color--light:    #f2f2f3;
+  --md-primary-fg-color--dark:     #d5d6d8;
+  --md-primary-bg-color:           #383a42;
+  --md-primary-bg-color--light:    #383a42b3;
+
+  --md-accent-fg-color:            #4078f2;
+  --md-accent-fg-color--transparent: #4078f21a;
+
+  --md-typeset-color:              #383a42;
+  --md-typeset-a-color:            #4078f2;
+
+  --md-code-bg-color:              #f0f0f0;
+  --md-code-fg-color:              #383a42;
+
+  /* syntax highlighting (One Light) */
+  --md-code-hl-keyword-color:      #a626a4;
+  --md-code-hl-function-color:     #4078f2;
+  --md-code-hl-string-color:       #50a14f;
+  --md-code-hl-number-color:       #986801;
+  --md-code-hl-constant-color:     #986801;
+  --md-code-hl-name-color:         #e45649;
+  --md-code-hl-operator-color:     #0184bc;
+  --md-code-hl-punctuation-color:  #383a42;
+  --md-code-hl-comment-color:      #a0a1a7;
+  --md-code-hl-variable-color:     #e45649;
+  --md-code-hl-special-color:      #c18401;
+}
+
+/* Mermaid diagrams sit on the page background (no white box in dark mode). */
+.mermaid { background: transparent !important; }
