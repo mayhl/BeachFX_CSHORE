@@ -6,13 +6,14 @@ the right ordering of PreStorm / PostStorm / REC / SSN / ESN across a storm
 schedule.  They test event handling, not the nourishment/recovery numerics.
 
 CSHORE is the only mock: ``MockCSStorm(depth)`` scoops a uniform chunk off the
-bed, and the *real* ``EqualSpacingStrategy`` turns the emergent deficit into a
+bed, and the *real* ``VolumeAssessor`` turns the emergent deficit into a
 campaign (bigger chunk / slower ``production_rate`` → longer, interruptible
 placement).  Blackout scenarios use ``blackout_windows``.
 
 Each ``Case`` declares the full expected label sequence per profile, optionally
 time-pinning entries as ``(L, t)``; ``durations`` assert intervals in days.  Run
-with ``--events-table`` to print the table (dates + intervals, OK/FAIL).
+with ``--events-table`` to print a per-scenario table (event / elapsed / date /
+OK, plus reach decisions + intervals).
 """
 
 from __future__ import annotations
@@ -45,15 +46,13 @@ def times_of(p, label: L) -> list[float]:
     return [s.t for s in p.snapshots if s.label == label]
 
 
-def _nourish_cfg(production_rate=500.0, strategy="equal_spacing") -> ReachConfig:
-    return ReachConfig(
-        nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate, strategy=strategy)
-    )
+def _nourish_cfg(production_rate=500.0) -> ReachConfig:
+    return ReachConfig(nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate))
 
 
 # --- scenario factories → (profiles, RecordingSink) after one lifecycle -----
 # Profiles start on the design template (deficit 0); MockCSStorm(depth) scoops a
-# chunk → the real strategy sizes the campaign. Sink captures reach decisions.
+# chunk → the real assessor sizes the campaign. Sink captures reach decisions.
 
 Made = tuple[list[Profile], RecordingSink]
 
@@ -97,6 +96,21 @@ def _interrupt_single() -> Made:
         sim_end=100.0,
         runner=MockCSStorm({"p0": [2.0, 0.2]}),
         cfg=_nourish_cfg(production_rate=5.0),
+        sink=RecordingSink(),
+    )
+
+
+def _defer_single() -> Made:
+    # Same setup as _interrupt_single, but the BeachFX "defer" policy delays the
+    # storm-hit placement to the next storm-free gap instead of splitting it.
+    cfg = _nourish_cfg(production_rate=5.0)
+    cfg.nourishment.storm_conflict = "defer"
+    return run(
+        [template_profile("p0")],
+        storms_df=storms_at([20, 34]),
+        sim_end=100.0,
+        runner=MockCSStorm({"p0": [2.0, 0.2]}),
+        cfg=cfg,
         sink=RecordingSink(),
     )
 
@@ -149,16 +163,17 @@ def _blackout() -> Made:
 # --- expected full sequences per scenario ----------------------------------
 
 _I, _PRE, _POST = L.INIT, L.PreStorm, L.PostStorm
-_REC, _SSN, _ESN, _END = L.REC, L.SSN, L.ESN, L.EndIteration
+_REC, _RECS, _SSN, _ESN, _END = L.REC, L.RECS, L.SSN, L.ESN, L.EndIteration
 _INUN = L.INUNDATION
 _PER = L.Periodic
 
 # reach-scope decision aliases
-_TRIG, _SKIP, _DEFER, _INTR = (
+_TRIG, _SKIP, _DEFER, _INTR, _SDEFER = (
     D.NOURISH_TRIGGER,
     D.NOURISH_SKIP,
     D.BLACKOUT_DEFER,
     D.INTERRUPT,
+    D.STORM_DEFER,
 )
 
 
@@ -172,6 +187,7 @@ class Case:
     durations: list = field(default_factory=list)
     # reach-scope decision kinds, in emission order (asserted once per scenario)
     decisions: list = field(default_factory=list)
+    reach_id: str = "test"  # matches builders.run() default; shown in the events table
 
 
 CASES = [
@@ -179,14 +195,14 @@ CASES = [
         "1_recovery",
         "sub-trigger deficit → NOURISH_SKIP + recovery",
         _recovery,
-        {"p0": [_I, (_PRE, 20.0), (_POST, 20.0), _REC, _END]},
+        {"p0": [_I, (_PRE, 20.0), (_POST, 20.5), _REC, _END]},
         decisions=[_SKIP],
     ),
     Case(
         "2_nourish_single",
         "chunk deficit → single nourishment",
         _nourish_single,
-        {"p0": [_I, _PRE, (_POST, 20.0), (_SSN, 20.0), _ESN, _END]},
+        {"p0": [_I, _PRE, (_POST, 20.5), (_SSN, 20.5), _ESN, _END]},
         decisions=[_TRIG],
     ),
     Case(
@@ -194,8 +210,8 @@ CASES = [
         "multi-profile nourishment, serial crew",
         _nourish_multi,
         {
-            "p0": [_I, _PRE, (_POST, 20.0), (_SSN, 20.0), _ESN, _END],
-            "p1": [_I, _PRE, (_POST, 20.0), _REC, _SSN, _ESN, _END],
+            "p0": [_I, _PRE, (_POST, 20.5), (_SSN, 20.5), _ESN, _END],
+            "p1": [_I, _PRE, (_POST, 20.5), _REC, _SSN, _ESN, _END],
         },
         decisions=[_TRIG],  # one reach-level trigger; crew serves both profiles
     ),
@@ -209,11 +225,11 @@ CASES = [
             "p0": [
                 _I,
                 _PRE,
-                (_POST, 20.0),
-                (_SSN, 20.0),
+                (_POST, 20.5),
+                (_SSN, 20.5),
                 (_PRE, 34.0),
-                (_POST, 34.0),
-                (_SSN, 34.0),
+                (_POST, 34.5),
+                (_SSN, 34.5),
                 _ESN,
                 _END,
             ]
@@ -229,22 +245,22 @@ CASES = [
             "p0": [
                 _I,
                 _PRE,
-                (_POST, 20.0),
-                (_SSN, 20.0),
+                (_POST, 20.5),
+                (_SSN, 20.5),
                 (_PRE, 34.0),
-                (_POST, 34.0),
-                (_SSN, 34.0),
+                (_POST, 34.5),
+                (_SSN, 34.5),
                 _ESN,
                 _END,
             ],
             "p1": [
                 _I,
                 _PRE,
-                (_POST, 20.0),
-                (_REC, 34.0),
+                (_POST, 20.5),
+                (_RECS, 34.0),  # 2nd storm cuts recovery short (13.5d < T_recover 21d)
                 _PRE,
-                (_POST, 34.0),
-                _REC,
+                (_POST, 34.5),
+                _REC,  # recovery up to this profile's own nourishment start (not storm-forced)
                 _SSN,
                 _ESN,
                 _END,
@@ -257,7 +273,7 @@ CASES = [
         "7_blackout",
         "nourishment deferred past a blackout window",
         _blackout,
-        {"p0": [_I, _PRE, (_POST, 20.0), _REC, (_SSN, 50.0), _ESN, _END]},
+        {"p0": [_I, _PRE, (_POST, 20.5), _REC, (_SSN, 50.0), _ESN, _END]},
         decisions=[_TRIG, _DEFER],
     ),
     Case(
@@ -271,26 +287,48 @@ CASES = [
         "9_periodic",
         "erosion ticks continue through every inter-storm gap (pre- AND post-storm)",
         _periodic,
-        # ticks @10,@20 before the storm, then @30…@80.5 across the tail before REC
+        # ticks @10,@20 before the storm; the storm ends at 20.5, so the tail ticks
+        # @30.5…@80.5 (6 ticks, one fewer than a storm-start window) before REC
         {
             "p0": [
                 _I,
                 (_PER, 10.0),
                 (_PER, 20.0),
                 (_PRE, 20.0),
-                (_POST, 20.0),
+                (_POST, 20.5),
+                (_PER, 30.5),
                 _PER,
                 _PER,
                 _PER,
                 _PER,
-                _PER,
-                _PER,
-                _PER,
+                (_PER, 80.5),
                 _REC,
                 _END,
             ]
         },
         decisions=[],  # no nourishment configured
+    ),
+    Case(
+        "10_storm_defer",
+        "storm-conflicting placement deferred to next window (BeachFX defer policy)",
+        _defer_single,
+        # Counterpart to 4_interrupt_single: rather than split SSN@20.5 → SSN@34.5,
+        # the placement is deferred (recovery-only over gap 1), then placed atomically
+        # in gap 2 — one SSN→ESN, no partial.
+        {
+            "p0": [
+                _I,
+                _PRE,
+                (_POST, 20.5),
+                (_RECS, 34.0),  # placement deferred → recovery-only, cut short by the 2nd storm
+                (_PRE, 34.0),
+                (_POST, 34.5),
+                (_SSN, 34.5),
+                _ESN,
+                _END,
+            ]
+        },
+        decisions=[_TRIG, _SDEFER, _TRIG],  # launch → storm-defer → resume in clear window
     ),
 ]
 
@@ -333,6 +371,7 @@ def test_event_sequence(case: Case, record_event):
             sim_start=SIM_START,
             durations=durs_by_pid.get(pid),
             decisions=case.decisions if pid == first_pid else None,
+            reach_id=case.reach_id,
         )
         assert generated == exp_labels, f"{case.id}/{pid}"
         for i, want_t in enumerate(exp_times):

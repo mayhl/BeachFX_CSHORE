@@ -129,6 +129,7 @@ _LABEL_STYLE: dict[str, dict] = {
     "PreStorm": {"color": "#888888", "lw": 0.8, "ls": "--", "zorder": 2},
     "PostStorm": {"color": "#d62728", "lw": 1.0, "ls": "-", "zorder": 3},
     "REC": {"color": "#2ca02c", "lw": 0.8, "ls": ":", "zorder": 2},
+    "RECS": {"color": "#ff7f0e", "lw": 0.8, "ls": "-.", "zorder": 2},  # storm-forced recovery
     "EndIteration": {"color": "#1f77b4", "lw": 2.0, "ls": "-", "zorder": 5},
 }
 
@@ -163,6 +164,53 @@ def _beach_zoom(sub: pd.DataFrame, margin_m: float = 150.0) -> tuple[float, floa
     x_shore_min = min(all_x) if all_x else sub["x"].min()
     x_max = sub["x"].max()
     return max(0.0, x_shore_min - margin_m), x_max
+
+
+def _compatible_snaps(
+    pdf: pd.DataFrame, snaps: pd.DataFrame
+) -> tuple[pd.DataFrame, dict, float | None]:
+    """Drop snapshots on the pre-CSHORE grid (INIT and the first PreStorm live on
+    the shorter raw grid).  A snapshot is kept when its max x reaches ≥80% of the
+    reference (longest) span, so all plotted profiles share one coordinate system.
+
+    Returns ``(filtered_snaps, snap_xmax, ref_xmax)``; ``ref_xmax`` is ``None`` when
+    there are no snapshots.  ``pdf`` is the single-profile frame.
+    """
+    snap_xmax = {
+        (r["label"], r["t"]): pdf[(pdf["label"] == r["label"]) & np.isclose(pdf["t"], r["t"])][
+            "x"
+        ].max()
+        for _, r in snaps.iterrows()
+    }
+    if not snap_xmax:
+        return snaps.iloc[0:0], snap_xmax, None
+    ref_xmax = max(snap_xmax.values())
+    filtered = snaps[
+        snaps.apply(lambda r: snap_xmax[(r["label"], r["t"])] >= 0.8 * ref_xmax, axis=1)
+    ].reset_index(drop=True)
+    return filtered, snap_xmax, ref_xmax
+
+
+def _beach_ylim(pdf: pd.DataFrame, xlim: tuple[float, float], labels: Sequence[str]):
+    """Y-limits framing the beach: bed range within ``xlim`` (over ``labels``),
+    padded 0.5 m and floored at -5 m, with a fallback for an empty view."""
+    z = pdf[pdf["label"].isin(labels)]
+    z = z[(z["x"] >= xlim[0]) & (z["x"] <= xlim[1])]["zb"]
+    if z.empty:
+        return (-5.0, 5.0)
+    return (max(z.min() - 0.5, -5.0), z.max() + 0.5)
+
+
+def _style_beach_axes(ax: plt.Axes, xlim: tuple[float, float], ylim: tuple[float, float]) -> None:
+    """Apply the shared static beach styling: limits, water fill, MSL line, labels,
+    grid.  Title is left to the caller (it differs per plot)."""
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
+    ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
+    ax.set_xlabel("Cross-shore position (m, offshore→landward)")
+    ax.set_ylabel("Elevation (m)")
+    ax.grid(True, alpha=0.25)
 
 
 def plot_profile_evolution(
@@ -200,19 +248,9 @@ def plot_profile_evolution(
     if snaps.empty:
         return fig or plt.figure()
 
-    # Determine the canonical x_max from CSHORE-expanded snapshots.
-    # The first PreStorm lives on the raw loaded grid (shorter x range) and
-    # must be excluded so all plotted profiles share the same coordinate system.
-    snap_xmax = {
-        (row["label"], row["t"]): sub[
-            (sub["label"] == row["label"]) & np.isclose(sub["t"], row["t"])
-        ]["x"].max()
-        for _, row in snaps.iterrows()
-    }
-    ref_xmax = max(snap_xmax.values())
-    snaps = snaps[
-        snaps.apply(lambda r: snap_xmax[(r["label"], r["t"])] >= 0.8 * ref_xmax, axis=1)
-    ].reset_index(drop=True)
+    # Exclude snapshots on the raw loaded grid (the first PreStorm) so all
+    # plotted profiles share the same coordinate system.
+    snaps, _, _ = _compatible_snaps(sub, snaps)
 
     if snaps.empty:
         return fig or plt.figure()
@@ -241,21 +279,8 @@ def plot_profile_evolution(
         if zoom_beach
         else (sub["x"].min(), sub["x"].max())
     )
-    ax.set_xlim(xlim)
-
-    ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
-    ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
-
-    z_in_view = sub[sub["label"].isin(all_labels)]
-    z_in_view = z_in_view[(z_in_view["x"] >= xlim[0]) & (z_in_view["x"] <= xlim[1])]["zb"]
-    y_lo = max(z_in_view.min() - 0.5, -5.0) if not z_in_view.empty else -5.0
-    y_hi = z_in_view.max() + 0.5 if not z_in_view.empty else 5.0
-    ax.set_ylim(y_lo, y_hi)
-
-    ax.set_xlabel("Cross-shore position (m, offshore→landward)")
-    ax.set_ylabel("Elevation (m)")
+    _style_beach_axes(ax, xlim, _beach_ylim(sub, xlim, all_labels))
     ax.set_title(f"{run.reach_id} / {run.alt_id} — {profile_id} profile evolution")
-    ax.grid(True, alpha=0.25)
     if fig is not None:
         fig.tight_layout()
     return fig
@@ -278,6 +303,7 @@ _LABEL_ORDER = {
     "PreStorm": 1,
     "PostStorm": 2,
     "REC": 3,
+    "RECS": 3,
     "EndIteration": 4,
     "Periodic": 5,
 }
@@ -287,6 +313,7 @@ _LABEL_MARKER = {
     "PreStorm": dict(marker="o", s=12, zorder=3, alpha=0.6),  # circle
     "PostStorm": dict(marker="v", s=25, zorder=5, alpha=0.9),  # triangle-down
     "REC": dict(marker="^", s=12, zorder=3, alpha=0.6),  # triangle-up
+    "RECS": dict(marker="^", s=20, zorder=4, alpha=0.9, facecolors="none"),  # open triangle-up
     "Periodic": dict(marker=".", s=8, zorder=2, alpha=0.4),  # dot
 }
 
@@ -477,9 +504,7 @@ def generate_event_transition_frames(
     else:
         xlim = (df["x"].min(), df["x"].max())
 
-    all_df = df[df["label"].isin(all_labels)]
-    z_in_view = all_df[(all_df["x"] >= xlim[0]) & (all_df["x"] <= xlim[1])]["zb"]
-    ylim = (max(z_in_view.min() - 0.5, -5.0), z_in_view.max() + 0.5)
+    ylim = _beach_ylim(df, xlim, all_labels)
 
     # Pre-fetch unique (label, t) → xy for all transitions
     needed: set[tuple] = set()
@@ -492,13 +517,7 @@ def generate_event_transition_frames(
 
     # Build figure with static elements
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
-    ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
-    ax.set_xlabel("Cross-shore position (m, offshore→landward)")
-    ax.set_ylabel("Elevation (m)")
-    ax.grid(True, alpha=0.25)
+    _style_beach_axes(ax, xlim, ylim)
 
     (before_line,) = ax.plot([], [], color="#888888", lw=1.2, ls="--", zorder=3, label="before")
     (after_line,) = ax.plot([], [], lw=2.2, zorder=5, label="after")
@@ -602,20 +621,7 @@ def generate_profile_frames(
     )
 
     # Drop snapshots on incompatible (pre-CSHORE) x grid
-    snap_xmax = {
-        (r["label"], r["t"]): df[(df["label"] == r["label"]) & np.isclose(df["t"], r["t"])][
-            "x"
-        ].max()
-        for _, r in snaps.iterrows()
-    }
-    if not snap_xmax:
-        print("No compatible snapshots found.")
-        return 0
-    ref_xmax = max(snap_xmax.values())
-    snaps = snaps[
-        snaps.apply(lambda r: snap_xmax[(r["label"], r["t"])] >= 0.8 * ref_xmax, axis=1)
-    ].reset_index(drop=True)
-
+    snaps, snap_xmax, ref_xmax = _compatible_snaps(df, snaps)
     if snaps.empty:
         print("No compatible snapshots found.")
         return 0
@@ -635,8 +641,7 @@ def generate_profile_frames(
     else:
         xlim = (compat_df["x"].min(), compat_df["x"].max())
 
-    z_in_view = compat_df[(compat_df["x"] >= xlim[0]) & (compat_df["x"] <= xlim[1])]["zb"]
-    ylim = (max(z_in_view.min() - 0.5, -5.0), z_in_view.max() + 0.5)
+    ylim = _beach_ylim(df, xlim, labels)
 
     # Pre-fetch snapshot arrays
     snap_xy: list[tuple[np.ndarray, np.ndarray] | None] = [
@@ -647,14 +652,8 @@ def generate_profile_frames(
 
     # Build figure — static elements drawn once
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.fill_between(xlim, -200, 0, color="#cce5ff", alpha=0.25, zorder=0)
-    ax.axhline(0, color="#4a90d9", lw=0.7, alpha=0.7)
-    ax.set_xlabel("Cross-shore position (m, offshore→landward)")
-    ax.set_ylabel("Elevation (m)")
+    _style_beach_axes(ax, xlim, ylim)
     ax.set_title(f"{run.reach_id} / {run.alt_id} — {profile_id}")
-    ax.grid(True, alpha=0.25)
 
     if ref_xy is not None:
         ax.plot(ref_xy[0], ref_xy[1], color="#aaaaaa", lw=1.0, ls="--", zorder=1)
@@ -715,12 +714,11 @@ def make_profile_video(
     )
     if n == 0:
         return
-    default_fps = fps
     cmd = [
         "ffmpeg",
         "-y",
         "-r",
-        str(default_fps),
+        str(fps),
         "-i",
         os.path.join(frame_dir, "frame_%05d.png"),
         "-vcodec",

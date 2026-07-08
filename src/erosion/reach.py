@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from .config import ReachConfig
-from .nourishment import ActiveCampaign
+from .interstorm import run_interstorm
+from .nourishment import ActiveCampaign, run_campaign
 from .profile import Profiles
 from .results import ResultsSink, RunMeta
+from .storm import build_storm_schedule, run_parallel_cshore
 from .types import SnapshotLabel
 
 if TYPE_CHECKING:
@@ -59,10 +61,6 @@ class Reach:
           Phase 2.5 — inter-storm gap erosion   (run_interstorm over [storm, next])
           Phase 3   — campaign: recovery + nourishment (run_campaign)
         """
-        from .interstorm import run_interstorm
-        from .nourishment import run_campaign
-        from .storm import build_storm_schedule, run_parallel_cshore
-
         widths = self.longshore_widths or None
         self.profiles.snapshot_all(SnapshotLabel.INIT, 0.0)
 
@@ -73,47 +71,47 @@ class Reach:
 
         for i, storm in enumerate(schedule):
             t_next = schedule[i + 1].t if i + 1 < n else sim_end
+            storm_end = storm.t + storm.duration  # recovery/nourishment begin here
 
             # Phase 1 — pre-storm erosion / SLC (only non-empty before the FIRST
             # storm; later gaps are eroded in Phase 2.5 below).
             run_interstorm(self.profiles, self.t, storm.t, self.cfg)
 
-            # Phase 2 — CSHORE (all profiles in parallel)
-            results, zb_pre_new = run_parallel_cshore(
-                self.profiles, storm.t, storm.forcing, self.runner, self.cfg
+            # Phase 2 — CSHORE (all profiles in parallel); PostStorm at storm end.
+            outcomes = run_parallel_cshore(
+                self.profiles, storm.t, storm.forcing, self.runner, self.cfg, t_post=storm_end
             )
-            inundated: set[str] = set()
-            for p, r in zip(self.profiles, results):
-                if r is not None:
-                    self.results.record_storm_hazard(p.id, storm.t, r)
+            for o in outcomes:
+                if not o.inundated:
+                    self.results.record_storm_hazard(o.profile.id, storm.t, o.result)
                 else:
                     # INUNDATION: CSHORE failed. Interim handling (undecided by the
                     # group) — skip the storm, reuse the profile, surface a warning,
                     # and skip Phase 3 for this profile (no storm ⇒ no recovery).
-                    inundated.add(p.id)
                     self.results.record_warning(
-                        p.id,
+                        o.profile.id,
                         storm.t,
                         f"CSHORE failed for storm {storm.storm_id!r} — "
                         "storm skipped, profile reused (INUNDATION)",
                     )
 
-            # Phase 2.5 — inter-storm erosion / SLC over the gap [storm, next storm].
+            # Phase 2.5 — inter-storm erosion / SLC over the gap [storm end, next storm].
             # Applied BEFORE the campaign so Periodic ticks stay ≤ the recovery time
             # (monotonic snapshots); recovery/nourishment then act on the eroded bed.
-            run_interstorm(self.profiles, storm.t, t_next, self.cfg)
+            run_interstorm(self.profiles, storm_end, t_next, self.cfg)
 
-            # Phase 3 — campaign
+            # Phase 3 — campaign (recovery + nourishment) begins at storm end.
+            # storm_at_next distinguishes a recovery cut short by the next storm
+            # (RECS) from one that runs to the sim end on the last storm (REC).
             self.t, self.active_campaign = run_campaign(
-                self.profiles,
-                zb_pre_new,
-                storm.t,
+                outcomes,
+                storm_end,
                 t_next,
                 self.cfg,
                 self.results,
                 longshore_widths=widths,
                 prior=self.active_campaign,
-                inundated=inundated,
+                storm_at_next=i + 1 < n,
             )
 
         self.profiles.snapshot_all(SnapshotLabel.EndIteration, self.t)

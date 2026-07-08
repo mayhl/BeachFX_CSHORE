@@ -179,6 +179,14 @@ def _resolve_alternatives(global_alts: dict, reach_alts: dict) -> dict:
     }
 
 
+def _priority_order(priorities: list[int] | None, n: int) -> list[int]:
+    """Return indices 0..n-1 sorted by priority (lower number = first); default is input order."""
+    prios = priorities if priorities is not None else list(range(n))
+    if len(prios) != n:
+        raise ValueError(f"profile_priority has {len(prios)} entries but profiles has {n}")
+    return sorted(range(n), key=lambda i: prios[i])
+
+
 def _load_profiles(
     profile_paths: list[str],
     d50: float,
@@ -187,12 +195,7 @@ def _load_profiles(
     geometry: ProfileGeometryConfig | None = None,
 ) -> list[Profile]:
     """Load profiles sorted by priority (lower number = first); IDs use list index."""
-    n = len(profile_paths)
-    prios = priorities if priorities is not None else list(range(n))
-    if len(prios) != n:
-        raise ValueError(f"profile_priority has {len(prios)} entries but profiles has {n}")
-
-    order = sorted(range(n), key=lambda i: prios[i])
+    order = _priority_order(priorities, len(profile_paths))
     profiles = []
     for i in order:
         raw = load_raw_profile(profile_paths[i], d50)
@@ -259,6 +262,73 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
         reach.run(job.storms_df, job.sim_end)
 
     return job.reach_id, job.alt_id, job.lc
+
+
+def _build_jobs(
+    reaches: dict,
+    global_alts: dict,
+    base_cshore: dict,
+    units_context: dict,
+    storms_df: pd.DataFrame,
+    sim_start: datetime,
+    sim_end: float,
+    out_root: str,
+    save_cshore: bool,
+    lifecycles: list,
+) -> list[_LifecycleJob]:
+    """Expand the config into one ``_LifecycleJob`` per (reach × alternative × lifecycle)."""
+    all_jobs: list[_LifecycleJob] = []
+    for reach_id, reach_data in reaches.items():
+        reach_cshore = reach_data.get("cshore", {})
+        alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
+        profile_paths = [os.path.join(ROOT, p) for p in reach_data["profiles"]]
+        priorities = reach_data.get("profile_priority")
+
+        order = _priority_order(priorities, len(profile_paths))
+        longshore_widths = _resolve_widths(
+            reach_data.get("longshore_width", 1.0),
+            order,
+            units_context,
+        )
+
+        _be = reach_data.get("berm_elevation")
+        geometry = (
+            ProfileGeometryConfig.model_validate(
+                {"berm_elevation": _be, "datum": reach_data.get("datum", 0.0)},
+                context=units_context,
+            )
+            if _be is not None
+            else None
+        )
+
+        for alt_id, alt_data in alts.items():
+            alt_cshore = alt_data.pop("cshore", {})
+            merged_cshore = _merge_cshore(base_cshore, reach_cshore, alt_cshore)
+            cfg = ReachConfig.model_validate(
+                {**alt_data, "cshore": merged_cshore},
+                context=units_context,
+            )
+            base_profiles = _load_profiles(
+                profile_paths, cfg.cshore.d50, reach_id, priorities, geometry
+            )
+
+            for lc in lifecycles:
+                all_jobs.append(
+                    _LifecycleJob(
+                        reach_id=reach_id,
+                        alt_id=alt_id,
+                        lc=int(lc),
+                        base_profiles=base_profiles,
+                        cfg=cfg,
+                        storms_df=storms_df,
+                        sim_start=sim_start,
+                        sim_end=sim_end,
+                        out_root=out_root,
+                        longshore_widths=longshore_widths,
+                        save_cshore=save_cshore,
+                    )
+                )
+    return all_jobs
 
 
 # ---------------------------------------------------------------------------
@@ -329,59 +399,18 @@ def run(config_path: str, max_workers: int | None = None, oversubscription: floa
             len(lifecycles),
         )
 
-        all_jobs: list[_LifecycleJob] = []
-        for reach_id, reach_data in reaches.items():
-            reach_cshore = reach_data.get("cshore", {})
-            alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
-            profile_paths = [os.path.join(ROOT, p) for p in reach_data["profiles"]]
-            priorities = reach_data.get("profile_priority")
-
-            n_profiles = len(profile_paths)
-            prios = priorities if priorities is not None else list(range(n_profiles))
-            order = sorted(range(n_profiles), key=lambda i: prios[i])
-            longshore_widths = _resolve_widths(
-                reach_data.get("longshore_width", 1.0),
-                order,
-                units_context,
-            )
-
-            _be = reach_data.get("berm_elevation")
-            geometry = (
-                ProfileGeometryConfig.model_validate(
-                    {"berm_elevation": _be, "datum": reach_data.get("datum", 0.0)},
-                    context=units_context,
-                )
-                if _be is not None
-                else None
-            )
-
-            for alt_id, alt_data in alts.items():
-                alt_cshore = alt_data.pop("cshore", {})
-                merged_cshore = _merge_cshore(base_cshore, reach_cshore, alt_cshore)
-                cfg = ReachConfig.model_validate(
-                    {**alt_data, "cshore": merged_cshore},
-                    context=units_context,
-                )
-                base_profiles = _load_profiles(
-                    profile_paths, cfg.cshore.d50, reach_id, priorities, geometry
-                )
-
-                for lc in lifecycles:
-                    all_jobs.append(
-                        _LifecycleJob(
-                            reach_id=reach_id,
-                            alt_id=alt_id,
-                            lc=int(lc),
-                            base_profiles=base_profiles,
-                            cfg=cfg,
-                            storms_df=storms_df,
-                            sim_start=sim_start,
-                            sim_end=sim_end,
-                            out_root=out_root,
-                            longshore_widths=longshore_widths,
-                            save_cshore=save_cshore,
-                        )
-                    )
+        all_jobs = _build_jobs(
+            reaches,
+            global_alts,
+            base_cshore,
+            units_context,
+            storms_df,
+            sim_start,
+            sim_end,
+            out_root,
+            save_cshore,
+            lifecycles,
+        )
 
         log.info("Submitting %d job(s) total", len(all_jobs))
         # pure=False → random task keys; skips deterministic tokenization of the

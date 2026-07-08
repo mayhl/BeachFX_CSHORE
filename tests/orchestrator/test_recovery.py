@@ -39,6 +39,16 @@ class TestRecoveryEvent:
         Recovery(t=5.0, fraction=0.5, zb_post_storm=zb_post, zb_pre_storm=zb_pre).apply(p)
         assert p.snapshots[-1].label == SnapshotLabel.REC
 
+    def test_interrupted_takes_recs_snapshot(self):
+        """A storm-forced (interrupted) recovery snapshots RECS, not REC."""
+        p = _p()
+        zb_post = np.zeros(50)
+        zb_pre = np.ones(50)
+        Recovery(
+            t=5.0, fraction=0.5, zb_post_storm=zb_post, zb_pre_storm=zb_pre, interrupted=True
+        ).apply(p)
+        assert p.snapshots[-1].label == SnapshotLabel.RECS
+
     def test_snapshot_t_stored(self):
         p = _p()
         zb_post = np.zeros(50)

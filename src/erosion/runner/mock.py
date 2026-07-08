@@ -32,7 +32,7 @@ class MockCSStorm(CSHORERunner):
     CSHORE is the only task worth stubbing (expensive, output not known
     a-priori), so this is the *one* mock the event-generation tests need: the
     scooped volume becomes a deterministic deficit that the **real**
-    ``EqualSpacingStrategy`` turns into a nourishment campaign — everything
+    ``VolumeAssessor`` turns into a nourishment campaign — everything
     downstream (deficit, scheduling, recovery) stays real.
 
     ``depth`` is a single metres value applied to every profile, or a

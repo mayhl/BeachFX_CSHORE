@@ -144,7 +144,6 @@ def ncfg(
     volume_trigger: float = 0.001,
     production_rate: float = 500.0,
     n: int = 50,
-    strategy: str = "equal_spacing",
 ) -> NourishmentConfig:
     """A nourishment config whose template matches ``template_profile``.
 
@@ -158,7 +157,6 @@ def ncfg(
             "template_z": list(np.linspace(-0.5, 3.0, n)),
             "volume_trigger": {"value": volume_trigger, "units": "m3"},
             "production_rate": {"value": production_rate, "units": "m3/day"},
-            "strategy": strategy,
         },
         context={"input_units": "m"},
     )

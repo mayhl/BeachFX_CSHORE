@@ -5,6 +5,7 @@ import pytest
 
 from erosion.metrics import (
     MorphType,
+    erosion_volume_above_msl,
     fit_profile,
     last_wet_dry_crossing,
     volume_above_datum,
@@ -53,6 +54,32 @@ class TestVolumeAboveDatum:
         x = np.arange(3.0)
         z = np.array([-5.0, -5.0, -5.0])
         assert volume_above_datum(x, z) == pytest.approx(0.0)
+
+
+class TestErosionVolumeAboveMSL:
+    def test_erosion_only_surplus_does_not_cancel(self):
+        # Eroded at 0,1,4 (+1 each) but ACCRETED at 2,3 (-1 each). The old
+        # difference-of-integrals nets to 0; erosion-only must keep the deficit.
+        x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        tpl = np.full(5, 2.0)
+        now = np.array([1.0, 1.0, 3.0, 3.0, 1.0])
+        assert volume_above_datum(x, tpl) - volume_above_datum(x, now) == pytest.approx(0.0)
+        assert erosion_volume_above_msl(x, tpl, now) == pytest.approx(2.0)
+
+    def test_clips_at_msl(self):
+        # Only the dry beach (above msl) counts toward the deficit.
+        x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        tpl = np.full(5, 2.0)
+        now = np.array([1.0, 1.0, 3.0, 3.0, 1.0])
+        assert erosion_volume_above_msl(x, tpl, now, msl=1.5) == pytest.approx(1.0)
+
+    def test_pure_erosion_matches_datum_difference(self):
+        # With no accretion, erosion-only equals the datum-difference (msl == datum).
+        x = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        tpl = np.full(5, 2.0)
+        now = tpl - 0.5
+        old = volume_above_datum(x, tpl) - volume_above_datum(x, now)
+        assert erosion_volume_above_msl(x, tpl, now) == pytest.approx(old)
 
 
 # ---------------------------------------------------------------------------

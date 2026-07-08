@@ -64,31 +64,45 @@ def record_event(request):
         sim_start=None,
         durations=None,
         decisions=None,
+        reach_id=None,
     ):
         # ``expected`` entries are a label ``L`` or a time-pinned ``(L, t)`` tuple.
         exp_labels = [e[0] if isinstance(e, tuple) else e for e in expected]
         exp_times = [e[1] if isinstance(e, tuple) else None for e in expected]
         exp = [getattr(x, "value", x) for x in exp_labels]
         gen = [getattr(x, "value", x) for x in generated_labels]
-        ok = exp == gen
-        if ok and generated_times is not None:
-            for i, want in enumerate(exp_times):
-                if want is not None and (
-                    i >= len(generated_times) or abs(generated_times[i] - want) > 1e-6
-                ):
-                    ok = False
-                    break
 
-        def _annot(i, g):
-            # pinned events show day + calendar date, e.g. SSN@20d(2030-01-21)
-            if generated_times is None or i >= len(exp_times) or exp_times[i] is None:
-                return g
-            t = generated_times[i]
-            if sim_start is not None:
-                return f"{g}@{t:g}d({(sim_start + timedelta(days=t)).date()})"
-            return f"{g}@{t:g}d"
+        # One row per event step: index, event, elapsed days, calendar date, and a
+        # per-event verdict (``ok`` for a matched time-pin, ``·`` unpinned, ``FAIL``
+        # on a label or time mismatch).  ``expected`` shows through only when it diverges.
+        n = max(len(gen), len(exp))
+        events = []
+        row_ok = True
+        for i in range(n):
+            g = gen[i] if i < len(gen) else None
+            e = exp[i] if i < len(exp) else None
+            has_t = generated_times is not None and i < len(generated_times)
+            t = generated_times[i] if has_t else None
+            want_t = exp_times[i] if i < len(exp_times) else None
+            label_ok = g == e
+            time_ok = want_t is None or (t is not None and abs(t - want_t) <= 1e-6)
+            match = label_ok and time_ok
+            if not match:
+                row_ok = False
+            verdict = "FAIL" if not match else ("ok" if want_t is not None else "·")
+            events.append(
+                {
+                    "idx": i,
+                    "event": g if g is not None else "—",
+                    "elapsed": t,
+                    "date": str((sim_start + timedelta(days=t)).date())
+                    if (sim_start is not None and t is not None)
+                    else "—",
+                    "verdict": verdict,
+                    "expected": e if not label_ok else None,
+                }
+            )
 
-        disp = [_annot(i, g) for i, g in enumerate(gen)]
         # interval-in-days notes, e.g. "SSN→ESN 3d"
         dur_notes = (
             [f"{gen[a]}→{gen[b]} {days:g}d" for a, b, days in durations] if durations else []
@@ -97,12 +111,12 @@ def record_event(request):
             {
                 "scenario": scenario,
                 "desc": desc,
+                "reach": reach_id,
                 "profile": profile_id,
-                "expected": exp,
-                "generated": disp,
+                "events": events,
                 "durations": dur_notes,
                 "decisions": [getattr(d, "value", d) for d in decisions] if decisions else [],
-                "status": "OK" if ok else "FAIL",
+                "status": "OK" if row_ok else "FAIL",
             }
         )
 
@@ -117,22 +131,105 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         return
 
     tw = terminalreporter
-    tw.write_line("")
-    tw.section("Orchestrator event sequences (expected vs generated)", sep="=")
 
-    w_scn = max(len(r["scenario"]) for r in rows)
-    tw.write_line(f"{'SCENARIO':<{w_scn}}  PROF  STATUS  EVENTS")
+    # Group rows (one per profile) under their scenario, preserving first-seen order.
+    by_scenario: dict[str, list] = {}
+    for r in rows:
+        by_scenario.setdefault(r["scenario"], []).append(r)
+
+    glyph = {"ok": "✓", "·": "·", "FAIL": "✗"}
+
+    def _seq(events):
+        # arrow-joined sequence; pinned events (verdict != "·") show day + date
+        out = []
+        for e in events:
+            if e["verdict"] != "·" and e["elapsed"] is not None:
+                out.append(f"{e['event']}@{e['elapsed']:g}d({e['date']})")
+            else:
+                out.append(str(e["event"]))
+        return " → ".join(out)
+
+    def _rule(widths, left, mid, right):
+        return left + mid.join("─" * (w + 2) for w in widths) + right
+
+    def _row(cells, widths, aligns, indent=""):
+        parts = []
+        for c, w, a in zip(cells, widths, aligns):
+            parts.append(f" {c:>{w}} " if a == ">" else f" {c:<{w}} ")
+        return indent + "│" + "│".join(parts) + "│"
+
+    # --- overview: one line per profile ------------------------------------
+    tw.write_line("")
+    tw.section("Orchestrator event sequences — overview", sep="═")
+    w_scn = max([len("SCENARIO")] + [len(r["scenario"]) for r in rows])
+    tw.write_line(f"  {'SCENARIO':<{w_scn}}  {'PROF':<4}  {'STATUS':<6}  EVENTS")
+    tw.write_line(f"  {'─' * w_scn}  {'─' * 4}  {'─' * 6}  {'─' * 6}")
     for r in rows:
         ok = r["status"] == "OK"
         markup = {"green": True} if ok else {"red": True, "bold": True}
-        seq = " → ".join(r["generated"])
-        tw.write(f"{r['scenario']:<{w_scn}}  {r['profile']:<4}  ")
-        tw.write(f"{r['status']:<6}", **markup)
-        tw.write_line(f"  {seq}")
-        pad = " " * (w_scn + 2 + 6 + 8)
-        if r.get("decisions"):
-            tw.write_line(f"{pad}decisions (reach): {' → '.join(r['decisions'])}")
-        if r.get("durations"):
-            tw.write_line(f"{pad}intervals: {', '.join(r['durations'])}")
-        if not ok:
-            tw.write_line(f"{pad}expected: {' → '.join(r['expected'])}")
+        status = ("✓ " if ok else "✗ ") + r["status"]
+        tw.write(f"  {r['scenario']:<{w_scn}}  {r['profile']:<4}  ")
+        tw.write(f"{status:<8}", **markup)
+        tw.write_line(f"  {_seq(r['events'])}")
+
+    # --- per-scenario detail: one reach timeline, all profiles merged -------
+    # Events from every profile are combined and ordered by time, so the table
+    # reads as the reach's actual event sequence (crew serialization, interrupts,
+    # simultaneous storms).  Δt is recomputed across the merged order, not per
+    # profile.  Ties (same t) keep each profile's causal order (profile, then idx).
+    tw.write_line("")
+    tw.section("Per-scenario detail (reach timeline)", sep="═")
+    headers = ["#", "REACH", "PROFILE", "EVENT", "Δt", "DATE", "OK"]
+    aligns = [">", "<", "<", "<", ">", "<", "<"]
+    for scenario, profiles in by_scenario.items():
+        desc = profiles[0]["desc"]
+        tw.write_line("")
+        tw.write_line(f"▌ {scenario} — {desc}", bold=True)
+
+        merged = []  # (t, profile_order, idx, profile_id, reach, event)
+        for prof_order, r in enumerate(profiles):
+            reach = r.get("reach") or "—"
+            for e in r["events"]:
+                merged.append((e["elapsed"], prof_order, e["idx"], r["profile"], reach, e))
+        merged.sort(key=lambda m: (m[0] if m[0] is not None else float("-inf"), m[1], m[2]))
+
+        notes = []
+        for r in profiles:
+            if r.get("decisions"):
+                notes.append(f"decisions: {' → '.join(r['decisions'])}")
+            if r.get("durations"):
+                notes.append(f"intervals: {', '.join(r['durations'])}")
+        if notes:
+            tw.write_line("  " + "   ·   ".join(notes))
+
+        body, prev_t = [], None
+        for seq, (t, _po, _idx, prof, reach, e) in enumerate(merged):
+            dt = "—" if (prev_t is None or t is None) else f"{t - prev_t:g}d"
+            body.append(
+                [
+                    str(seq),
+                    reach,
+                    str(prof),
+                    str(e["event"]),
+                    dt,
+                    e["date"],
+                    glyph.get(e["verdict"], e["verdict"]),
+                ]
+            )
+            if t is not None:
+                prev_t = t
+        widths = [
+            max(len(headers[c]), *(len(row[c]) for row in body)) for c in range(len(headers))
+        ]
+
+        tw.write_line(_rule(widths, "  ┌", "┬", "┐"))
+        tw.write_line(_row(headers, widths, aligns, indent="  "))
+        tw.write_line(_rule(widths, "  ├", "┼", "┤"))
+        for (_t, _po, _idx, _prof, _reach, e), cells in zip(merged, body):
+            line = _row(cells, widths, aligns, indent="  ")
+            if e["verdict"] == "FAIL":
+                exp = f"   ← expected {e['expected']}" if e["expected"] is not None else ""
+                tw.write_line(line + exp, red=True, bold=True)
+            else:
+                tw.write_line(line)
+        tw.write_line(_rule(widths, "  └", "┴", "┘"))

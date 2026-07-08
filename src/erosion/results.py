@@ -29,6 +29,34 @@ def _concat_chunks(chunks: list[dict], cols: list[str]) -> pd.DataFrame:
     return pd.DataFrame({c: np.concatenate([ch[c] for ch in chunks]) for c in cols})
 
 
+# ProfileMetrics fields emitted to profile_metrics.parquet, in column order.
+# Deliberately omits n_upland_nodes (an internal count, not a reported metric),
+# so this is an explicit list rather than dataclasses.asdict(m).
+_METRIC_COLUMNS = (
+    "morph_type",
+    "shoreline_x",
+    "foreshore_slope",
+    "berm_elevation",
+    "berm_width",
+    "dune_crest_elevation",
+    "dune_crest_x",
+    "dune_width",
+    "dune_front_width",
+    "dune_back_width",
+    "dune_top_width",
+    "dune_front_relief",
+    "dune_back_relief",
+    "dune_front_slope",
+    "dune_back_slope",
+    "upland_elevation",
+    "volume_above_datum",
+    "berm_scarp",
+    "dune_scarp",
+    "scarp_height",
+    "fit_quality",
+)
+
+
 @dataclass
 class RunMeta:
     reach_id: str
@@ -47,6 +75,7 @@ class ResultsSink:
         t_end: float,
         volume_m3: float,
         event_type: str,
+        borrow_m3: float = 0.0,
     ) -> None: ...
 
     def record_warning(self, profile_id: str, t: float, message: str) -> None: ...
@@ -111,8 +140,11 @@ class ParquetResultsSink(ResultsSink):
         t_end: float,
         volume_m3: float,
         event_type: str,
+        borrow_m3: float = 0.0,
     ) -> None:
         CY_PER_M3 = 1.30795
+        # volume_m3 = placement (geometry-effective, on the beach); borrow_m3 =
+        # dredged volume (placement × ratio) — the basis for duration and cost.
         self._nourishment_rows.append(
             {
                 "event_type": event_type,
@@ -121,6 +153,8 @@ class ParquetResultsSink(ResultsSink):
                 "t_end": t_end,
                 "volume_m3": volume_m3,
                 "volume_cy": volume_m3 * CY_PER_M3,
+                "borrow_m3": borrow_m3,
+                "borrow_cy": borrow_m3 * CY_PER_M3,
             }
         )
 
@@ -185,27 +219,7 @@ class ParquetResultsSink(ResultsSink):
                         "profile_id": p.id,
                         "label": snap.label.value,
                         "t": snap.t,
-                        "morph_type": m.morph_type,
-                        "shoreline_x": m.shoreline_x,
-                        "foreshore_slope": m.foreshore_slope,
-                        "berm_elevation": m.berm_elevation,
-                        "berm_width": m.berm_width,
-                        "dune_crest_elevation": m.dune_crest_elevation,
-                        "dune_crest_x": m.dune_crest_x,
-                        "dune_width": m.dune_width,
-                        "dune_front_width": m.dune_front_width,
-                        "dune_back_width": m.dune_back_width,
-                        "dune_top_width": m.dune_top_width,
-                        "dune_front_relief": m.dune_front_relief,
-                        "dune_back_relief": m.dune_back_relief,
-                        "dune_front_slope": m.dune_front_slope,
-                        "dune_back_slope": m.dune_back_slope,
-                        "upland_elevation": m.upland_elevation,
-                        "volume_above_datum": m.volume_above_datum,
-                        "berm_scarp": m.berm_scarp,
-                        "dune_scarp": m.dune_scarp,
-                        "scarp_height": m.scarp_height,
-                        "fit_quality": m.fit_quality,
+                        **{col: getattr(m, col) for col in _METRIC_COLUMNS},
                     }
                 )
         if rows:
@@ -236,7 +250,16 @@ class ParquetResultsSink(ResultsSink):
             )
 
     def _write_segment_events(self) -> None:
-        cols = ["event_type", "profile_id", "t_start", "t_end", "volume_m3", "volume_cy"]
+        cols = [
+            "event_type",
+            "profile_id",
+            "t_start",
+            "t_end",
+            "volume_m3",
+            "volume_cy",
+            "borrow_m3",
+            "borrow_cy",
+        ]
         df = (
             pd.DataFrame(self._nourishment_rows)
             if self._nourishment_rows
@@ -246,11 +269,7 @@ class ParquetResultsSink(ResultsSink):
 
     def _write_warnings(self) -> None:
         cols = ["profile_id", "t", "message"]
-        df = (
-            pd.DataFrame(self._warning_rows)
-            if self._warning_rows
-            else pd.DataFrame(columns=cols)
-        )
+        df = pd.DataFrame(self._warning_rows) if self._warning_rows else pd.DataFrame(columns=cols)
         df.to_csv(os.path.join(self.out_dir, "warnings.csv"), index=False)
 
     def _write_metadata(self, meta: RunMeta, profiles: list[Profile]) -> None:

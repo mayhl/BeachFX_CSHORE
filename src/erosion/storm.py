@@ -4,6 +4,7 @@ import logging
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
@@ -11,6 +12,8 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 
+from .metrics import MorphType
+from .profile import Profiles, StormResponse, _shoreline_shift
 from .types import SnapshotLabel, StormResponseType
 from .units import ufloat
 
@@ -50,9 +53,10 @@ class StormConfig(BaseModel):
 
 
 class StormRecord(NamedTuple):
-    t: float  # days since sim_start
+    t: float  # days since sim_start (storm start)
     storm_id: str
     forcing: dict  # CSHORE BC dict (timebc_wave, Hs, Hrms, Tp, Wsetup, swlbc, angle)
+    duration: float = 0.0  # storm length in days; storm ends (and recovery begins) at t + duration
 
 
 def build_storm_schedule(
@@ -101,7 +105,11 @@ def build_storm_schedule(
             "swlbc": raw["swlbc"],
             "angle": raw["angle"],
         }
-        records.append(StormRecord(t=t_days, storm_id=str(storm_id), forcing=forcing))
+        # hydrograph span in days; PostStorm/recovery begin at t + duration
+        duration = float(t_in_storm[-1] / 86400.0)
+        records.append(
+            StormRecord(t=t_days, storm_id=str(storm_id), forcing=forcing, duration=duration)
+        )
 
     return sorted(records, key=lambda r: r.t)
 
@@ -124,8 +132,6 @@ def classify_storm_response(
       CAT_PARTIAL   — LOW_UPLAND pre-storm; dune gone, berm survives (BW > 0)
       CAT_TOTAL     — LOW_UPLAND pre-storm; dune and berm both gone (BW == 0)
     """
-    from .metrics import MorphType
-
     min_dune_elev = max(float(m_post.upland_elevation), float(BE))
     if float(m_post.dune_crest_elevation) > min_dune_elev:
         return StormResponseType.NORMAL
@@ -145,34 +151,98 @@ def classify_storm_response(
 # ---------------------------------------------------------------------------
 
 
+class _PreStorm(NamedTuple):
+    """Pre-storm state captured before CSHORE mutates a profile's bed.
+
+    Only ``zb`` is snapshotted; ``profile.x`` is never mutated by any event, so the
+    fixed grid is read straight off ``profile`` at use.
+    """
+
+    profile: Profile
+    zb: np.ndarray
+
+
+@dataclass
+class StormOutcome:
+    """Per-profile result of one storm's CSHORE run — the storm->reach->campaign
+    boundary record that replaces the parallel ``(results, zb_pre_new)`` lists and
+    the separately-threaded ``inundated`` set.
+
+    ``result`` is ``None`` exactly when CSHORE failed; ``inundated`` reads that as
+    the storm-skipped condition (profile reused unchanged, Phase 3 skipped).
+    """
+
+    profile: Profile
+    result: CSHOREResult | None  # None when CSHORE failed
+    zb_pre: np.ndarray  # pre-storm bed shift-registered onto the fixed grid
+
+    @property
+    def inundated(self) -> bool:
+        return self.result is None
+
+
+def _apply_storm_result(
+    pre: _PreStorm, r: CSHOREResult | None, t_storm: float, t_post: float
+) -> StormOutcome:
+    """Fold one profile's CSHORE result into a ``StormOutcome``.
+
+    On success: shift-register the pre-storm bed onto the fixed grid, take the
+    PostStorm snapshot (via ``StormResponse.apply``), and classify the response.
+    On failure (``r is None``): snapshot the unmodified bed as INUNDATION.
+    """
+    p, zb_p = pre.profile, pre.zb
+    x_p = p.x  # fixed grid; never mutated
+    if r is None:
+        # CSHORE failed: snapshot current (unmodified) zb with INUNDATION label
+        p.snapshot(SnapshotLabel.INUNDATION, t_storm)
+        p.snapshots[-1].storm_response_type = StormResponseType.INUNDATION
+        return StormOutcome(p, None, zb_p.copy())
+
+    # Shift-register pre-storm profile to post-storm shoreline position,
+    # keeping everything on the original fixed x-grid.
+    dx = _shoreline_shift(x_p, zb_p, r.x, r.zb)
+    zb_pre = np.interp(x_p - dx, x_p, zb_p, left=zb_p[0], right=zb_p[-1])
+    StormResponse(t=t_post, result=r).apply(p)  # interpolates onto x_p, PostStorm at storm end
+
+    # Attach storm response classification when geometry metrics are available
+    if p.geometry is not None:
+        pre_snap = p.last_snapshot(SnapshotLabel.PreStorm)
+        post_snap = p.snapshots[-1]
+        if pre_snap and pre_snap.metrics and post_snap.metrics:
+            post_snap.storm_response_type = classify_storm_response(
+                pre_snap.metrics,
+                post_snap.metrics,
+                p.geometry.berm_elevation,
+            )
+
+    return StormOutcome(p, r, zb_pre)
+
+
 def run_parallel_cshore(
     profiles: list[Profile],
     t_storm: float,
     forcing: dict,
     runner: CSHORERunner,
     cfg: ReachConfig,
-) -> tuple[list[CSHOREResult | None], list[np.ndarray]]:
+    t_post: float | None = None,
+) -> list[StormOutcome]:
     """Run CSHORE for all profiles in parallel.
 
-    PreStorm snapshot taken before applying results.
-    StormResponse.apply() takes PostStorm snapshot (or INUNDATION if CSHORE
-    fails).  All snapshots share the original fixed ``profile.x`` grid.
+    PreStorm snapshot taken at ``t_storm`` (storm start) before applying results;
+    StormResponse.apply() takes the PostStorm snapshot at ``t_post`` (storm end,
+    defaulting to ``t_storm``).  INUNDATION (CSHORE failure) is marked at
+    ``t_storm``.  All snapshots share the original fixed ``profile.x`` grid.
 
-    Returns
-    -------
-    results
-        CSHOREResult per profile, or ``None`` when CSHORE failed.
-    zb_pre_new
-        Pre-storm zb shift-registered onto the original fixed grid, ready
-        for Recovery event construction.
+    Returns one ``StormOutcome`` per profile (in input order), bundling its
+    CSHORE result (``None`` on failure) with the pre-storm zb shift-registered
+    onto the original fixed grid, ready for Recovery event construction.
     """
-    from .profile import Profiles, StormResponse, _shoreline_shift
-
+    if t_post is None:
+        t_post = t_storm
     profiles = Profiles(profiles)  # collection sugar; a no-op for callers already passing one
 
     # Capture pre-storm state and take PreStorm snapshots
-    x_pre = [p.x.copy() for p in profiles]
-    zb_pre = [p.zb.copy() for p in profiles]
+    pre_storm = [_PreStorm(p, p.zb.copy()) for p in profiles]
     profiles.snapshot_all(SnapshotLabel.PreStorm, t_storm)
 
     # Run CSHORE in parallel with failure isolation
@@ -189,57 +259,20 @@ def run_parallel_cshore(
     max_workers = min(len(profiles), os.cpu_count() or len(profiles))
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futs = [ex.submit(_run_safe, p) for p in profiles]
-        raw = [f.result() for f in futs]
+        cshore_results = [f.result() for f in futs]
 
-    # Apply results; compute zb_pre_new on the original fixed grid
-    results: list[CSHOREResult | None] = []
-    zb_pre_new: list[np.ndarray] = []
-
-    for p, r, zb_p, x_p in zip(profiles, raw, zb_pre, x_pre):
-        if r is None:
-            # CSHORE failed: snapshot current (unmodified) zb with INUNDATION label
-            p.snapshot(SnapshotLabel.INUNDATION, t_storm)
-            p.snapshots[-1].storm_response_type = StormResponseType.INUNDATION
-            zb_pre_new.append(zb_p.copy())
-            results.append(None)
-            continue
-
-        # Shift-register pre-storm profile to post-storm shoreline position,
-        # keeping everything on the original fixed x-grid.
-        dx = _shoreline_shift(x_p, zb_p, r.x, r.zb)
-        zb_pre_new.append(
-            np.interp(
-                x_p - dx,
-                x_p,
-                zb_p,
-                left=zb_p[0],
-                right=zb_p[-1],
-            )
-        )
-        StormResponse(t=t_storm, result=r).apply(p)  # interpolates onto x_p, takes PostStorm
-
-        # Attach storm response classification when geometry metrics are available
-        if p.geometry is not None:
-            pre_snap = next(
-                (s for s in reversed(p.snapshots[:-1]) if s.label == SnapshotLabel.PreStorm), None
-            )
-            post_snap = p.snapshots[-1]
-            if pre_snap and pre_snap.metrics and post_snap.metrics:
-                post_snap.storm_response_type = classify_storm_response(
-                    pre_snap.metrics,
-                    post_snap.metrics,
-                    p.geometry.berm_elevation,
-                )
-
-        results.append(r)
+    # Fold each result (or failure) into its outcome on the fixed grid.
+    outcomes = [
+        _apply_storm_result(pre, r, t_storm, t_post) for pre, r in zip(pre_storm, cshore_results)
+    ]
 
     log.info(
         "Storm t=%.1fd — done (%d ok, %d failed)",
         t_storm,
-        sum(r is not None for r in results),
-        sum(r is None for r in results),
+        sum(not o.inundated for o in outcomes),
+        sum(o.inundated for o in outcomes),
     )
-    return results, zb_pre_new
+    return outcomes
 
 
 # ---------------------------------------------------------------------------

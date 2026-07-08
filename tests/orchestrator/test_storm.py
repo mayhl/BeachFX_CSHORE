@@ -84,10 +84,10 @@ class TestRunParallelCshore:
         """zb_pre_new must always be on the original fixed profile grid."""
         p = _p()
         n_original = len(p.x)
-        _, zb_pre_new = run_parallel_cshore(
+        outcomes = run_parallel_cshore(
             [p], t_storm=10.0, forcing=_forcing(), runner=MockCSHORERunner(), cfg=ReachConfig()
         )
-        assert len(zb_pre_new[0]) == n_original
+        assert len(outcomes[0].zb_pre) == n_original
 
     def test_profile_x_unchanged(self):
         """profile.x must not be mutated by run_parallel_cshore."""
@@ -101,11 +101,10 @@ class TestRunParallelCshore:
     def test_two_profiles_parallel(self):
         p0, p1 = _p(), _p()
         p1.id = "p1"
-        results, zb_pre_new = run_parallel_cshore(
+        outcomes = run_parallel_cshore(
             [p0, p1], t_storm=10.0, forcing=_forcing(), runner=MockCSHORERunner(), cfg=ReachConfig()
         )
-        assert len(results) == 2
-        assert len(zb_pre_new) == 2
+        assert len(outcomes) == 2
 
     def test_zb_mutated_by_mock_runner(self):
         p = _p()
@@ -126,10 +125,11 @@ class _FailRunner(CSHORERunner):
 class TestRunParallelCshoreFailure:
     def test_failure_returns_none_result(self):
         p = _p()
-        results, _ = run_parallel_cshore(
+        outcomes = run_parallel_cshore(
             [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
         )
-        assert results[0] is None
+        assert outcomes[0].result is None
+        assert outcomes[0].inundated
 
     def test_failure_zb_unchanged(self):
         p = _p()
@@ -142,10 +142,10 @@ class TestRunParallelCshoreFailure:
     def test_failure_zb_pre_new_is_original(self):
         p = _p()
         zb_before = p.zb.copy()
-        _, zb_pre_new = run_parallel_cshore(
+        outcomes = run_parallel_cshore(
             [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
         )
-        np.testing.assert_array_equal(zb_pre_new[0], zb_before)
+        np.testing.assert_array_equal(outcomes[0].zb_pre, zb_before)
 
 
 def _make_metrics(

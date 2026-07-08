@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from .profile import ErosionTick
 from .units import ufloat
 
 if TYPE_CHECKING:
@@ -86,8 +87,6 @@ def _apply_tick(
     ecfg: UniformErosionConfig | None,
     slc: SLCConfig | None,
 ) -> None:
-    from .profile import ErosionTick
-
     ErosionTick(
         t=t_tick,
         dz_erosion=_erosion_rate(profile, ecfg) * dt,

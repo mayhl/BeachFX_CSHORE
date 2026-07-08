@@ -50,12 +50,14 @@ class ProfileGeometryConfig(BaseModel):
     BeachFX morphology classification and metric extraction.  It remains
     constant throughout the simulation regardless of storm response.
     ``recovery_duration`` overrides ``StormConfig.T_recover`` for this profile;
-    ``None`` means use the reach-wide default.
+    ``depth_of_closure`` overrides ``ReachConfig.depth_of_closure``; ``None``
+    means use the reach-wide default.
     """
 
     berm_elevation: ufloat("m", "ft")
     datum: float = 0.0
     recovery_duration: ufloat("days") | None = None
+    depth_of_closure: ufloat("m", "ft") | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +106,10 @@ class Profile:
         # Pin ref_metrics to the INIT snapshot — constrains dune search in all subsequent fits
         if label == SnapshotLabel.INIT and metrics is not None:
             self.ref_metrics = metrics
+
+    def last_snapshot(self, label: SnapshotLabel) -> ProfileSnapshot | None:
+        """Most recent snapshot carrying ``label``, or ``None`` if there is none."""
+        return next((s for s in reversed(self.snapshots) if s.label == label), None)
 
 
 class Profiles(list):
@@ -203,18 +209,24 @@ class Recovery(ProfileEvent):
     ``zb_pre_storm`` must already be re-interpolated onto the post-storm grid
     (shifted by shoreline offset) by the phase runner before constructing this event.
     Only nodes below ``z_berm`` are blended; nodes at or above are left unchanged.
+
+    ``interrupted`` marks a recovery a following storm cut short before ``T_recover``
+    elapsed (BeachFX's forced-recovery ``RECS``); a recovery that ran its full period
+    snapshots ``REC``.
     """
 
     fraction: float
     zb_post_storm: np.ndarray
     zb_pre_storm: np.ndarray
     z_berm: float | None = None
+    interrupted: bool = False
 
     def apply(self, profile: Profile) -> None:
         profile.zb = recovered_bed(
             self.zb_post_storm, self.zb_pre_storm, self.fraction, self.z_berm, base_zb=profile.zb
         )
-        profile.snapshot(SnapshotLabel.REC, self.t)
+        label = SnapshotLabel.RECS if self.interrupted else SnapshotLabel.REC
+        profile.snapshot(label, self.t)
 
 
 @dataclass

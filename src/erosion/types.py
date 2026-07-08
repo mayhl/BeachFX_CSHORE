@@ -35,7 +35,9 @@ class DecisionKind(Enum):
 
     NOURISH_TRIGGER = "NOURISH_TRIGGER"  # reach deficit ≥ trigger → launch campaign
     NOURISH_SKIP = "NOURISH_SKIP"  # deficit < trigger → recovery only
+    NOURISH_EMERGENCY = "NOURISH_EMERGENCY"  # dune below geometric trigger → forced mobilization
     MOBILIZE = "MOBILIZE"  # crew lead-time before it can start
     BLACKOUT_DEFER = "BLACKOUT_DEFER"  # placement start pushed past a blackout window
-    INTERRUPT = "INTERRUPT"  # next storm cut the campaign (partial placement)
+    INTERRUPT = "INTERRUPT"  # next storm cut the campaign (partial place) — interrupt policy
+    STORM_DEFER = "STORM_DEFER"  # start delayed past a storm-conflicting window — defer policy
     WINDOW_EXTENDED = "WINDOW_EXTENDED"  # sim window extended to finish a campaign
