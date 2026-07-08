@@ -31,6 +31,7 @@ import glob
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -179,6 +180,40 @@ def _resolve_alternatives(global_alts: dict, reach_alts: dict) -> dict:
     }
 
 
+def _parse_run_spec(spec, available: list[str]) -> list[str]:
+    """Resolve a run selector to the subset of alternative ids to run.
+
+    ``spec`` is ``"all"`` (every id), or a comma-separated list of integer ids,
+    ``N-M`` inclusive ranges, and/or explicit ids — e.g. ``"1-4,8,11-14,FWP"``.
+    Config JSON keys are strings, so an integer token ``3`` matches the key
+    ``"3"``.  Unknown ids raise (no silent skip).  Returns the selected ids in
+    ``available`` order (parallel run order is irrelevant; this keeps output
+    deterministic).
+    """
+    if spec is None or (isinstance(spec, str) and spec.strip().lower() == "all"):
+        return list(available)
+    tokens = spec.split(",") if isinstance(spec, str) else [str(t) for t in spec]
+    selected: set[str] = set()
+    for tok in tokens:
+        tok = tok.strip()
+        if not tok:
+            continue
+        m = re.fullmatch(r"(\d+)-(\d+)", tok)
+        if m:
+            lo, hi = int(m.group(1)), int(m.group(2))
+            if lo > hi:
+                raise ValueError(f"run: descending range {tok!r}")
+            selected.update(str(i) for i in range(lo, hi + 1))
+        else:
+            selected.add(tok)
+    unknown = sorted(selected - set(available), key=str)
+    if unknown:
+        raise ValueError(
+            f"run: unknown alternative id(s) {unknown}; available: {sorted(available)}"
+        )
+    return [a for a in available if a in selected]
+
+
 def _priority_order(priorities: list[int] | None, n: int) -> list[int]:
     """Return indices 0..n-1 sorted by priority (lower number = first); default is input order."""
     prios = priorities if priorities is not None else list(range(n))
@@ -275,12 +310,17 @@ def _build_jobs(
     out_root: str,
     save_cshore: bool,
     lifecycles: list,
+    run_spec="all",
 ) -> list[_LifecycleJob]:
-    """Expand the config into one ``_LifecycleJob`` per (reach × alternative × lifecycle)."""
+    """Expand the config into one ``_LifecycleJob`` per (reach × selected alternative
+    × lifecycle).  ``run_spec`` (``"all"`` or a range/list like ``"1-4,8"``) picks
+    which alternative ids to run."""
     all_jobs: list[_LifecycleJob] = []
     for reach_id, reach_data in reaches.items():
         reach_cshore = reach_data.get("cshore", {})
         alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
+        selected = _parse_run_spec(run_spec, list(alts))
+        alts = {aid: alts[aid] for aid in selected}
         profile_paths = [os.path.join(ROOT, p) for p in reach_data["profiles"]]
         priorities = reach_data.get("profile_priority")
 
@@ -303,6 +343,10 @@ def _build_jobs(
 
         for alt_id, alt_data in alts.items():
             alt_cshore = alt_data.pop("cshore", {})
+            alt_data.pop("name", None)  # human label from gen-alternatives; not a config field
+            # A generated run may pin one lifecycle (top-level "lifecycle"); otherwise
+            # cross every lifecycle in the storm file (the default / hand-written path).
+            pinned_lc = alt_data.pop("lifecycle", None)
             merged_cshore = _merge_cshore(base_cshore, reach_cshore, alt_cshore)
             cfg = ReachConfig.model_validate(
                 {**alt_data, "cshore": merged_cshore},
@@ -312,7 +356,17 @@ def _build_jobs(
                 profile_paths, cfg.cshore.d50, reach_id, priorities, geometry
             )
 
-            for lc in lifecycles:
+            if pinned_lc is None:
+                alt_lcs = lifecycles
+            else:
+                alt_lcs = [int(pinned_lc)]
+                if int(pinned_lc) not in {int(x) for x in lifecycles}:
+                    raise ValueError(
+                        f"alternative {alt_id!r} pins lifecycle {pinned_lc} not in the storm "
+                        f"file (available: {sorted(int(x) for x in lifecycles)})"
+                    )
+
+            for lc in alt_lcs:
                 all_jobs.append(
                     _LifecycleJob(
                         reach_id=reach_id,
@@ -336,7 +390,12 @@ def _build_jobs(
 # ---------------------------------------------------------------------------
 
 
-def run(config_path: str, max_workers: int | None = None, oversubscription: float = 2.0) -> None:
+def run(
+    config_path: str,
+    max_workers: int | None = None,
+    oversubscription: float = 2.0,
+    run_select: str | None = None,
+) -> None:
     with open(config_path) as f:
         cfg_raw = json.load(f)
 
@@ -345,6 +404,8 @@ def run(config_path: str, max_workers: int | None = None, oversubscription: floa
     base_cshore = cfg_raw.get("cshore", {})
     global_alts = cfg_raw.get("alternatives", {})
     reaches = cfg_raw["reaches"]
+    # Which alternative ids to run: CLI --run overrides the config "run" (default all).
+    run_spec = run_select if run_select is not None else cfg_raw.get("run", "all")
 
     sim_start = datetime.fromisoformat(sim["sim_start"])
     sim_end = float(sim["sim_end_days"])
@@ -410,8 +471,10 @@ def run(config_path: str, max_workers: int | None = None, oversubscription: floa
             out_root,
             save_cshore,
             lifecycles,
+            run_spec=run_spec,
         )
 
+        log.info("Alternative selection: run=%s", run_spec)
         log.info("Submitting %d job(s) total", len(all_jobs))
         # pure=False → random task keys; skips deterministic tokenization of the
         # job payload (Profile dataclasses w/ numpy arrays, storms_df), which
@@ -465,11 +528,18 @@ def main(argv: list[str] | None = None) -> None:
         default=2.0,
         help="CSHORE slot multiplier relative to cpu_count (default: 2.0)",
     )
+    parser.add_argument(
+        "--run",
+        default=None,
+        help="alternative ids to run: 'all' or a range/list e.g. '1-4,8,11-14' "
+        "(overrides the config 'run' field)",
+    )
     args = parser.parse_args(argv)
     run(
         _resolve_config(args.config),
         max_workers=args.workers,
         oversubscription=args.oversubscription,
+        run_select=args.run,
     )
 
 
