@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -38,6 +39,21 @@ def _trigger_geometry(cfg: ReachConfig) -> GeometryThresholds:
     return cfg.nourishment.trigger_geometry if cfg.nourishment else GeometryThresholds()
 
 
+def _dune_emergency_force(metrics: dict, tg: GeometryThresholds) -> bool:
+    """Geometric emergency trigger (cReach.cpp:509): forced when the measured dune
+    height (front relief) OR width falls below a configured threshold.  Each
+    criterion is active only when its threshold is set; berm width is not a
+    trigger.  Reads the fitted ``metrics`` dict, so a profile with no measured dune
+    never fires.  Shared by the dune-aware assessors (Fitted, Geometric)."""
+    relief = metrics.get("dune_front_relief", np.nan)
+    width = metrics.get("dune_width", np.nan)
+    if tg.dune_height is not None and np.isfinite(relief) and relief < float(tg.dune_height):
+        return True
+    if tg.dune_width is not None and np.isfinite(width) and 0.0 < width < float(tg.dune_width):
+        return True
+    return False
+
+
 @dataclass
 class ProfileAssessment:
     """Tier-1 physical read of one profile: whether it needs fill, and how much.
@@ -46,9 +62,10 @@ class ProfileAssessment:
     gate; ``placement_m3`` is the full active-height volume actually placed
     (subaerial deficit extended down to depth of closure), which Tier 2 scales
     by the borrow ratio to drive duration and cost. ``force`` lets a profile
-    override the reach economic default (the emergency geometric trigger —
-    unwired until Phase 4). ``metrics`` is free-form json that varies by
-    assessor and rides along for output.
+    override the reach economic default (the emergency trigger — set by the
+    assessor's ``emergency_force``: a volume threshold on the base, plus the
+    geometric dune criterion for dune-aware assessors). ``metrics`` is free-form
+    json that varies by assessor and rides along for output.
     """
 
     needs_fill: bool
@@ -63,6 +80,18 @@ class ProfileAssessor(ABC):
 
     @abstractmethod
     def assess(self, profile: Profile, cfg: ReachConfig, width_m: float) -> ProfileAssessment: ...
+
+    def emergency_force(self, a: ProfileAssessment, cfg: ReachConfig) -> bool:
+        """Does this profile force reach mobilization on its own (emergency trigger)?
+
+        Base rule (assessor-agnostic): the measured subaerial deficit meets the
+        configured ``emergency_volume`` threshold.  Dune-aware assessors override to
+        add the geometric dune trigger, falling back to this volume rule.  A ``None``
+        threshold (or a bare reach config) leaves the volume path off.
+        """
+        ncfg = cfg.nourishment
+        ev = ncfg.emergency_volume if ncfg is not None else None
+        return ev is not None and a.volume_m3 >= float(ev)
 
     def restore_template(self, profile: Profile, cfg: ReachConfig) -> np.ndarray:
         """The bed shape (on the profile grid) this assessor restores to.
@@ -108,12 +137,14 @@ class VolumeAssessor(ProfileAssessor):
                     "placement not extended to depth of closure",
                     profile.id,
                 )
-        return ProfileAssessment(
+        a = ProfileAssessment(
             needs_fill=deficit > 0.0,
             volume_m3=deficit,
             placement_m3=placement,
             metrics={"msl": cfg.msl, "depth_of_closure": dclose},
         )
+        a.force = self.emergency_force(a, cfg)
+        return a
 
 
 class FittedAssessor(ProfileAssessor):
@@ -144,20 +175,12 @@ class FittedAssessor(ProfileAssessor):
         ``GeometricAssessor`` overrides it to add the rebuilt dune's fill."""
         return 0.0
 
-    @staticmethod
-    def _emergency_force(m, tg: GeometryThresholds) -> bool:
-        """Geometric emergency trigger (cReach.cpp:509): forced when the measured
-        dune height (front relief) OR width falls below a configured threshold.
-        Each criterion is active only when its threshold is set; berm width is not
-        a trigger.  A profile with no measured dune never fires.
-        """
-        if tg.dune_height is not None and np.isfinite(m.dune_front_relief):
-            if m.dune_front_relief < float(tg.dune_height):
-                return True
-        if tg.dune_width is not None and np.isfinite(m.dune_width) and m.dune_width > 0.0:
-            if m.dune_width < float(tg.dune_width):
-                return True
-        return False
+    def emergency_force(self, a: ProfileAssessment, cfg: ReachConfig) -> bool:
+        """Dune-aware trigger: the geometric dune criterion (shared
+        ``_dune_emergency_force``) OR the base volume fallback."""
+        if _dune_emergency_force(a.metrics, _trigger_geometry(cfg)):
+            return True
+        return super().emergency_force(a, cfg)
 
     def assess(self, profile, cfg, width_m):
         ref = profile.ref_metrics
@@ -188,13 +211,14 @@ class FittedAssessor(ProfileAssessor):
         if dune_fill > 0.0:
             placement_m3 += dune_fill
             metrics["dune_fill_m3"] = dune_fill
-        return ProfileAssessment(
+        a = ProfileAssessment(
             needs_fill=berm_deficit > 0.0,
             volume_m3=volume_m3,
             placement_m3=placement_m3,
-            force=self._emergency_force(m, _trigger_geometry(cfg)),
             metrics=metrics,
         )
+        a.force = self.emergency_force(a, cfg)
+        return a
 
 
 def _dune_target(tg: GeometryThresholds, ref, m) -> tuple[float, float, float] | None:
@@ -352,13 +376,28 @@ _ASSESSORS: dict[str, ProfileAssessor] = {
 _DEFAULT_ASSESSOR: ProfileAssessor = _ASSESSORS["volume"]
 
 
+def _warn_geometric_deprecated(profile_id: str) -> None:
+    """Signal that ``GeometricAssessor`` is legacy — kept working, but users should
+    migrate to ``fitted`` (successor) or ``volume``.  Emitted on both a log warning
+    (visible in pipeline output) and a ``DeprecationWarning`` (for tooling/tests)."""
+    msg = (
+        f"GeometricAssessor (profile {profile_id}) is a legacy assessor; prefer "
+        "'fitted' or 'volume'. It stays available but may be removed in future."
+    )
+    log.warning(msg)
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
+
+
 def _select_assessor(profile: Profile, ncfg: NourishmentConfig) -> ProfileAssessor:
     """Pick a profile's assessor: per-profile override, else reach default, else
-    auto-classify (dune present -> geometric, else volume).  Explicit wins.
+    auto-classify (dune present -> geometric, else volume).  Explicit wins.  Any
+    path that lands on the legacy ``GeometricAssessor`` emits a deprecation warning.
     """
     name = ncfg.per_profile_assessor.get(profile.id) or ncfg.assessor
-    if name is not None:
-        return _ASSESSORS[name]
-    ref = profile.ref_metrics
-    has_dune = ref is not None and np.isfinite(ref.dune_crest_elevation)
-    return _ASSESSORS["geometric" if has_dune else "volume"]
+    if name is None:
+        ref = profile.ref_metrics
+        has_dune = ref is not None and np.isfinite(ref.dune_crest_elevation)
+        name = "geometric" if has_dune else "volume"
+    if name == "geometric":
+        _warn_geometric_deprecated(profile.id)
+    return _ASSESSORS[name]

@@ -71,10 +71,10 @@ class _CampaignScheduler:
     t_crew: float
     storm_at_next: bool = False  # t_next is a following storm (vs sim/window end) → RECS on cutoff
 
-    def _place(self, w: _Work) -> tuple[_Outcome, float]:
+    def _place(self, w: _Work) -> _Outcome:
         """Schedule the placement, then dispatch: recover to the start and place
-        full, or partial/deferred on storm conflict.  Advances ``self.t_crew``;
-        returns ``(outcome, volume placed)``.
+        full, or partial/deferred on storm conflict.  Advances ``self.t_crew`` and
+        returns the placement outcome.
         """
         ncfg = self.cfg.nourishment
         borrow = w.plan.placement_m3 * ncfg.borrow_to_placement_ratio
@@ -90,7 +90,7 @@ class _CampaignScheduler:
                 deferred_to=t_start,
             )
         if t_start >= self.t_next:  # can't start before the next storm
-            return _Outcome.BLOCKED, 0.0
+            return _Outcome.BLOCKED
 
         t_end = t_start + duration
         storm_conflict = t_end >= self.t_next  # next storm would land during placement
@@ -108,7 +108,7 @@ class _CampaignScheduler:
                 would_end=t_end,
                 storm=self.t_next,
             )
-            return _Outcome.BLOCKED, 0.0
+            return _Outcome.BLOCKED
 
         _recover_profile(w, self.t_storm, t_start, self.cfg)  # recovery up to the start
         w.profile.snapshot(SnapshotLabel.SSN, t_start)
@@ -117,9 +117,7 @@ class _CampaignScheduler:
             return self._place_partial(w, t_start, duration, borrow)
         return self._place_full(w, t_start, t_end, borrow)
 
-    def _place_partial(
-        self, w: _Work, t_start: float, duration: float, borrow: float
-    ) -> tuple[_Outcome, float]:
+    def _place_partial(self, w: _Work, t_start: float, duration: float, borrow: float) -> _Outcome:
         """INTERRUPT policy: place what fits before the next storm, resume after."""
         fraction = (self.t_next - t_start) / duration
         placed = w.plan.placement_m3 * fraction  # geometry-effective volume on the beach
@@ -143,11 +141,9 @@ class _CampaignScheduler:
         )
         w.recovered = True
         self.t_crew = self.t_next
-        return _Outcome.INTERRUPTED, placed
+        return _Outcome.INTERRUPTED
 
-    def _place_full(
-        self, w: _Work, t_start: float, t_end: float, borrow: float
-    ) -> tuple[_Outcome, float]:
+    def _place_full(self, w: _Work, t_start: float, t_end: float, borrow: float) -> _Outcome:
         """Full placement completes before the next storm."""
         FullNourishment(t=t_end, template_zb=w.plan.template_zb).apply(w.profile)
         self.sink.record_nourishment(
@@ -155,7 +151,7 @@ class _CampaignScheduler:
         )
         w.recovered = True
         self.t_crew = t_end
-        return _Outcome.COMPLETED, w.plan.placement_m3
+        return _Outcome.COMPLETED
 
     def run(self, order: list[_Work], works: _Works) -> ActiveCampaign | None:
         """Place each plan in ``order`` serially; on the first block/interrupt, stop
@@ -164,7 +160,7 @@ class _CampaignScheduler:
         """
         campaign: ActiveCampaign | None = None
         for w in order:
-            outcome, placed = self._place(w)
+            outcome = self._place(w)
             if outcome is _Outcome.BLOCKED:
                 campaign = ActiveCampaign(crew_on_site=False, priority_order=_remaining(order))
                 break
@@ -172,7 +168,6 @@ class _CampaignScheduler:
                 campaign = ActiveCampaign(
                     crew_on_site=True,
                     priority_order=_remaining(order, interrupted=w),
-                    placed={w.profile.id: placed},
                 )
                 break
 
@@ -226,7 +221,7 @@ def run_campaign(
             decision.kind,
             t_storm,
             deficit=decision.total_deficit,
-            trigger=float(ncfg.volume_trigger),
+            trigger=float(ncfg.volume_trigger) if ncfg.volume_trigger is not None else None,
         )
         works.recover_unreached(t_storm, t_next, cfg, storm_at_next)
         return t_next, None

@@ -34,7 +34,10 @@ class NourishmentConfig(BaseModel):
     template_geometry: GeometryThresholds = Field(default_factory=GeometryThresholds)
 
     # Trigger + production
-    volume_trigger: ufloat("m3", "cy")  # reach-level volume deficit (m³) to launch a campaign
+    # Regular (scheduled) trigger: reach-level volume deficit (m³) that launches a
+    # campaign.  Optional — omit it for an emergency-only reach (the ≥1-active-trigger
+    # validator then requires emergency_volume or trigger_geometry instead).
+    volume_trigger: ufloat("m3", "cy") | None = None
     production_rate: ufloat("m3/day", "cy/yr")  # dredge/pump output rate (m³/day)
     # Borrow = placement × ratio (cReach.cpp): extra material lost in placement.
     # Drives duration and cost off the borrow volume, not the restored geometry.
@@ -67,7 +70,13 @@ class NourishmentConfig(BaseModel):
     # Emergency geometric trigger thresholds (cReach.cpp:509): a profile forces
     # mobilization when its measured dune_height < dune_height OR dune_width <
     # dune_width.  None = that criterion is off; berm_width is NOT a trigger.
+    # Dune-aware assessors (fitted, geometric) only.
     trigger_geometry: GeometryThresholds = Field(default_factory=GeometryThresholds)
+    # Assessor-agnostic emergency trigger: a profile forces mobilization when its
+    # measured subaerial deficit meets this volume threshold (m³).  The base
+    # ``ProfileAssessor`` path — dune-aware assessors add ``trigger_geometry`` on
+    # top and fall back to this.  None = the volume emergency path is off.
+    emergency_volume: ufloat("m3", "cy") | None = None
 
     # Output tagging
     alternative_id: str = "FWP"
@@ -82,8 +91,50 @@ class NourishmentConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_positive_rates(self) -> NourishmentConfig:
-        if self.volume_trigger <= 0:
-            raise ValueError("volume_trigger must be positive")
+        if self.volume_trigger is not None and self.volume_trigger <= 0:
+            raise ValueError("volume_trigger must be positive when set (omit for emergency-only)")
+        if self.emergency_volume is not None and self.emergency_volume <= 0:
+            raise ValueError("emergency_volume must be positive when set")
         if self.production_rate <= 0:
             raise ValueError("production_rate must be positive")
+        return self
+
+    @model_validator(mode="after")
+    def _require_active_trigger(self) -> NourishmentConfig:
+        """A present nourishment block must actually do something: at least one
+        trigger active (regular volume, emergency volume, or a geometric dune
+        threshold).  A block with none is a silent no-op — express no-action
+        explicitly with ``nourishment: null`` instead."""
+        tg = self.trigger_geometry
+        has_trigger = (
+            self.volume_trigger is not None
+            or self.emergency_volume is not None
+            or tg.dune_height is not None
+            or tg.dune_width is not None
+        )
+        if not has_trigger:
+            raise ValueError(
+                "nourishment block has no active trigger; set volume_trigger, "
+                "emergency_volume, or trigger_geometry.dune_height/dune_width — or use "
+                "`null` (no nourishment) for a recovery-only reach"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _restore_clears_trigger(self) -> NourishmentConfig:
+        """A configured restore geometry must be able to clear its own emergency
+        trigger.  If the restore target sits below the trigger threshold, even a full
+        restore leaves the dune tripping the trigger, so the profile re-fires an
+        emergency nourishment every interval.  Only checkable when both the restore
+        target and the trigger are set explicitly — an unset restore target falls back
+        to the measured as-built geometry, unknowable at config time."""
+        tmpl, trig = self.template_geometry, self.trigger_geometry
+        for attr in ("dune_height", "dune_width"):
+            target, threshold = getattr(tmpl, attr), getattr(trig, attr)
+            if target is not None and threshold is not None and target < threshold:
+                raise ValueError(
+                    f"template_geometry.{attr} ({target}) is below trigger_geometry.{attr} "
+                    f"({threshold}); a full restore can't clear the emergency trigger and "
+                    "would re-fire it every interval"
+                )
         return self

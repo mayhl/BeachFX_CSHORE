@@ -3,7 +3,7 @@ active-campaign carry-forward collection, and profile recovery."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -33,7 +33,6 @@ class ActiveCampaign:
 
     crew_on_site: bool
     priority_order: list[str]  # profile IDs in remaining campaign order
-    placed: dict[str, float] = field(default_factory=dict)  # volume placed so far (m³)
 
 
 @dataclass

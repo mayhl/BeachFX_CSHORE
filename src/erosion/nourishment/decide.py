@@ -51,7 +51,8 @@ class ReachNourishmentDecider:
         """
         total_deficit = sum(w.plan.volume_m3 for w in plans)
         resume = prior is not None and prior.crew_on_site
-        gate_met = total_deficit >= ncfg.volume_trigger
+        # None volume_trigger = the regular gate is off (emergency-only reach).
+        gate_met = ncfg.volume_trigger is not None and total_deficit >= ncfg.volume_trigger
         if not (resume or forced or gate_met):
             return ReachDecision(False, DecisionKind.NOURISH_SKIP, total_deficit, resume)
 

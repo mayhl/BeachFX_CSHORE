@@ -460,6 +460,81 @@ class TestAssessorSelection:
         ncfg.per_profile_assessor = {"p7": "volume"}
         assert isinstance(_select_assessor(p, ncfg), VA)  # explicit per-profile wins
 
+    def test_geometric_selection_warns(self):
+        """Both auto-classified and explicit geometric selection emit the legacy
+        deprecation warning."""
+        from erosion.nourishment import _select_assessor
+
+        with pytest.warns(DeprecationWarning, match="legacy assessor"):
+            _select_assessor(self._dune_profile(), _ncfg())  # auto-classify -> geometric
+        ncfg = _ncfg()
+        ncfg.assessor = "geometric"
+        with pytest.warns(DeprecationWarning, match="legacy assessor"):
+            _select_assessor(_p(), ncfg)  # explicit reach default
+
+    def test_non_geometric_selection_does_not_warn(self):
+        import warnings
+
+        from erosion.nourishment import _select_assessor
+
+        ncfg = _ncfg()
+        ncfg.assessor = "fitted"
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # any warning -> test failure
+            _select_assessor(_p(), ncfg)
+
+
+class TestNourishmentConfigValidation:
+    """Trigger-presence and restore-vs-trigger geometry validators."""
+
+    @staticmethod
+    def _build(**over):
+        """A minimal NourishmentConfig payload (no triggers by default) plus overrides."""
+        from erosion.nourishment import NourishmentConfig
+
+        payload = {
+            "template_x": [0.0, 100.0],
+            "template_z": [-0.5, 3.0],
+            "production_rate": {"value": 500.0, "units": "m3/day"},
+            **over,
+        }
+        return NourishmentConfig.model_validate(payload, context={"input_units": "m"})
+
+    def test_no_active_trigger_rejected(self):
+        with pytest.raises(ValueError, match="no active trigger"):
+            self._build()  # no volume_trigger, no emergency_volume, no trigger_geometry
+
+    def test_volume_trigger_alone_is_valid(self):
+        cfg = self._build(volume_trigger={"value": 1.0, "units": "m3"})
+        assert cfg.emergency_volume is None
+
+    def test_emergency_volume_alone_is_valid(self):
+        cfg = self._build(emergency_volume={"value": 100.0, "units": "m3"})
+        assert cfg.volume_trigger is None and cfg.emergency_volume == pytest.approx(100.0)
+
+    def test_trigger_geometry_alone_is_valid(self):
+        cfg = self._build(trigger_geometry={"dune_height": {"value": 2.0, "units": "m"}})
+        assert cfg.volume_trigger is None and cfg.trigger_geometry.dune_height == pytest.approx(2.0)
+
+    def test_restore_below_trigger_rejected(self):
+        with pytest.raises(ValueError, match="can't clear the emergency trigger"):
+            self._build(
+                trigger_geometry={"dune_height": {"value": 3.0, "units": "m"}},
+                template_geometry={"dune_height": {"value": 2.0, "units": "m"}},
+            )
+
+    def test_restore_meets_trigger_is_valid(self):
+        cfg = self._build(
+            trigger_geometry={"dune_height": {"value": 2.0, "units": "m"}},
+            template_geometry={"dune_height": {"value": 2.5, "units": "m"}},
+        )
+        assert cfg.template_geometry.dune_height == pytest.approx(2.5)
+
+    def test_trigger_set_restore_unset_is_valid(self):
+        # unset restore target falls back to as-built (unknowable at config time) -> not checked
+        cfg = self._build(trigger_geometry={"dune_width": {"value": 10.0, "units": "m"}})
+        assert cfg.template_geometry.dune_width is None
+
 
 class TestEmergencyTrigger:
     """Geometric emergency trigger sets force; force override mobilizes the reach."""
@@ -501,7 +576,33 @@ class TestEmergencyTrigger:
         p, _m = self._profile_with_dune()
         cfg = self._cfg_trigger(dune_height=1e9)
         a = VolumeAssessor().assess(p, cfg, 50.0)
-        assert a.force is False  # VolumeAssessor doesn't read the dune
+        assert a.force is False  # no dune trigger, and emergency_volume unset
+
+    def test_base_volume_emergency_force(self):
+        """The assessor-agnostic base trigger: a deficit at/above emergency_volume
+        forces, below does not, and an unset threshold never fires."""
+        from erosion.nourishment import ProfileAssessment
+
+        a = ProfileAssessment(needs_fill=True, volume_m3=100.0)
+        ncfg = _ncfg(volume_trigger=1e9)
+        cfg = _cfg(nourishment=ncfg)
+        assert VolumeAssessor().emergency_force(a, cfg) is False  # threshold unset
+        ncfg.emergency_volume = 100.0
+        assert VolumeAssessor().emergency_force(a, cfg) is True  # deficit meets threshold
+        ncfg.emergency_volume = 150.0
+        assert VolumeAssessor().emergency_force(a, cfg) is False  # deficit below threshold
+
+    def test_fitted_falls_back_to_volume_emergency(self):
+        """A dune-aware assessor with no geometric trigger still forces via the base
+        volume threshold (shared fallback)."""
+        from erosion.nourishment import ProfileAssessment
+
+        a = ProfileAssessment(needs_fill=False, volume_m3=100.0, metrics={})  # no dune metrics
+        ncfg = _ncfg(volume_trigger=1e9)  # no trigger_geometry set
+        cfg = _cfg(nourishment=ncfg)
+        assert FittedAssessor().emergency_force(a, cfg) is False
+        ncfg.emergency_volume = 50.0
+        assert FittedAssessor().emergency_force(a, cfg) is True  # volume fallback
 
     def test_decider_force_override_mobilizes_below_gate(self):
         w = _Work(_p("p0"), np.zeros(1), np.zeros(1), 1.0)
@@ -510,6 +611,18 @@ class TestEmergencyTrigger:
         assert d.mobilize is True
         assert d.forced is True  # emergency, not the volume gate
         assert d.kind is DecisionKind.NOURISH_EMERGENCY
+
+    def test_emergency_only_has_no_volume_gate(self):
+        """volume_trigger=None (emergency-only reach): no deficit ever mobilizes the
+        regular gate; only an emergency force does."""
+        ncfg = _ncfg()
+        ncfg.volume_trigger = None  # regular gate off
+        w = _Work(_p("p0"), np.zeros(1), np.zeros(1), 1.0)
+        w.plan = ProfileNourishmentPlan("p0", 1e9, np.zeros(1), priority_score=1.0)  # huge deficit
+        cold = ReachNourishmentDecider().decide([w], None, ncfg, forced=False)
+        assert cold.mobilize is False  # no gate, no force -> skip
+        hot = ReachNourishmentDecider().decide([w], None, ncfg, forced=True)
+        assert hot.mobilize is True and hot.kind is DecisionKind.NOURISH_EMERGENCY
 
     def test_forced_dune_only_profile_gets_placed(self):
         """A profile whose dune trips the emergency but whose berm is intact
