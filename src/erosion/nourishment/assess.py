@@ -19,11 +19,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-
-def _interp_template(profile: Profile, ncfg: NourishmentConfig) -> np.ndarray:
-    tx = np.asarray(ncfg.template_x)
-    tz = np.asarray(ncfg.template_z)
-    return np.interp(profile.x, tx, tz, left=float(tz[0]), right=float(tz[-1]))
+# Trapezoid plateau width as a fraction of the dune footprint, used only when an
+# explicit ``dune_form="trapezoid"`` has no measured plateau to size it from.
+_DUNE_TOP_FRAC = 0.3
 
 
 def _depth_of_closure(profile: Profile, cfg: ReachConfig) -> float:
@@ -94,15 +92,27 @@ class ProfileAssessor(ABC):
         return ev is not None and a.volume_m3 >= float(ev)
 
     def restore_template(self, profile: Profile, cfg: ReachConfig) -> np.ndarray:
-        """The bed shape (on the profile grid) this assessor restores to.
+        """The restore bed shape (on the profile grid) this assessor builds to.
 
-        Default: the reach config template array (``template_x/template_z``).
-        ``GeometricAssessor`` overrides it to synthesize an idealized profile, so
-        for that assessor the deficit target and the applied shape coincide. Kept
-        polymorphic (not a field on ``ProfileAssessment``) because template
-        synthesis is assessor-specific — most assessors just use the config array.
+        A parametric template synthesized from ``template_geometry`` at the measured
+        shoreline — so it is CSHORE-frame by construction (landward-positive, x=0
+        offshore) and fill-only.  The template metrics drive the target shape (berm
+        width/height, foreshore slope, dune); the fit supplies only the horizontal
+        anchor (where the shoreline/dune sit on this profile).  Shared by every
+        assessor — ``GeometricAssessor`` no longer needs its own override.
+
+        Requires ``ref_metrics`` (the as-built INIT fit) as the fit basis; a profile
+        without one places no fill.
         """
-        return _interp_template(profile, cfg.nourishment)
+        ref = profile.ref_metrics
+        if ref is None or not np.isfinite(ref.berm_elevation):
+            log.warning(
+                "restore_template: profile %s has no as-built fit basis; placing no fill",
+                profile.id,
+            )
+            return profile.zb.copy()
+        tmpl, _span = _synthesize_berm_template(profile, cfg, ref)
+        return tmpl
 
 
 class VolumeAssessor(ProfileAssessor):
@@ -221,47 +231,45 @@ class FittedAssessor(ProfileAssessor):
         return a
 
 
-def _dune_target(tg: GeometryThresholds, ref, m) -> tuple[float, float, float] | None:
+def _dune_target(tg: GeometryThresholds, ref) -> tuple[float, float, float] | None:
     """Target ``(front_relief, width, front_fraction)`` for the synthesized dune,
     or ``None`` when there's no dune to restore.
 
-    Height (crest above the berm) and total footprint width fall back to the
-    as-built ``ref`` when unset (the default->override idiom, matching the berm).
-    The crest splits the footprint by the measured front:back width ratio (``ref``,
-    else symmetric).  Requires a measured dune (``m.dune_crest_x``): the restore
-    anchors on the measured landward toe, so a profile with no dune keeps the
-    berm-only shape and preserves its back (Phase-4b bound).
+    Anchored on the idealized reference ``ref`` (the pinned as-built / "previous"
+    geometry), NOT the storm-damaged fit: the back structure does not erode, so the
+    restore rebuilds the dune the profile HAD — even when the damaged profile has
+    lost it.  Height (crest above the berm) and footprint width come from the
+    template metrics, ``ref`` as fallback; the crest splits the footprint by the
+    reference front:back width ratio (else symmetric).
     """
-    if not np.isfinite(m.dune_crest_x):
+    if not np.isfinite(ref.dune_crest_x):
         return None
     height = float(tg.dune_height) if tg.dune_height is not None else float(ref.dune_front_relief)
     width = float(tg.dune_width) if tg.dune_width is not None else float(ref.dune_width)
     if not (np.isfinite(height) and height > 0.0 and np.isfinite(width) and width > 0.0):
         return None
-    fw, bw = m.dune_front_width, m.dune_back_width
-    if not (np.isfinite(fw) and np.isfinite(bw) and fw + bw > 0.0):
-        fw, bw = ref.dune_front_width, ref.dune_back_width
+    fw, bw = ref.dune_front_width, ref.dune_back_width
     front_frac = fw / (fw + bw) if np.isfinite(fw) and np.isfinite(bw) and fw + bw > 0.0 else 0.5
     return height, width, float(front_frac)
 
 
 def _synthesize_berm_template(
-    profile: Profile, cfg: ReachConfig, ref, m
+    profile: Profile, cfg: ReachConfig, ref
 ) -> tuple[np.ndarray, tuple[float, float] | None]:
     """Synthesize a berm(+dune)-restore template on the profile grid.
 
-    Advances the shoreline seaward (nourishment adds material seaward) while the
-    landward structure is fixed: the berm is rebuilt flat at the as-built elevation
-    ``BE`` to the target width, the foreshore ramps down at the measured slope, and
-    the seaward end ties to the first raw data point (``x[0]``).
+    The whole subaerial shape is anchored on the idealized reference ``ref`` (the
+    pinned as-built / "previous" berm position), NOT the storm-damaged profile:
+    storm erosion attacks the beach front, not the back structure, so the restore
+    rebuilds the berm/dune WHERE THEY WERE rather than following the retreated
+    shoreline the damaged fit reads.  The berm is rebuilt flat at ``BE`` to the
+    target width, the foreshore ramps down at the reference slope, and (when the
+    reference has a dune) the dune is rebuilt to ``BE + target_relief`` over the
+    target footprint, its landward toe fixed at the reference position.
 
-    When the profile has a dune to restore (``_dune_target``), the dune is rebuilt
-    too: its **landward toe stays fixed** at the measured position and upland
-    elevation ``UE`` (freezing the back, as the berm does), the crest rises to
-    ``BE + target_relief``, and the footprint grows *seaward* to the target width —
-    so the seaward dune toe becomes the berm's landward edge.  The measured back
-    landward of that toe is preserved.  Fill-only — the result never dips below the
-    existing bed (``np.maximum``), so restoration cannot carve.
+    Fill is subaerial and fill-only (see the placement step): the result never dips
+    below the existing bed and never places sand below the datum, so the subaqueous
+    profile CSHORE runs on is untouched.
 
     Returns ``(template, dune_span)`` where ``dune_span`` is the ``(seaward_toe,
     landward_toe)`` x-range of the rebuilt dune (for metering its fill volume), or
@@ -270,29 +278,33 @@ def _synthesize_berm_template(
     x = profile.x
     zb = profile.zb
     datum = float(cfg.msl)
-    be = float(ref.berm_elevation)
     tg = cfg.nourishment.template_geometry
+    # Target geometry is template-metrics-driven; the idealized ``ref`` is the
+    # fallback for any unset metric AND the horizontal anchor for the whole shape.
+    be = float(tg.berm_height) if tg.berm_height is not None else float(ref.berm_elevation)
     target_bw = float(tg.berm_width) if tg.berm_width is not None else float(ref.berm_width)
-    slope = m.foreshore_slope if np.isfinite(m.foreshore_slope) and m.foreshore_slope > 0 else None
-    if slope is None:
-        slope = ref.foreshore_slope if np.isfinite(ref.foreshore_slope) else 0.1
+    if tg.foreshore_slope is not None:
+        slope = float(tg.foreshore_slope)
+    elif np.isfinite(ref.foreshore_slope) and ref.foreshore_slope > 0:
+        slope = float(ref.foreshore_slope)
+    else:
+        slope = 0.1
 
-    dune = _dune_target(tg, ref, m)
+    dune = _dune_target(tg, ref)
     if dune is not None:
         relief, width, front_frac = dune
         de = be + relief  # target crest elevation
-        ue = m.upland_elevation if np.isfinite(m.upland_elevation) else ref.upland_elevation
-        ue = float(ue) if np.isfinite(ue) else be
-        x_lt = float(m.dune_crest_x) + float(m.dune_back_width)  # fixed measured landward toe
+        ue = float(ref.upland_elevation) if np.isfinite(ref.upland_elevation) else be
+        x_lt = float(ref.dune_crest_x) + float(ref.dune_back_width)  # idealized landward toe
         x_lt = min(max(x_lt, float(x[0])), float(x[-1]))
         x_crest = x_lt - width * (1.0 - front_frac)  # back_width landward of the crest
         x_bl = x_lt - width  # seaward dune toe = berm landward edge
     else:
-        # No dune to restore: berm ends at the measured dune toe / upland rise.
-        if np.isfinite(m.dune_crest_x):
-            x_bl = float(m.dune_crest_x) - float(m.dune_front_width)  # seaward dune toe
+        # No dune in the idealized profile: berm ends at the reference dune toe / upland rise.
+        if np.isfinite(ref.dune_crest_x):
+            x_bl = float(ref.dune_crest_x) - float(ref.dune_front_width)  # seaward dune toe
         else:
-            x_bl = float(m.shoreline_x) + float(m.berm_width)
+            x_bl = float(ref.shoreline_x) + float(ref.berm_width)
     x_bl = min(max(x_bl, float(x[0])), float(x[-1]))
 
     x_bs = x_bl - target_bw  # seaward berm edge (foreshore crest)
@@ -305,35 +317,59 @@ def _synthesize_berm_template(
     kx = [float(x[0]), x_sh, x_bs, x_bl]
     kz = [float(zb[0]), datum, be, be]
     x_far = x_bl  # landward extent of the synthesized front; back preserved beyond
+    form = None
     if dune is not None:
         x_crest = max(x_crest, x_bl)
         x_lt = max(x_lt, x_crest)
-        kx += [x_crest, x_lt]
-        kz += [de, ue]
         x_far = x_lt
+        # Crest shape: config override, else auto (trapezoid if the idealized dune
+        # had a measured plateau, else triangle).
+        has_plateau = np.isfinite(ref.dune_top_width) and ref.dune_top_width > 0.0
+        form = tg.dune_form or ("trapezoid" if has_plateau else "triangle")
+        if form == "trapezoid":
+            tw = float(ref.dune_top_width) if has_plateau else _DUNE_TOP_FRAC * width
+            xc0 = max(x_crest - tw / 2.0, x_bl)
+            xc1 = min(x_crest + tw / 2.0, x_lt)
+            kx += [xc0, xc1, x_lt]
+            kz += [de, de, ue]
+        else:  # triangle apex (gaussian re-shapes its footprint below)
+            kx += [x_crest, x_lt]
+            kz += [de, ue]
     front = np.interp(x, kx, kz, left=float(zb[0]), right=kz[-1])
+    if form == "gaussian":
+        # Rounded skew-gaussian crest on the linear toe baseline (BE seaward toe ->
+        # UE landward toe), independent front/back scales — mirrors the fitter's
+        # gaussian form.  Overwrites the linear dune footprint only.
+        span = max(x_lt - x_bl, 1e-6)
+        base = be + (ue - be) * (x - x_bl) / span
+        amp = de - (be + (ue - be) * (x_crest - x_bl) / span)
+        sig = np.where(
+            x <= x_crest, max((x_crest - x_bl) / 2.0, 1.0), max((x_lt - x_crest) / 2.0, 1.0)
+        )
+        bump = amp * np.exp(-0.5 * ((x - x_crest) / np.maximum(sig, 1e-6)) ** 2)
+        reg = (x >= x_bl) & (x <= x_lt)
+        front[reg] = (base + bump)[reg]
 
-    tmpl = zb.copy()  # preserve the measured back
-    seaward = x <= x_far
-    tmpl[seaward] = front[seaward]
+    # Placement is SUBAERIAL only: raise the bed to the template where the template
+    # stands above BOTH the current bed (fill-only, never carve) AND the datum (dry
+    # beach + dune).  Below the datum the bed is left natural — the subaqueous fill
+    # is a borrow-accounting concern (the ``(BE+DClose)`` DoC inflation in ``assess``),
+    # not a change to the bed CSHORE runs on.
+    tmpl = zb.copy()  # preserve the measured back and the whole subaqueous profile
+    fill = (x <= x_far) & (front > zb) & (front > datum)
+    tmpl[fill] = front[fill]
     span = (x_bl, x_lt) if dune is not None else None
-    return np.maximum(tmpl, zb), span
+    return tmpl, span
 
 
 class GeometricAssessor(FittedAssessor):
     """``FittedAssessor``'s decision (measured berm-width shortfall via the fitter),
-    but the restore template is SYNTHESIZED from target geometry
-    (``NourishmentConfig.template_geometry``, as-built fallback) rather than the
-    reach's ``template_x/template_z`` array — BeachFX's parametric restore, run on
-    the real post-storm profile.  The target berm width comes from the same config,
-    so the deficit target and the synthesized applied shape coincide.
-
-    The synthesized shape rebuilds the berm + foreshore and, when the profile has a
-    dune, the dune too — crest to ``BE + template_geometry.dune_height`` over a
-    ``dune_width`` footprint (as-built ``ref`` fallback), landward toe fixed on the
-    measured back (see ``_synthesize_berm_template``).  So an emergency force
-    restores the geometry that tripped it.  ``assess`` meters the subaerial dune
-    fill into ``placement_m3`` on top of the berm wedge (``_extra_placement``).
+    plus the dune-fill metering.  The restore template itself is now the shared
+    parametric synthesis (``ProfileAssessor.restore_template`` → the
+    ``template_geometry`` shape on the profile grid), so ``geometric`` no longer
+    owns a distinct template — it differs from ``fitted`` only in metering the
+    rebuilt dune's subaerial fill into ``placement_m3`` (``_extra_placement``) and
+    in taking its target berm width from ``template_geometry`` rather than as-built.
     """
 
     _basis = "geometric"
@@ -347,7 +383,7 @@ class GeometricAssessor(FittedAssessor):
         integrated across the rebuilt dune footprint.  The dune is a subaerial
         structure built on the berm crest, so — unlike the berm wedge — it is NOT
         extended to the depth of closure (no ``(BE+DClose)`` inflation)."""
-        _tmpl, span = _synthesize_berm_template(profile, cfg, ref, m)
+        _tmpl, span = _synthesize_berm_template(profile, cfg, ref)
         if span is None:
             return 0.0
         x_bl, x_lt = span
@@ -358,14 +394,6 @@ class GeometricAssessor(FittedAssessor):
             erosion_volume_above_msl(profile.x[region], _tmpl[region], profile.zb[region], cfg.msl)
             * width_m
         )
-
-    def restore_template(self, profile, cfg):
-        ref = profile.ref_metrics
-        if ref is None or not np.isfinite(ref.berm_elevation):
-            return super().restore_template(profile, cfg)  # no fit basis → config array
-        m, _ideal = fit_profile(profile.x, profile.zb, ref.berm_elevation, cfg.msl, ref=ref)
-        tmpl, _span = _synthesize_berm_template(profile, cfg, ref, m)
-        return tmpl
 
 
 _ASSESSORS: dict[str, ProfileAssessor] = {

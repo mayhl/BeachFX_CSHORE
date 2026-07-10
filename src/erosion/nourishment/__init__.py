@@ -11,7 +11,6 @@ from .assess import (
     ProfileAssessor,
     VolumeAssessor,
     _depth_of_closure,
-    _interp_template,
     _select_assessor,
 )
 from .campaign import ActiveCampaign, ProfileNourishmentPlan, _Work, _Works
@@ -34,7 +33,6 @@ __all__ = [
     "_Work",
     "_Works",
     "_depth_of_closure",
-    "_interp_template",
     "_next_available",
     "_select_assessor",
     "run_campaign",

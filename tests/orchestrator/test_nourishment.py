@@ -14,7 +14,6 @@ from erosion.nourishment import (
     ReachNourishmentDecider,
     VolumeAssessor,
     _depth_of_closure,
-    _interp_template,
     _next_available,
     _Work,
     run_campaign,
@@ -26,11 +25,21 @@ from erosion.storm import StormOutcome
 from erosion.types import DecisionKind, SnapshotLabel
 from tests.builders import ncfg as _ncfg
 from tests.builders import profile as _p
+from tests.builders import template_profile
 from tests.synthetic import DuneSpec, make_profile
 
 
 def _cfg(nourishment=None) -> ReachConfig:
     return ReachConfig(nourishment=nourishment)
+
+
+def _eroded(pid: str = "p0", scoop: float = 1.0) -> Profile:
+    """A ``template_profile`` scooped uniformly by ``scoop`` m — a clear
+    super-trigger subaerial deficit against its own as-built restore target
+    (the parametric template synthesized from ``ref_metrics``)."""
+    p = template_profile(pid)
+    p.zb = p.zb - scoop
+    return p
 
 
 def _zb_pre(profiles: list[Profile]) -> list[np.ndarray]:
@@ -115,11 +124,13 @@ class TestRunCampaignWithNourishment:
     def test_record_nourishment_called(self):
         with tempfile.TemporaryDirectory() as root:
             sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
-            p = _p()
-            cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0))
+            p = _eroded()
+            cfg = _cfg(
+                nourishment=_ncfg(volume_trigger=0.001, production_rate=500.0, assessor="volume")
+            )
             cfg.storm.T_recover = 21.0
             run_campaign(
-                _outcomes([p], [np.zeros(50)]),
+                _outcomes([p], [p.zb.copy()]),
                 t_storm=0.0,
                 t_next=200.0,
                 cfg=cfg,
@@ -132,12 +143,12 @@ class TestRunCampaignWithNourishment:
 
 class TestRunCampaignStormInterrupt:
     def test_active_campaign_returned_when_interrupted(self):
-        p0, p1 = _p("p0"), _p("p1")
-        ncfg = _ncfg(volume_trigger=0.001, production_rate=0.0001)
+        p0, p1 = _eroded("p0"), _eroded("p1")
+        ncfg = _ncfg(volume_trigger=0.001, production_rate=0.0001, assessor="volume")
         cfg = _cfg(nourishment=ncfg)
         cfg.storm.T_recover = 21.0
         t, campaign = run_campaign(
-            _outcomes([p0, p1], [np.zeros(50), np.zeros(50)]),
+            _outcomes([p0, p1], [p0.zb.copy(), p1.zb.copy()]),
             t_storm=0.0,
             t_next=0.001,
             cfg=cfg,
@@ -306,8 +317,6 @@ class TestGeometricAssessor:
         tg = {} if target_bw is None else {"berm_width": {"value": target_bw, "units": "m"}}
         ncfg = NourishmentConfig.model_validate(
             {
-                "template_x": list(x),
-                "template_z": list(current),
                 "volume_trigger": {"value": 0.001, "units": "m3"},
                 "production_rate": {"value": 500.0, "units": "m3/day"},
                 "template_geometry": tg,
@@ -356,8 +365,6 @@ class TestGeometricAssessor:
         p = Profile("p0", x, current.copy(), 0.3, ref_metrics=ref)
         ncfg = NourishmentConfig.model_validate(
             {
-                "template_x": list(x),
-                "template_z": list(current),
                 "volume_trigger": {"value": 0.001, "units": "m3"},
                 "production_rate": {"value": 500.0, "units": "m3/day"},
                 "template_geometry": {
@@ -406,16 +413,88 @@ class TestGeometricAssessor:
         a = FittedAssessor().assess(p, cfg, 50.0)
         assert "dune_fill_m3" not in a.metrics
 
-    def test_no_ref_metrics_falls_back_to_config_array(self):
+    def test_no_ref_metrics_places_no_fill(self):
+        """Without an as-built fit basis (``ref_metrics``) there is no parametric
+        target to synthesize, so the restore template is the bed itself — no fill."""
         from erosion.nourishment import GeometricAssessor
 
         x = np.arange(0, 121, 1.0)
         current = np.interp(x, [0, 42, 47, 55, 120], [-1, 0, 2, 2, 3])
         p = Profile("p0", x, current, 0.3)  # no ref_metrics
-        ncfg = _ncfg(volume_trigger=0.001)
-        cfg = _cfg(nourishment=ncfg)
+        cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001))
         tmpl = GeometricAssessor().restore_template(p, cfg)
-        np.testing.assert_allclose(tmpl, _interp_template(p, ncfg))
+        np.testing.assert_allclose(tmpl, p.zb)  # no basis -> no fill
+
+
+class TestDuneFormSynthesis:
+    """The three synthesized dune-crest forms (``template_geometry.dune_form``):
+    a sharp ``triangle`` apex, a flat-topped ``trapezoid``, a rounded ``gaussian``.
+    Each rebuilds the eroded dune to the target crest, fill-only and subaerial
+    (datum up), leaving the subaqueous profile CSHORE runs on untouched."""
+
+    def _template(self, dune_form=None):
+        from erosion.metrics import fit_profile
+        from erosion.nourishment import GeometricAssessor, NourishmentConfig
+
+        x = np.arange(0, 121, 1.0)
+        render = lambda ks: np.interp(x, *zip(*ks))  # noqa: E731
+        asbuilt = render([(0, -1), (20, 0), (25, 2), (55, 2), (65, 5), (78, 3), (120, 3)])
+        current = render([(0, -1), (20, 0), (25, 2), (55, 2), (65, 4.0), (78, 3), (120, 3)])
+        ref, _ = fit_profile(x, asbuilt, 2.0, 0.0)
+        p = Profile("p0", x, current.copy(), 0.3, ref_metrics=ref)
+        tg = {
+            "berm_width": {"value": 30.0, "units": "m"},
+            "dune_height": {"value": 3.0, "units": "m"},
+            "dune_width": {"value": 23.0, "units": "m"},
+        }
+        if dune_form is not None:
+            tg["dune_form"] = dune_form
+        ncfg = NourishmentConfig.model_validate(
+            {
+                "volume_trigger": {"value": 0.001, "units": "m3"},
+                "production_rate": {"value": 500.0, "units": "m3/day"},
+                "template_geometry": tg,
+            },
+            context={"input_units": "m"},
+        )
+        cfg = _cfg(nourishment=ncfg)
+        cfg.depth_of_closure = 6.0
+        return x, current, GeometricAssessor().restore_template(p, cfg)
+
+    def _plateau_pts(self, x, tmpl) -> int:
+        dune = (x >= 55) & (x <= 80)
+        return int(np.count_nonzero(np.abs(tmpl[dune] - tmpl[dune].max()) < 0.05))
+
+    @pytest.mark.parametrize("form", ["triangle", "trapezoid", "gaussian"])
+    def test_each_form_fill_only_subaerial_and_reaches_crest(self, form):
+        x, current, tmpl = self._template(form)
+        assert np.all(tmpl >= current - 1e-9)  # fill-only: never carves
+        assert np.all(tmpl[tmpl > current + 1e-9] >= 0.0)  # subaerial: no fill below datum
+        assert np.allclose(tmpl[current < 0.0], current[current < 0.0])  # subaqueous untouched
+        dune = (x >= 55) & (x <= 80)
+        assert tmpl[dune].max() == pytest.approx(5.0, abs=0.25)  # BE + target relief
+
+    def test_trapezoid_has_flat_top_triangle_does_not(self):
+        x, _c, tri = self._template("triangle")
+        _x, _c2, trap = self._template("trapezoid")
+        assert self._plateau_pts(x, tri) == 1  # sharp apex, single crest node
+        assert self._plateau_pts(x, trap) >= 4  # measurable plateau
+
+    def test_gaussian_crest_is_rounded_not_linear(self):
+        """A triangle's front face is linear (≈0 second difference); the gaussian's
+        rounds over — its rising increments shrink toward the crest (concave)."""
+        x, _c, tri = self._template("triangle")
+        _x, _c2, gau = self._template("gaussian")
+        face = (x >= 60) & (x <= 65)  # dune front, up to the crest
+        assert np.max(np.abs(np.diff(tri[face], 2))) < 0.02  # triangle ~linear
+        assert np.min(np.diff(gau[face], 2)) < -0.02  # gaussian concave near crest
+
+    def test_auto_form_is_triangle_without_ref_plateau(self):
+        """``dune_form=None`` auto-selects triangle when the idealized dune has no
+        measured plateau (``ref.dune_top_width == 0``)."""
+        _xa, _ca, auto = self._template(None)
+        _xt, _ct, tri = self._template("triangle")
+        np.testing.assert_allclose(auto, tri)
 
 
 class TestAssessorSelection:
@@ -493,8 +572,6 @@ class TestNourishmentConfigValidation:
         from erosion.nourishment import NourishmentConfig
 
         payload = {
-            "template_x": [0.0, 100.0],
-            "template_z": [-0.5, 3.0],
             "production_rate": {"value": 500.0, "units": "m3/day"},
             **over,
         }
@@ -656,13 +733,13 @@ class TestBorrowDrivesDuration:
     def test_ratio_scales_borrow_and_duration(self):
         with tempfile.TemporaryDirectory() as root:
             sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
-            p = _p()
-            ncfg = _ncfg(volume_trigger=0.001, production_rate=500.0)
+            p = _eroded()
+            ncfg = _ncfg(volume_trigger=0.001, production_rate=500.0, assessor="volume")
             ncfg.borrow_to_placement_ratio = 2.0
             cfg = _cfg(nourishment=ncfg)
             cfg.storm.T_recover = 21.0
             run_campaign(
-                _outcomes([p], [np.zeros(50)]),
+                _outcomes([p], [p.zb.copy()]),
                 t_storm=0.0,
                 t_next=1e6,
                 cfg=cfg,
@@ -679,12 +756,12 @@ class TestBorrowDrivesDuration:
 class TestRunCampaignCrewOnSite:
     def test_crew_on_site_bypasses_volume_trigger(self):
         """crew_on_site=True bypasses the volume_trigger gate."""
-        p = _p()
-        cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9, production_rate=500.0))
+        p = _eroded()
+        cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9, production_rate=500.0, assessor="volume"))
         cfg.storm.T_recover = 21.0
         prior = ActiveCampaign(crew_on_site=True, priority_order=["p0"])
         run_campaign(
-            _outcomes([p], [np.zeros(50)]),
+            _outcomes([p], [p.zb.copy()]),
             t_storm=0.0,
             t_next=200.0,
             cfg=cfg,

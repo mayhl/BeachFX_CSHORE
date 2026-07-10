@@ -188,10 +188,14 @@ class LocalCSHORERunner(CSHORERunner):
         zb_final = zb_final[valid]
         x_final = x_final[valid]
 
-        # An all-NaN last morpho step strips to an empty grid: CSHORE ran but the
-        # profile was overtopped/inundated.  Same condition as a missing ODOC above,
-        # so route it through the same INUNDATION path (_run_safe catches -> None).
-        # TEMPORARY: remove once CSHORE handles inundation natively.
+        # An all-NaN last morpho step strips to an empty grid: CSHORE ran to
+        # completion but the profile was overtopped/inundated.  Same physical
+        # condition as a missing ODOC above, so route it through the same INUNDATION
+        # path (_run_safe catches -> None).
+        # NOTE: the spurious all-NaN from a backwards restore template (berm placed at
+        # the deep seaward boundary) was root-caused and fixed in the parametric-template
+        # redesign, so this now signals GENUINE surge overtopping, not a numerical failure
+        # to mask.  Kept as first-class inundation detection until CSHORE reports it natively.
         if x_final.size == 0:
             raise RuntimeError(
                 f"CSHORE output all-NaN in {storm_dir} (profile overtopped/inundated)."

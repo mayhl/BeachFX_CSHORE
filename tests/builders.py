@@ -13,11 +13,13 @@ import numpy as np
 import pandas as pd
 
 from erosion.config import ReachConfig
+from erosion.metrics import fit_profile
 from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
 from erosion.reach import Reach
 from erosion.results import NullResultsSink
 from erosion.runner.mock import MockCSHORERunner
+from tests.synthetic import DuneSpec, make_profile
 
 SIM_START = datetime(2030, 1, 1)
 
@@ -136,39 +138,41 @@ def forcing(hs=(1.0, 2.0)) -> dict:
     }
 
 
-_TEMPLATE_X = np.linspace(0, 100, 50)
-_TEMPLATE_Z = np.linspace(-0.5, 3.0, 50)
-
-
 def ncfg(
     volume_trigger: float = 0.001,
     production_rate: float = 500.0,
-    n: int = 50,
+    assessor: str | None = None,
 ) -> NourishmentConfig:
-    """A nourishment config whose template matches ``template_profile``.
+    """A nourishment config for the parametric restore (no template array).
 
-    Validated with an ``input_units="m"`` context so the template stays in metres
-    (the ``ufloat("m","ft")`` fields would otherwise ft→m convert the raw values,
-    putting the template on a different scale than ``template_profile``).
+    The restore geometry is synthesized from each profile's ``ref_metrics``, so
+    this config carries only the trigger/production policy.  ``assessor`` pins the
+    Tier-1 assessor — pass ``"volume"`` to pair with ``template_profile`` without
+    its dune auto-classifying to the legacy geometric assessor.  Validated with an
+    ``input_units="m"`` context so the ``ufloat`` fields stay in metres.
     """
-    return NourishmentConfig.model_validate(
-        {
-            "template_x": list(np.linspace(0, 100, n)),
-            "template_z": list(np.linspace(-0.5, 3.0, n)),
-            "volume_trigger": {"value": volume_trigger, "units": "m3"},
-            "production_rate": {"value": production_rate, "units": "m3/day"},
-        },
-        context={"input_units": "m"},
-    )
+    payload = {
+        "volume_trigger": {"value": volume_trigger, "units": "m3"},
+        "production_rate": {"value": production_rate, "units": "m3/day"},
+    }
+    if assessor is not None:
+        payload["assessor"] = assessor
+    return NourishmentConfig.model_validate(payload, context={"input_units": "m"})
 
 
 def template_profile(pid: str = "p0") -> Profile:
-    """A profile sitting exactly on the ``ncfg`` design template (deficit = 0).
+    """A clean as-built berm+dune profile, fit to ``ref_metrics`` so the parametric
+    restore template reconstructs its own shape (fresh deficit ≈ 0).
 
-    Pair with ``MockCSStorm(depth)``: a small chunk leaves a sub-trigger deficit
-    (→ recovery), a large chunk a super-trigger deficit (→ nourishment).
+    Pair with ``MockCSStorm(depth)``: a uniform scoop drops the bed below the
+    synthesized restore target, so the assessor sizes a deficit that scales with
+    depth — a small chunk stays sub-trigger (→ recovery), a large chunk trips it
+    (→ nourishment).  Pair with ``ncfg(assessor="volume")`` so the dune doesn't
+    auto-classify to the legacy geometric assessor.
     """
-    return Profile(id=pid, x=_TEMPLATE_X.copy(), zb=_TEMPLATE_Z.copy(), d50=0.3)
+    x, z, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=DuneSpec(crest_elevation=5.0))
+    ref, _ = fit_profile(x, z, 2.0, 0.0)
+    return Profile(id=pid, x=x, zb=z.copy(), d50=0.3, ref_metrics=ref)
 
 
 def run(

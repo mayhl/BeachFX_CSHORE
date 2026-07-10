@@ -10,27 +10,38 @@ from ..units import ufloat
 
 
 class GeometryThresholds(BaseModel):
-    """Target restore geometry for the synthesized template (``GeometricAssessor``)
-    and, later, the emergency trigger (Phase 4).  Each field is a target; ``None``
-    falls back to the measured as-built value (``ref_metrics``) — the
-    default->override idiom.  BeachFX-grid numeric defaults are populated per reach
-    in config; unset here means restore-to-as-built.
+    """Restore-target geometry for the synthesized template, and the emergency
+    trigger thresholds (Phase 4).  Each field is a target; ``None`` falls back to
+    the measured as-built value (``ref_metrics``) — the default->override idiom.
+    BeachFX-grid numeric defaults are populated per reach in config; unset here
+    means restore-to-as-built.
+
+    As the sole template definition (the ``template_x/template_z`` array is
+    retired), these parametric metrics drive the whole restore shape; ``berm_height``
+    and ``foreshore_slope`` fix the beach-face wedge, the dune fields the dune. The
+    template is synthesized on the profile grid — already CSHORE-frame (landward-
+    positive, x=0 offshore) — so there is no coordinate array to mis-orient.
     """
 
     berm_width: ufloat("m", "ft") | None = None
+    berm_height: ufloat("m", "ft") | None = None  # BE: berm crest elevation above datum
+    foreshore_slope: float | None = None  # beach-face |dz/dx| (m/m)
     dune_height: ufloat("m", "ft") | None = None  # crest above berm (front relief)
     dune_width: ufloat("m", "ft") | None = None
+    # Synthesized dune crest shape (mirrors the fitter's three forms): a sharp
+    # ``triangle`` apex, a flat-topped ``trapezoid`` plateau, or a rounded
+    # ``gaussian`` bell.  ``None`` auto-selects: trapezoid when the idealized dune
+    # has a measured plateau (``ref.dune_top_width > 0``), else triangle.
+    dune_form: Literal["triangle", "trapezoid", "gaussian"] | None = None
 
 
 class NourishmentConfig(BaseModel):
     """Reach-level nourishment policy parameters."""
 
-    # Template profile
-    template_x: list[
-        ufloat("m", "ft")
-    ]  # cross-shore positions (CSHORE convention, landward-positive)
-    template_z: list[ufloat("m", "ft")]  # bed elevations (m NAVD internally)
-    # Restore-target geometry for GeometricAssessor's synthesized template.
+    # Template profile — parametric restore geometry, synthesized on the profile
+    # grid (CSHORE-frame by construction).  The former ``template_x/template_z``
+    # coordinate array is retired: it lived in a foreign frame that had to be
+    # declared per-config and was one data-entry slip from being placed backwards.
     template_geometry: GeometryThresholds = Field(default_factory=GeometryThresholds)
 
     # Trigger + production

@@ -1,5 +1,5 @@
 {
-  "_description": "Example 4 — single reach, 3 profiles, FWOP (current authorized schedule) vs FWP (proposed, more proactive nourishment). Schema-v2 authoring: a global `nourishment` plan table keyed by plan id, referenced per reach by key; `storm`/`erosion`/`slc` are hoisted to the global level (shared across plans, layered global->reach->alt). The two plans share the template, production rate, and costs and differ only in the volume trigger. 8 storms at 90-day spacing leaves room for annual nourishment windows.",
+  "_description": "Example 4 — single reach, 3 profiles, FWOP (current authorized schedule) vs FWP (proposed, more proactive nourishment). Schema-v2 authoring: a global `nourishment` plan table keyed by plan id, referenced per reach by key; `storm`/`erosion`/`slc` are hoisted to the global level (shared across plans, layered global->reach->alt). The restore geometry is parametric (synthesized per profile from its as-built fit; omit `template_geometry` to restore to as-built), so the two plans share the restore target, production rate, and costs and differ only in the volume trigger. 8 storms at 90-day spacing leaves room for annual nourishment windows.",
   "paths": {
     "storms": "data/storms/ex_storms_8s_90d.parquet",
     "output": "output/ex4"
@@ -40,8 +40,6 @@
   },
   "nourishment": {
     "FWOP": {
-      "template_x":             [0, 100, 120, 140, 165, 200, 260, 370, 520, 800, 1200, 1600],
-      "template_z":             [1.8, 1.8, 2.4, 2.4, 2.4, 1.2, 0.0, -1.5, -3.0, -5.5, -8.0, -9.3],
       "volume_trigger":         50000,
       "production_rate":        500000,
       "cost_per_cy":            12.50,
@@ -49,8 +47,6 @@
       "mobilization_threshold": 1000000
     },
     "FWP": {
-      "template_x":             [0, 100, 120, 140, 165, 200, 260, 370, 520, 800, 1200, 1600],
-      "template_z":             [1.8, 1.8, 2.4, 2.4, 2.4, 1.2, 0.0, -1.5, -3.0, -5.5, -8.0, -9.3],
       "volume_trigger":         25000,
       "production_rate":        500000,
       "cost_per_cy":            12.50,

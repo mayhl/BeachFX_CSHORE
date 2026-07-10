@@ -32,7 +32,7 @@ from erosion.types import SnapshotLabel as L
 from erosion.types import StormResponseType
 from tests.builders import SIM_START, RecordingSink, ncfg, run, storms_at, template_profile
 
-TRIGGER = 30.0  # deficit trigger: chunk depth 0.2→16.6 m³ (recover) vs ≥1.0→71 m³ (nourish)
+TRIGGER = 30.0  # deficit trigger: chunk depth 0.2→17.9 m³ (recover) vs ≥1.0→77.5 m³ (nourish)
 
 
 # --- trace helpers ---------------------------------------------------------
@@ -47,12 +47,14 @@ def times_of(p, label: L) -> list[float]:
 
 
 def _nourish_cfg(production_rate=500.0) -> ReachConfig:
-    return ReachConfig(nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate))
+    return ReachConfig(
+        nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate, assessor="volume")
+    )
 
 
 # --- scenario factories → (profiles, RecordingSink) after one lifecycle -----
-# Profiles start on the design template (deficit 0); MockCSStorm(depth) scoops a
-# chunk → the real assessor sizes the campaign. Sink captures reach decisions.
+# Profiles start on their as-built restore geometry (deficit ≈ 0); MockCSStorm(depth)
+# scoops a chunk → the real assessor sizes the campaign. Sink captures reach decisions.
 
 Made = tuple[list[Profile], RecordingSink]
 
