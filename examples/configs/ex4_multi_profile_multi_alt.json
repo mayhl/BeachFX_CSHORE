@@ -1,5 +1,5 @@
 {
-  "_description": "Example 4 — single reach, 3 profiles, FWOP vs FWP (with nourishment). 8 storms at 90-day spacing leaves room for annual nourishment windows.",
+  "_description": "Example 4 — single reach, 3 profiles, FWOP (current authorized schedule) vs FWP (proposed, more proactive nourishment). Schema-v2 authoring: a global `nourishment` plan table keyed by plan id, referenced per reach by key; `storm`/`erosion`/`slc` are hoisted to the global level (shared across plans, layered global->reach->alt). The two plans share the template, production rate, and costs and differ only in the volume trigger. 8 storms at 90-day spacing leaves room for annual nourishment windows.",
   "paths": {
     "storms": "data/storms/ex_storms_8s_90d.parquet",
     "output": "output/ex4"
@@ -24,50 +24,38 @@
     "fw":     0.015,
     "iprofl": 1.1
   },
-  "alternatives": {
+  "storm": {
+    "T_recover":      21.0,
+    "recovery_model": "linear"
+  },
+  "erosion": {
+    "type":     "uniform",
+    "rate":     0.00082,
+    "interval": 30.0
+  },
+  "slc": {
+    "rate":     1.1e-5,
+    "interval": 30.0,
+    "scenario": "mid"
+  },
+  "nourishment": {
     "FWOP": {
-      "storm": {
-        "T_recover":      21.0,
-        "recovery_model": "linear"
-      },
-      "erosion": {
-        "type":     "uniform",
-        "rate":     0.00082,
-        "interval": 30.0
-      },
-      "slc": {
-        "rate":     1.1e-5,
-        "interval": 30.0,
-        "scenario": "mid"
-      }
+      "template_x":             [0, 100, 120, 140, 165, 200, 260, 370, 520, 800, 1200, 1600],
+      "template_z":             [1.8, 1.8, 2.4, 2.4, 2.4, 1.2, 0.0, -1.5, -3.0, -5.5, -8.0, -9.3],
+      "volume_trigger":         50000,
+      "production_rate":        500000,
+      "cost_per_cy":            12.50,
+      "mobilization_cost":      500000,
+      "mobilization_threshold": 1000000
     },
     "FWP": {
-      "storm": {
-        "T_recover":      21.0,
-        "recovery_model": "linear"
-      },
-      "erosion": {
-        "type":     "uniform",
-        "rate":     0.00082,
-        "interval": 30.0
-      },
-      "slc": {
-        "rate":     1.1e-5,
-        "interval": 30.0,
-        "scenario": "mid"
-      },
-      "nourishment": {
-        "_description": "Template in m (input_units=m above). x=0 offshore, increasing landward (CSHORE convention). volume_trigger and production_rate in m³ (3-D, reach segment total).",
-        "template_x":          [0, 100, 120, 140, 165, 200, 260, 370, 520, 800, 1200, 1600],
-        "template_z":          [1.8, 1.8, 2.4, 2.4, 2.4, 1.2, 0.0, -1.5, -3.0, -5.5, -8.0, -9.3],
-        "volume_trigger":      25000,
-        "production_rate":     500000,
-        "evaluation_interval": 365.0,
-        "cost_per_cy":            12.50,
-        "mobilization_cost":      500000,
-        "mobilization_threshold": 1000000,
-        "alternative_id":      "FWP"
-      }
+      "template_x":             [0, 100, 120, 140, 165, 200, 260, 370, 520, 800, 1200, 1600],
+      "template_z":             [1.8, 1.8, 2.4, 2.4, 2.4, 1.2, 0.0, -1.5, -3.0, -5.5, -8.0, -9.3],
+      "volume_trigger":         25000,
+      "production_rate":        500000,
+      "cost_per_cy":            12.50,
+      "mobilization_cost":      500000,
+      "mobilization_threshold": 1000000
     }
   },
   "reaches": {
@@ -82,7 +70,8 @@
       "_note": "reach1_p0=LOW_UPLAND(BE≈2.44m), p1=LOW_BERM(BE≈1.83m), p2=HIGH_UPLAND(BE≈2.44m). berm_elevation is reach-wide; p1 berm detection is approximate.",
       "berm_elevation": 2.4,
       "datum": 0.0,
-      "cshore": { "d50": 0.3 }
+      "cshore": { "d50": 0.3 },
+      "nourishment": ["FWOP", "FWP"]
     }
   }
 }

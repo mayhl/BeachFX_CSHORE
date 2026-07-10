@@ -188,6 +188,15 @@ class LocalCSHORERunner(CSHORERunner):
         zb_final = zb_final[valid]
         x_final = x_final[valid]
 
+        # An all-NaN last morpho step strips to an empty grid: CSHORE ran but the
+        # profile was overtopped/inundated.  Same condition as a missing ODOC above,
+        # so route it through the same INUNDATION path (_run_safe catches -> None).
+        # TEMPORARY: remove once CSHORE handles inundation natively.
+        if x_final.size == 0:
+            raise RuntimeError(
+                f"CSHORE output all-NaN in {storm_dir} (profile overtopped/inundated)."
+            )
+
         num_steps = params["num_steps"]
         last = num_steps - 1
         eta = np.array(hydro["mwl"].get(last, hydro["mwl"][0]))

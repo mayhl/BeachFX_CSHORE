@@ -423,6 +423,10 @@ def _build_jobs(
     """Expand the config into one ``_LifecycleJob`` per (reach × selected alternative
     × lifecycle).  ``run_spec`` (``"all"`` or a range/list like ``"1-4,8"``) picks
     which alternative ids to run."""
+    # Slice storms once per lifecycle so each job carries only its own rows (reach.run
+    # filters by lifecycle anyway).  Keeps the per-job payload tiny — essential when
+    # workers are processes (no full-table copy per worker / per node).
+    lc_slices = {int(lc): grp for lc, grp in storms_df.groupby("lifecycle")}
     all_jobs: list[_LifecycleJob] = []
     for reach_id, reach_data in reaches.items():
         alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
@@ -483,7 +487,7 @@ def _build_jobs(
                         lc=int(lc),
                         base_profiles=base_profiles,
                         cfg=cfg,
-                        storms_df=storms_df,
+                        storms_df=lc_slices[int(lc)],
                         sim_start=sim_start,
                         sim_end=sim_end,
                         out_root=out_root,
@@ -553,13 +557,19 @@ def run(
     )
     logging.getLogger("distributed").setLevel(logging.WARNING)
 
-    # One thread per worker: CSHORE runs as a subprocess so the GIL is released.
-    # processes=False keeps storms_df in shared memory (no per-job serialisation).
+    # One thread per worker so the GIL never bottlenecks; CSHORE runs as a subprocess.
+    # processes=True (not threads): each worker is its own process, so the transient
+    # memory CSHORE result-parsing fragments off the heap is returned to the OS when a
+    # worker recycles, and the nanny restarts any worker that exceeds memory_limit —
+    # bounding memory over a long run.  Per-job payloads are per-lifecycle storm slices
+    # (see _build_jobs), so process isolation costs no full-table duplication (scales to
+    # many workers / multiple nodes).
     with (
         LocalCluster(
             n_workers=n_workers,
             threads_per_worker=1,
-            processes=False,
+            processes=True,
+            memory_limit="auto",
             dashboard_address="localhost:8787",
         ) as cluster,
         Client(cluster) as client,
