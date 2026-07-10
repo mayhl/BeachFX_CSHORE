@@ -18,6 +18,8 @@ class CSHOREResult(BaseModel):
     eta: np.ndarray  # mean water level at final BC timestep (OSETUP "setup")
     Hs: np.ndarray  # significant wave height at final BC timestep
     runup_m: float  # 2% runup from ODOC, meters (0.0 if not reported)
+    # Landward wet-computation limit node count (hydro valid over nodes < jr); 0 = unknown.
+    jr: int = 0
 
 
 class CSHORERunner(ABC):

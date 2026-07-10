@@ -8,10 +8,30 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 if TYPE_CHECKING:
+    from .config import ReachConfig
     from .profile import Profile
     from .runner.base import CSHOREResult
+
+
+def write_parquet_with_footer(df: pd.DataFrame, path: str, footer: dict | None) -> None:
+    """Write ``df`` to parquet, embedding ``footer`` (str->str) in the file's key-value
+    metadata so the output is self-describing / reproducible.  Shared with postprocess."""
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    if footer:
+        existing = table.schema.metadata or {}
+        merged = {**existing, **{k.encode(): v.encode() for k, v in footer.items()}}
+        table = table.replace_schema_metadata(merged)
+    pq.write_table(table, path)
+
+
+def read_parquet_footer(path: str) -> dict:
+    """Decode the ``beachfx_*`` key-value footer written by ``write_parquet_with_footer``."""
+    md = pq.read_metadata(path).metadata or {}
+    return {k.decode(): v.decode() for k, v in md.items() if k.decode().startswith("beachfx_")}
 
 
 def _fit_to_n(a: np.ndarray, n: int) -> np.ndarray:
@@ -109,7 +129,14 @@ class ParquetResultsSink(ResultsSink):
             run_summary.txt
     """
 
-    def __init__(self, out_root: str, reach_id: str, alternative_id: str, lifecycle: int = 0):
+    def __init__(
+        self,
+        out_root: str,
+        reach_id: str,
+        alternative_id: str,
+        lifecycle: int = 0,
+        config: ReachConfig | None = None,
+    ):
         self.lifecycle = lifecycle
         self.out_dir = os.path.join(out_root, reach_id, alternative_id, f"lc_{lifecycle:04d}")
         os.makedirs(self.out_dir, exist_ok=True)
@@ -117,6 +144,24 @@ class ParquetResultsSink(ResultsSink):
         self._storm_times: set[float] = set()
         self._nourishment_rows: list[dict] = []
         self._warning_rows: list[dict] = []
+        # Run config embedded in every parquet footer (self-describing outputs).
+        self._config_json = config.model_dump_json() if config is not None else None
+        self._footer: dict | None = None
+
+    def _build_footer(self, meta: RunMeta) -> dict:
+        """Key-value footer stamped into every parquet: run identity + full config JSON."""
+        footer = {
+            "beachfx_reach_id": meta.reach_id,
+            "beachfx_alternative_id": meta.alternative_id,
+            "beachfx_lifecycle": str(meta.lifecycle),
+            "beachfx_sim_start": meta.sim_start.isoformat(),
+        }
+        if self._config_json is not None:
+            footer["beachfx_config"] = self._config_json
+        return footer
+
+    def _to_parquet(self, df: pd.DataFrame, filename: str) -> None:
+        write_parquet_with_footer(df, os.path.join(self.out_dir, filename), self._footer)
 
     def record_storm_hazard(self, profile_id: str, t: float, result: CSHOREResult) -> None:
         n = len(result.x)
@@ -168,6 +213,9 @@ class ParquetResultsSink(ResultsSink):
         self._warning_rows.append({"profile_id": profile_id, "t": float(t), "message": message})
 
     def flush(self, profiles: list[Profile], meta: RunMeta) -> None:
+        self._footer = self._build_footer(meta)
+        self._write_events(profiles)
+        self._write_georef(profiles)
         self._write_profiles(profiles)
         self._write_storm_hazard()
         self._write_profile_metrics(profiles)
@@ -178,6 +226,49 @@ class ParquetResultsSink(ResultsSink):
         self._write_summary(meta, profiles)
 
     # ------------------------------------------------------------------
+
+    def _write_events(self, profiles: list[Profile]) -> None:
+        """Append-only event log — one row per applied event (Phase A source of truth).
+
+        The bed each event produced lives in ``profiles.parquet`` (referenced by
+        ``label`` + ``t``), so the log never duplicates node arrays; it carries the
+        event type, its scalar payload, and the ``ref_pos`` seam (inert until Phase C).
+        ``event_seq`` orders events within a profile.  Payload keys vary by event type,
+        so absent keys land null in the columnar frame.
+        """
+        base_cols = ["profile_id", "event_seq", "event_type", "t", "label", "ref_pos"]
+        rows = [
+            {
+                "profile_id": p.id,
+                "event_seq": seq,
+                "event_type": e.event_type,
+                "t": e.t,
+                "label": e.label,
+                "ref_pos": e.ref_pos,
+                **e.payload,
+            }
+            for p in profiles
+            for seq, e in enumerate(p.events)
+        ]
+        df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=base_cols)
+        self._to_parquet(df, "events.parquet")
+
+    def _write_georef(self, profiles: list[Profile]) -> None:
+        """Per-profile transect georeference (the GeoParquet hook), when set.  One row per
+        georeferenced profile; postprocess reads it to project the grid to lon/lat and build
+        the reach polygon.  No file when no profile carries a georef (today's case)."""
+        rows = [
+            {
+                "profile_id": p.id,
+                "origin_lon": p.georef.origin_lon,
+                "origin_lat": p.georef.origin_lat,
+                "azimuth_deg": p.georef.azimuth_deg,
+            }
+            for p in profiles
+            if p.georef is not None
+        ]
+        if rows:
+            self._to_parquet(pd.DataFrame(rows), "profile_georef.parquet")
 
     def _write_profiles(self, profiles: list[Profile]) -> None:
         chunks = []
@@ -196,16 +287,12 @@ class ParquetResultsSink(ResultsSink):
                 )
         if chunks:
             cols = ["profile_id", "label", "t", "node_idx", "x", "zb"]
-            _concat_chunks(chunks, cols).to_parquet(
-                os.path.join(self.out_dir, "profiles.parquet"), index=False
-            )
+            self._to_parquet(_concat_chunks(chunks, cols), "profiles.parquet")
 
     def _write_storm_hazard(self) -> None:
         if self._hazard_chunks:
             cols = ["profile_id", "t_storm", "node_idx", "x", "mwl", "Hs", "runup_m"]
-            _concat_chunks(self._hazard_chunks, cols).to_parquet(
-                os.path.join(self.out_dir, "storm_hazard.parquet"), index=False
-            )
+            self._to_parquet(_concat_chunks(self._hazard_chunks, cols), "storm_hazard.parquet")
 
     def _write_profile_metrics(self, profiles: list[Profile]) -> None:
         rows = []
@@ -223,9 +310,7 @@ class ParquetResultsSink(ResultsSink):
                     }
                 )
         if rows:
-            pd.DataFrame(rows).to_parquet(
-                os.path.join(self.out_dir, "profile_metrics.parquet"), index=False
-            )
+            self._to_parquet(pd.DataFrame(rows), "profile_metrics.parquet")
 
     def _write_profile_events(self, profiles: list[Profile]) -> None:
         """Lightweight snapshot log — one row per (profile, snapshot). No node data."""
@@ -245,9 +330,7 @@ class ParquetResultsSink(ResultsSink):
                     }
                 )
         if rows:
-            pd.DataFrame(rows).to_parquet(
-                os.path.join(self.out_dir, "profile_events.parquet"), index=False
-            )
+            self._to_parquet(pd.DataFrame(rows), "profile_events.parquet")
 
     def _write_segment_events(self) -> None:
         cols = [
@@ -280,6 +363,7 @@ class ParquetResultsSink(ResultsSink):
             "sim_start": meta.sim_start.isoformat(),
             "n_profiles": len(profiles),
             "n_storms": len(self._storm_times),
+            "n_events": sum(len(p.events) for p in profiles),
             "n_nourishment": len(self._nourishment_rows),
             "n_warnings": len(self._warning_rows),
         }
@@ -298,6 +382,7 @@ class ParquetResultsSink(ResultsSink):
             f.write(f"Sim start:    {meta.sim_start.isoformat()}\n")
             f.write(f"Storms:       {len(self._storm_times)}\n")
             f.write(f"Profiles:     {len(profiles)}\n")
+            f.write(f"Events:       {sum(len(p.events) for p in profiles)}\n")
             f.write(f"Hazard rows:  {n_hazard_rows}\n")
             f.write(f"Metric rows:  {n_metrics}\n")
             f.write(f"Nourishment:  {len(self._nourishment_rows)}\n")

@@ -210,6 +210,11 @@ class LocalCSHORERunner(CSHORERunner):
         runup_val = runup_arr[-1] if len(runup_arr) else np.nan
         runup_m = 0.0 if np.isnan(runup_val) else float(runup_val)
 
+        # Landward wet-computation limit (JR): hydro is valid only over nodes < JR.
+        jr_arr = csio.ODOC_dict.get("jr", np.array([np.nan]))
+        jr_val = jr_arr[-1] if len(jr_arr) else np.nan
+        jr = int(jr_val) if np.isfinite(jr_val) else 0
+
         # Release large CSHORE output dicts immediately — in thread-mode Dask workers
         # GC can be delayed by traceback references, so be explicit.
         del params, bc, veg, hydro, sed, morpho, csio
@@ -220,4 +225,5 @@ class LocalCSHORERunner(CSHORERunner):
             eta=eta,
             Hs=Hs,
             runup_m=runup_m,
+            jr=jr,
         )

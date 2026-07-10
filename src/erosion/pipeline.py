@@ -388,7 +388,9 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
     with tempfile.TemporaryDirectory(
         prefix=f"cshore_{job.reach_id}_{job.alt_id}_lc{job.lc}_"
     ) as work_dir:
-        sink = ParquetResultsSink(job.out_root, job.reach_id, job.alt_id, lifecycle=job.lc)
+        sink = ParquetResultsSink(
+            job.out_root, job.reach_id, job.alt_id, lifecycle=job.lc, config=job.cfg
+        )
         infile_dir = os.path.join(sink.out_dir, "infiles") if job.save_cshore else None
         runner = LocalCSHORERunner(params=job.cfg.cshore, work_dir=work_dir, infile_dir=infile_dir)
         reach = Reach(

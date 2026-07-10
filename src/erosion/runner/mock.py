@@ -23,6 +23,7 @@ class MockCSHORERunner(CSHORERunner):
             eta=dummy,
             Hs=dummy,
             runup_m=0.0,
+            jr=n,  # mock: whole domain "wet"
         )
 
 
@@ -61,4 +62,4 @@ class MockCSStorm(CSHORERunner):
             raise RuntimeError("mock CSHORE failure (inundation)")
         zb = profile.zb - float(spec)  # scoop a uniform chunk out of the profile
         dummy = np.zeros(len(zb))
-        return CSHOREResult(zb=zb, x=profile.x.copy(), eta=dummy, Hs=dummy, runup_m=0.0)
+        return CSHOREResult(zb=zb, x=profile.x.copy(), eta=dummy, Hs=dummy, runup_m=0.0, jr=len(zb))

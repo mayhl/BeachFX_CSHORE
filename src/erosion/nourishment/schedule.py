@@ -112,6 +112,7 @@ class _CampaignScheduler:
 
         _recover_profile(w, self.t_storm, t_start, self.cfg)  # recovery up to the start
         w.profile.snapshot(SnapshotLabel.SSN, t_start)
+        w.profile.record_event("NourishmentStart", t_start, SnapshotLabel.SSN)
 
         if storm_conflict:  # INTERRUPT policy: place what fits, resume after the storm
             return self._place_partial(w, t_start, duration, borrow)

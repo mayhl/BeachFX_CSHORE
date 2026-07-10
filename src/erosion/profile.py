@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from pydantic import BaseModel
@@ -60,6 +60,21 @@ class ProfileGeometryConfig(BaseModel):
     depth_of_closure: ufloat("m", "ft") | None = None
 
 
+class Georef(BaseModel):
+    """Real-world georeference for a cross-shore transect (the GeoParquet hook).
+
+    ``origin`` is the transect's x=0 node (seaward) in lon/lat; ``azimuth_deg`` is the
+    compass bearing (deg from north) toward increasing x (landward).  Optional — when
+    unset, outputs stay in local cross-shore coordinates and the geo products are skipped.
+    No data carries this yet; it's the seam that lets postprocess emit real geometry when
+    a georeferenced dataset arrives.
+    """
+
+    origin_lon: float
+    origin_lat: float
+    azimuth_deg: float
+
+
 # ---------------------------------------------------------------------------
 # Profile: pure data + snapshot()
 # ---------------------------------------------------------------------------
@@ -76,6 +91,23 @@ class ProfileSnapshot:
 
 
 @dataclass
+class EventRecord:
+    """One applied event, serialized for the append-only event log (Phase A output spine).
+
+    Lightweight by design: scalars + a small scalar payload only.  The bed the event
+    produced lives in the referenced snapshot (``label`` at ``t``), so the log never
+    duplicates node arrays.  ``ref_pos`` is a SEAM for the Phase-C ref/recovery policy —
+    recorded now, inert until then.
+    """
+
+    event_type: str
+    t: float
+    label: str | None = None
+    ref_pos: float | None = None
+    payload: dict = field(default_factory=dict)
+
+
+@dataclass
 class Profile:
     id: str
     x: np.ndarray
@@ -84,6 +116,8 @@ class Profile:
     snapshots: list[ProfileSnapshot] = field(default_factory=list)
     geometry: ProfileGeometryConfig | None = field(default=None)
     ref_metrics: ProfileMetrics | None = field(default=None)
+    events: list[EventRecord] = field(default_factory=list)  # append-only event log
+    georef: Georef | None = field(default=None)  # transect lon/lat + azimuth (GeoParquet hook)
 
     def snapshot(self, label: SnapshotLabel, t: float = 0.0) -> None:
         metrics = None
@@ -111,6 +145,18 @@ class Profile:
         """Most recent snapshot carrying ``label``, or ``None`` if there is none."""
         return next((s for s in reversed(self.snapshots) if s.label == label), None)
 
+    def record_event(
+        self,
+        event_type: str,
+        t: float,
+        label: SnapshotLabel | None = None,
+        ref_pos: float | None = None,
+        **payload,
+    ) -> None:
+        """Append an entry to the profile's append-only event log (Phase A output spine)."""
+        lbl = label.value if isinstance(label, SnapshotLabel) else label
+        self.events.append(EventRecord(event_type, float(t), lbl, ref_pos, payload))
+
 
 class Profiles(list):
     """A ``list[Profile]`` with orchestration-level collection helpers.
@@ -135,9 +181,18 @@ class Profiles(list):
 @dataclass
 class ProfileEvent(ABC):
     t: float
+    event_type: ClassVar[str] = "ProfileEvent"
 
     @abstractmethod
     def apply(self, profile: Profile) -> None: ...
+
+    def _payload(self) -> dict:
+        """Scalar provenance for the event-log entry (arrays live in the snapshot)."""
+        return {}
+
+    def _emit(self, profile: Profile, label: SnapshotLabel | None) -> None:
+        """Append this event to the profile's log after it has been applied."""
+        profile.record_event(self.event_type, self.t, label, **self._payload())
 
 
 # ---------------------------------------------------------------------------
@@ -149,12 +204,20 @@ class ProfileEvent(ABC):
 class ErosionTick(ProfileEvent):
     """Lower bed by erosion + SLC during the inter-storm interval."""
 
+    event_type: ClassVar[str] = "ErosionTick"
     dz_erosion: float | np.ndarray = 0.0
     dz_slc: float | np.ndarray = 0.0
+
+    def _payload(self) -> dict:
+        return {
+            "dz_erosion": float(np.mean(self.dz_erosion)),
+            "dz_slc": float(np.mean(self.dz_slc)),
+        }
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb - (self.dz_erosion + self.dz_slc)
         profile.snapshot(SnapshotLabel.Periodic, self.t)
+        self._emit(profile, SnapshotLabel.Periodic)
 
 
 @dataclass
@@ -165,17 +228,25 @@ class StormResponse(ProfileEvent):
     original fixed grid so every snapshot shares the same x-axis.
     """
 
+    event_type: ClassVar[str] = "StormResponse"
     result: CSHOREResult
 
     def apply(self, profile: Profile) -> None:
-        profile.zb = np.interp(
-            profile.x,
-            self.result.x,
-            self.result.zb,
-            left=self.result.zb[0],
-            right=self.result.zb[-1],
-        )
+        r = self.result
+        profile.zb = np.interp(profile.x, r.x, r.zb, left=r.zb[0], right=r.zb[-1])
+        # Bed nodes outside CSHORE's returned grid are constant-extrapolated (the JMAX
+        # landward-boundary chop); count them so consumers can flag non-physical nodes.
+        # jr = landward wet-computation limit (hydro valid over nodes < jr).
+        n_extrapolated = int(np.count_nonzero((profile.x < r.x[0]) | (profile.x > r.x[-1])))
         profile.snapshot(SnapshotLabel.PostStorm, self.t)
+        profile.record_event(
+            "StormResponse",
+            self.t,
+            SnapshotLabel.PostStorm,
+            runup_m=float(r.runup_m),
+            jr=int(r.jr),
+            n_extrapolated=n_extrapolated,
+        )
 
 
 def recovered_bed(
@@ -215,11 +286,15 @@ class Recovery(ProfileEvent):
     snapshots ``REC``.
     """
 
+    event_type: ClassVar[str] = "Recovery"
     fraction: float
     zb_post_storm: np.ndarray
     zb_pre_storm: np.ndarray
     z_berm: float | None = None
     interrupted: bool = False
+
+    def _payload(self) -> dict:
+        return {"fraction": float(self.fraction), "interrupted": bool(self.interrupted)}
 
     def apply(self, profile: Profile) -> None:
         profile.zb = recovered_bed(
@@ -227,17 +302,20 @@ class Recovery(ProfileEvent):
         )
         label = SnapshotLabel.RECS if self.interrupted else SnapshotLabel.REC
         profile.snapshot(label, self.t)
+        self._emit(profile, label)
 
 
 @dataclass
 class FullNourishment(ProfileEvent):
     """Place complete nourishment template (campaign reaches this profile fully)."""
 
+    event_type: ClassVar[str] = "FullNourishment"
     template_zb: np.ndarray
 
     def apply(self, profile: Profile) -> None:
         profile.zb = self.template_zb.copy()
         profile.snapshot(SnapshotLabel.ESN, self.t)
+        self._emit(profile, SnapshotLabel.ESN)
         # Reset ref_metrics to the post-nourishment shape so subsequent storm
         # fits are constrained to the new equilibrium dune position.
         if profile.snapshots and profile.snapshots[-1].metrics is not None:
@@ -255,8 +333,14 @@ class PartialNourishment(ProfileEvent):
     completion, so a partial segment is ``SSN`` with no matching ``ESN``.
     """
 
+    event_type: ClassVar[str] = "PartialNourishment"
     template_zb: np.ndarray
     fraction: float
 
+    def _payload(self) -> dict:
+        return {"fraction": float(self.fraction)}
+
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb + self.fraction * (self.template_zb - profile.zb)
+        # No snapshot of its own (see class docstring); the log still records the placement.
+        self._emit(profile, None)

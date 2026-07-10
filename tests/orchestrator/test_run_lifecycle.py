@@ -10,7 +10,7 @@ import pandas as pd
 
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
-from erosion.results import ParquetResultsSink
+from erosion.results import ParquetResultsSink, read_parquet_footer
 from erosion.types import SnapshotLabel
 from tests.builders import profile, run
 
@@ -46,6 +46,45 @@ class TestOutputSchema:
             _run(n_storms=3, n_profiles=2, sink=sink)
             df = pd.read_parquet(os.path.join(sink.out_dir, "storm_hazard.parquet"))
             assert len(df["t_storm"].unique()) == 3
+
+    def test_events_parquet_matches_profile_logs(self):
+        with tempfile.TemporaryDirectory() as root:
+            sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
+            profiles = _run(n_storms=2, n_profiles=2, sink=sink)
+            df = pd.read_parquet(os.path.join(sink.out_dir, "events.parquet"))
+            # one row per applied event across all profiles
+            assert len(df) == sum(len(p.events) for p in profiles)
+            for col in ("profile_id", "event_seq", "event_type", "t", "label", "ref_pos"):
+                assert col in df.columns
+            assert set(df["event_type"]) <= {
+                "ErosionTick",
+                "StormResponse",
+                "Recovery",
+                "FullNourishment",
+                "PartialNourishment",
+                "NourishmentStart",
+                "Inundation",
+            }
+            assert df["ref_pos"].isna().all()  # Phase-C seam still inert
+
+    def test_config_embedded_in_parquet_footer(self):
+        with tempfile.TemporaryDirectory() as root:
+            cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=5.0))
+            sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0, config=cfg)
+            _run(n_storms=2, cfg=cfg, sink=sink)
+            for fname in ("events.parquet", "profiles.parquet"):
+                footer = read_parquet_footer(os.path.join(sink.out_dir, fname))
+                assert "beachfx_reach_id" in footer
+                assert footer["beachfx_lifecycle"] == "0"
+                assert footer["beachfx_config"] == cfg.model_dump_json()
+
+    def test_footer_without_config_has_identity_only(self):
+        with tempfile.TemporaryDirectory() as root:
+            sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)  # no config passed
+            _run(n_storms=2, sink=sink)
+            footer = read_parquet_footer(os.path.join(sink.out_dir, "events.parquet"))
+            assert "beachfx_config" not in footer
+            assert "beachfx_reach_id" in footer
 
 
 class TestWithErosionConfig:

@@ -196,6 +196,7 @@ def _apply_storm_result(
         # CSHORE failed: snapshot current (unmodified) zb with INUNDATION label
         p.snapshot(SnapshotLabel.INUNDATION, t_storm)
         p.snapshots[-1].storm_response_type = StormResponseType.INUNDATION
+        p.record_event("Inundation", t_storm, SnapshotLabel.INUNDATION)
         return StormOutcome(p, None, zb_p.copy())
 
     # Shift-register pre-storm profile to post-storm shoreline position,
