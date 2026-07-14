@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from erosion.results import NullResultsSink, ParquetResultsSink, RunMeta
+from erosion.types import DecisionKind
 from tests.builders import SIM_START, profile, run
 
 
@@ -63,6 +64,7 @@ class TestParquetResultsSinkOutputFiles:
             "profiles.parquet",
             "storm_hazard.parquet",
             "profile_events.parquet",
+            "decisions.parquet",
             "segment_events.csv",
             "run_metadata.json",
             "run_summary.txt",
@@ -148,3 +150,39 @@ class TestRecordNourishment:
         df = pd.read_csv(os.path.join(sink.out_dir, "segment_events.csv"))
         assert len(df) == 2
         assert set(df["event_type"].unique()) == {"FullNourishment", "PartialNourishment"}
+
+
+class TestRecordDecision:
+    """The reach-scope audit trail: why the crew mobilized, deferred, or was cut short."""
+
+    def _flushed(self, tmp_path) -> pd.DataFrame:
+        sink = ParquetResultsSink(str(tmp_path), "R1", "FWOP", lifecycle=0)
+        sink.record_decision(DecisionKind.NOURISH_TRIGGER, 20.5, deficit_m3=155.0, trigger=30.0)
+        # Logged at the time it concerns (the next storm), not the time it was taken —
+        # which is why the file carries an emission sequence as well as a time.
+        sink.record_decision(DecisionKind.INTERRUPT, 34.0, profile_id="p0", placed_fraction=0.33)
+        sink.flush([], RunMeta("R1", "FWOP", SIM_START, 0))
+        return pd.read_parquet(os.path.join(sink.out_dir, "decisions.parquet"))
+
+    def test_rows_carry_kind_time_and_emission_order(self, tmp_path):
+        df = self._flushed(tmp_path)
+        assert list(df["kind"]) == ["NOURISH_TRIGGER", "INTERRUPT"]
+        assert list(df["decision_seq"]) == [0, 1]
+        assert list(df["t"]) == pytest.approx([20.5, 34.0])
+
+    def test_payload_keys_become_columns_and_absent_ones_are_null(self, tmp_path):
+        df = self._flushed(tmp_path)
+        assert df.loc[0, "deficit_m3"] == pytest.approx(155.0)
+        assert df.loc[1, "placed_fraction"] == pytest.approx(0.33)
+        assert pd.isna(df.loc[1, "deficit_m3"])  # INTERRUPT carries no deficit
+        assert pd.isna(df.loc[0, "profile_id"])  # a reach-scope decision names no profile
+
+    def test_written_empty_when_nothing_was_decided(self, tmp_path):
+        sink = ParquetResultsSink(str(tmp_path), "R1", "FWOP", lifecycle=0)
+        sink.flush([], RunMeta("R1", "FWOP", SIM_START, 0))
+        df = pd.read_parquet(os.path.join(sink.out_dir, "decisions.parquet"))
+        assert len(df) == 0
+        assert set(df.columns) == {"decision_seq", "kind", "t", "profile_id"}
+
+    def test_null_sink_noop(self):
+        NullResultsSink().record_decision(DecisionKind.NOURISH_SKIP, 1.0)  # must not raise

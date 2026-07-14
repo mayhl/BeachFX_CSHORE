@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..profile import FullNourishment, PartialNourishment
-from ..types import DecisionKind, SnapshotLabel
+from ..types import CampaignKind, DecisionKind
 from .campaign import (
     ActiveCampaign,
     _Outcome,
@@ -19,6 +19,7 @@ from .decide import _DEFAULT_DECIDER
 
 if TYPE_CHECKING:
     from ..config import ReachConfig
+    from ..profile import Profile
     from ..results import ResultsSink
     from ..storm import StormOutcome
 
@@ -57,19 +58,25 @@ def _remaining(order: list[_Work], interrupted: _Work | None = None) -> list[str
 
 @dataclass
 class _CampaignScheduler:
-    """Tier-3: a serial crew placing nourishment plans within ``[t_storm, t_next]``.
+    """Tier-3: a serial crew placing nourishment plans within ``[t_start, t_next]``.
 
     Owns the crew clock (``t_crew``) and emits the placement events — full/partial
-    nourishment, plus BLACKOUT_DEFER / STORM_DEFER / INTERRUPT decisions — so
-    ``run_campaign`` stays a flat assess->decide->place->recover pipeline.
+    nourishment, plus BLACKOUT_DEFER / STORM_DEFER / INTERRUPT decisions — so the
+    campaign entry points stay flat assess->decide->place->recover pipelines.
+
+    ``kind`` is what launched the campaign: it selects the morphology label pair
+    (``SEN``/``EEN`` post-storm, ``SSN``/``ESN`` for a planned cycle) and decides
+    whether a placement is preceded by recovery.  A planned cycle only fires in a
+    quiet window, so there is no recovery left to run before it places.
     """
 
-    t_storm: float
+    t_storm: float  # campaign start — storm end, or the cycle date for a planned cycle
     t_next: float
     cfg: ReachConfig
     sink: ResultsSink
     t_crew: float
     storm_at_next: bool = False  # t_next is a following storm (vs sim/window end) → RECS on cutoff
+    kind: CampaignKind = CampaignKind.STORM
 
     def _place(self, w: _Work) -> _Outcome:
         """Schedule the placement, then dispatch: recover to the start and place
@@ -96,8 +103,8 @@ class _CampaignScheduler:
         storm_conflict = t_end >= self.t_next  # next storm would land during placement
 
         # DEFER policy (BeachFX): a placement the storm would hit is not started at all —
-        # delay it to a storm-free window (the campaign carries to the next gap). No SSN,
-        # no partial fill; the profile just recovers over this gap.
+        # delay it to a storm-free window (the campaign carries to the next gap). No start
+        # marker, no partial fill; the profile just recovers over this gap.
         if storm_conflict and ncfg.storm_conflict == "defer":
             _log_decision(
                 self.sink,
@@ -110,9 +117,13 @@ class _CampaignScheduler:
             )
             return _Outcome.BLOCKED
 
-        _recover_profile(w, self.t_storm, t_start, self.cfg)  # recovery up to the start
-        w.profile.snapshot(SnapshotLabel.SSN, t_start)
-        w.profile.record_event("NourishmentStart", t_start, SnapshotLabel.SSN)
+        # recovery up to the placement start; cut short here → RECN (crew, not storm).
+        # A planned cycle has none to run — it only fires past the recovery completion.
+        if self.kind is CampaignKind.STORM:
+            _recover_profile(w, self.t_storm, t_start, self.cfg, nourish_at_end=True)
+        label = self.kind.start_label
+        w.profile.snapshot(label, t_start)
+        w.profile.record_event("NourishmentStart", t_start, label)
 
         if storm_conflict:  # INTERRUPT policy: place what fits, resume after the storm
             return self._place_partial(w, t_start, duration, borrow)
@@ -129,9 +140,12 @@ class _CampaignScheduler:
             profile_id=w.profile.id,
             placed_fraction=fraction,
         )
-        PartialNourishment(t=self.t_next, template_zb=w.plan.template_zb, fraction=fraction).apply(
-            w.profile
-        )
+        PartialNourishment(
+            t=self.t_next,
+            template_zb=w.plan.template_zb,
+            fraction=fraction,
+            label=self.kind.partial_label,
+        ).apply(w.profile)
         self.sink.record_nourishment(
             w.profile.id,
             t_start,
@@ -146,7 +160,9 @@ class _CampaignScheduler:
 
     def _place_full(self, w: _Work, t_start: float, t_end: float, borrow: float) -> _Outcome:
         """Full placement completes before the next storm."""
-        FullNourishment(t=t_end, template_zb=w.plan.template_zb).apply(w.profile)
+        FullNourishment(t=t_end, template_zb=w.plan.template_zb, label=self.kind.end_label).apply(
+            w.profile
+        )
         self.sink.record_nourishment(
             w.profile.id, t_start, t_end, w.plan.placement_m3, "FullNourishment", borrow_m3=borrow
         )
@@ -244,5 +260,75 @@ def run_campaign(
         sink=sink,
         t_crew=t_crew,
         storm_at_next=storm_at_next,
+        kind=CampaignKind.STORM,
     )
     return t_next, scheduler.run(decision.order, works)
+
+
+def run_scheduled_campaign(
+    profiles: list[Profile],
+    t_cycle: float,
+    t_next: float,
+    cfg: ReachConfig,
+    sink: ResultsSink,
+    longshore_widths: list[float] | None = None,
+    prior: ActiveCampaign | None = None,
+) -> ActiveCampaign | None:
+    """Run a periodic planned nourishment cycle in the quiet window ``[t_cycle, t_next]``.
+
+    The calendar proposes and the volume gate disposes: every profile is assessed as in
+    a post-storm campaign, but the reach mobilizes only if the deficit clears
+    ``volume_trigger`` — so a cycle that finds a healthy beach places nothing.  Beyond
+    that it is the same crew: same priority order, same blackout windows, same
+    ``storm_conflict`` policy against the following storm.  The one difference is that
+    there is no recovery to run (the caller only fires a cycle past the last recovery
+    completion), so placements are ``SSN``/``ESN`` with no ``RECN`` ahead of them.
+
+    Returns the carry-forward campaign if the crew was interrupted or blocked, else None.
+    """
+    ncfg = cfg.nourishment
+    if ncfg is None:
+        return None
+
+    widths = longshore_widths or [1.0] * len(profiles)
+    works = _Works.build_scheduled(list(profiles), widths)
+    works.assess(cfg)
+
+    decision = _DEFAULT_DECIDER.decide(works.plans, prior, ncfg, forced=works.forced)
+    if not decision.mobilize:
+        _log_decision(
+            sink,
+            DecisionKind.NOURISH_SKIP,
+            t_cycle,
+            cycle=True,
+            deficit=decision.total_deficit,
+            trigger=float(ncfg.volume_trigger) if ncfg.volume_trigger is not None else None,
+        )
+        return None
+
+    # NOURISH_CYCLE is the calendar mobilization; an emergency raised inside the cycle
+    # window keeps its own kind, since it would have forced the campaign either way.
+    kind = (
+        DecisionKind.NOURISH_CYCLE
+        if decision.kind is DecisionKind.NOURISH_TRIGGER
+        else decision.kind
+    )
+    _log_decision(
+        sink,
+        kind,
+        t_cycle,
+        deficit=decision.total_deficit,
+        resume=decision.resume,
+        forced=decision.forced,
+    )
+
+    t_crew = t_cycle if decision.resume else t_cycle + ncfg.mobilization_days
+    scheduler = _CampaignScheduler(
+        t_storm=t_cycle,
+        t_next=t_next,
+        cfg=cfg,
+        sink=sink,
+        t_crew=t_crew,
+        kind=CampaignKind.SCHEDULED,
+    )
+    return scheduler.run(decision.order, works)

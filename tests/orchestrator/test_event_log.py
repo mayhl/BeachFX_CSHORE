@@ -9,6 +9,7 @@ Physics-independent via ``MockCSStorm``.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
@@ -55,8 +56,8 @@ def test_storm_and_recovery_logged():
 def test_full_nourishment_logged():
     p = _run_one(MockCSStorm(1.0), _nourish_cfg())  # big chunk -> campaign
     types = _etypes(p)
-    assert "NourishmentStart" in types  # SSN marker
-    assert "FullNourishment" in types  # ESN completion
+    assert "NourishmentStart" in types  # SEN marker
+    assert "FullNourishment" in types  # EEN completion
 
 
 def test_inundation_logged():
@@ -117,3 +118,61 @@ def test_events_are_time_ordered():
     p = _run_one(MockCSStorm(1.0), _nourish_cfg())
     ts = [e.t for e in p.events]
     assert ts == sorted(ts)
+
+
+def test_events_parquet_roundtrips_full_lifecycle():
+    """The persisted ``events.parquet`` reproduces the in-memory event log for a
+    full run through the sink — type / time / label / scalar payload all survive
+    serialization, across a rich nourish+interrupt lifecycle.
+
+    Uses the interrupt scenario so the stream spans every event type, including a
+    ``PartialNourishment`` whose ``label`` is ``None`` (the sparse-column /
+    null-label edge the count-only round-trip in ``test_run_lifecycle`` misses).
+    """
+    import os
+    import tempfile
+
+    import pandas as pd
+
+    from erosion.results import ParquetResultsSink
+
+    with tempfile.TemporaryDirectory() as root:
+        sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
+        profiles, _ = run(
+            [template_profile("p0")],
+            storms_df=storms_at([20, 34]),
+            sim_end=100.0,
+            runner=MockCSStorm({"p0": [2.0, 0.2]}),  # big chunk → slow-rate interrupt → partial
+            cfg=_nourish_cfg(production_rate=5.0),
+            sink=sink,
+        )
+        p = profiles[0]
+        df = pd.read_parquet(os.path.join(sink.out_dir, "events.parquet")).sort_values("event_seq")
+
+        # one row per applied event, same order — type and time round-trip exactly
+        assert len(df) == len(p.events)
+        assert list(df["event_type"]) == [e.event_type for e in p.events]
+        assert list(df["t"]) == pytest.approx([e.t for e in p.events])
+
+        # label round-trips, including the None the partial placement contributes
+        def _none(v):
+            return None if v is None or (isinstance(v, float) and pd.isna(v)) else v
+
+        assert [_none(v) for v in df["label"]] == [e.label for e in p.events]
+        assert "PartialNourishment" in set(df["event_type"])  # the label=None row is present
+
+        # scalar payloads survive the sparse-column flatten (a populated payload row
+        # coexists with the empty-payload NourishmentStart/FullNourishment rows) —
+        # spot-check a float (fraction) and the valid-domain ints (jr / n_extrapolated).
+        pn_df, pn_mem = (
+            df[df["event_type"] == "PartialNourishment"].iloc[0],
+            next(e for e in p.events if e.event_type == "PartialNourishment"),
+        )
+        assert pn_df["fraction"] == pytest.approx(pn_mem.payload["fraction"])
+
+        sr_df, sr_mem = (
+            df[df["event_type"] == "StormResponse"].iloc[0],
+            next(e for e in p.events if e.event_type == "StormResponse"),
+        )
+        assert sr_df["jr"] == sr_mem.payload["jr"]
+        assert sr_df["n_extrapolated"] == sr_mem.payload["n_extrapolated"]

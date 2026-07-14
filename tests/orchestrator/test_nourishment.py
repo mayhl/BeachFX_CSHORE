@@ -770,4 +770,4 @@ class TestRunCampaignCrewOnSite:
             prior=prior,
         )
         labels = [s.label for s in p.snapshots]
-        assert SnapshotLabel.ESN in labels
+        assert SnapshotLabel.EEN in labels

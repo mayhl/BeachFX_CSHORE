@@ -13,13 +13,21 @@ from .assess import (
     _depth_of_closure,
     _select_assessor,
 )
-from .campaign import ActiveCampaign, ProfileNourishmentPlan, _Work, _Works
+from .campaign import (
+    ActiveCampaign,
+    ProfileNourishmentPlan,
+    _Work,
+    _Works,
+    recovery_duration,
+)
 from .config import GeometryThresholds, NourishmentConfig
+from .cycle import CycleTracker, cycle_times
 from .decide import ReachDecision, ReachNourishmentDecider
-from .schedule import _next_available, run_campaign
+from .schedule import _next_available, run_campaign, run_scheduled_campaign
 
 __all__ = [
     "ActiveCampaign",
+    "CycleTracker",
     "FittedAssessor",
     "GeometricAssessor",
     "GeometryThresholds",
@@ -35,5 +43,8 @@ __all__ = [
     "_depth_of_closure",
     "_next_available",
     "_select_assessor",
+    "cycle_times",
+    "recovery_duration",
     "run_campaign",
+    "run_scheduled_campaign",
 ]

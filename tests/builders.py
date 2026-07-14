@@ -23,6 +23,17 @@ from tests.synthetic import DuneSpec, make_profile
 
 SIM_START = datetime(2030, 1, 1)
 
+_STORM_COLUMNS = [
+    "lifecycle",
+    "storm_id",
+    "hydro_tstp",
+    "date",
+    "wave_height",
+    "wave_peak_period",
+    "water_elevation",
+    "wave_direction",
+]
+
 
 class RecordingSink(NullResultsSink):
     """Test sink that captures reach/SIM-scope decisions in memory."""
@@ -120,7 +131,9 @@ def storms_at(
                     wave_direction=0.0,
                 )
             )
-    return pd.DataFrame(rows)
+    # ``times=[]`` is a stormless lifecycle — still a valid schedule, so keep the
+    # columns the loop selects on rather than handing back a shapeless empty frame.
+    return pd.DataFrame(rows, columns=_STORM_COLUMNS if not rows else None)
 
 
 def forcing(hs=(1.0, 2.0)) -> dict:

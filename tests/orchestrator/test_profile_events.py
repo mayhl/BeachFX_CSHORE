@@ -177,10 +177,16 @@ class TestFullNourishment:
         template[:] = 0.0
         assert not np.allclose(p.zb, 0.0)
 
-    def test_takes_esn_snapshot(self):
+    def test_takes_een_snapshot_by_default(self):
+        """Post-storm is the default campaign, so the end marker is EEN.
+
+        Which label each CAMPAIGN KIND gets is the orchestrator's call, asserted where it
+        is made (test_event_sequences / test_nourishment_cycle) — passing a label in here
+        and reading it back would only re-assert the dataclass field.
+        """
         p = _p()
         FullNourishment(t=10.0, template_zb=np.ones(len(p.x))).apply(p)
-        assert p.snapshots[-1].label == SnapshotLabel.ESN
+        assert p.snapshots[-1].label == SnapshotLabel.EEN
 
 
 class TestPartialNourishment:
@@ -204,8 +210,9 @@ class TestPartialNourishment:
         PartialNourishment(t=10.0, template_zb=template, fraction=0.5).apply(p)
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-14)
 
-    def test_takes_no_snapshot(self):
-        """Partial placement is mid-segment; run_campaign owns the SSN start marker."""
+    def test_takes_eens_snapshot_by_default(self):
+        """A cut campaign closes its segment rather than leaving it open — post-storm is
+        the default kind, so EENS."""
         p = _p()
         PartialNourishment(t=10.0, template_zb=np.ones(len(p.x)), fraction=0.5).apply(p)
-        assert p.snapshots == []
+        assert p.snapshots[-1].label == SnapshotLabel.EENS

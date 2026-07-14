@@ -103,9 +103,11 @@ def record_event(request):
                 }
             )
 
-        # interval-in-days notes, e.g. "SSN→ESN 3d"
+        # interval-in-days notes, e.g. "SEN#0→SEN#1 14d" — endpoints are (label, nth)
         dur_notes = (
-            [f"{gen[a]}→{gen[b]} {days:g}d" for a, b, days in durations] if durations else []
+            [f"{a[0].value}#{a[1]}→{b[0].value}#{b[1]} {days:g}d" for a, b, days in durations]
+            if durations
+            else []
         )
         request.config._event_rows.append(
             {
@@ -176,7 +178,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     # Events from every profile are combined and ordered by time, so the table
     # reads as the reach's actual event sequence (crew serialization, interrupts,
     # simultaneous storms).  Δt is recomputed across the merged order, not per
-    # profile.  Ties (same t) keep each profile's causal order (profile, then idx).
+    # profile.  Ties (same t) break by profile id, then each profile's causal idx.
     tw.write_line("")
     tw.section("Per-scenario detail (reach timeline)", sep="═")
     headers = ["#", "REACH", "PROFILE", "EVENT", "Δt", "DATE", "OK"]
@@ -186,11 +188,12 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         tw.write_line("")
         tw.write_line(f"▌ {scenario} — {desc}", bold=True)
 
-        merged = []  # (t, profile_order, idx, profile_id, reach, event)
-        for prof_order, r in enumerate(profiles):
+        merged = []  # (t, profile_id, idx, reach, event)
+        for r in profiles:
             reach = r.get("reach") or "—"
             for e in r["events"]:
-                merged.append((e["elapsed"], prof_order, e["idx"], r["profile"], reach, e))
+                merged.append((e["elapsed"], r["profile"], e["idx"], reach, e))
+        # reach timeline: order by date, then profile id, then each profile's causal idx
         merged.sort(key=lambda m: (m[0] if m[0] is not None else float("-inf"), m[1], m[2]))
 
         notes = []
@@ -203,7 +206,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             tw.write_line("  " + "   ·   ".join(notes))
 
         body, prev_t = [], None
-        for seq, (t, _po, _idx, prof, reach, e) in enumerate(merged):
+        for seq, (t, prof, _idx, reach, e) in enumerate(merged):
             dt = "—" if (prev_t is None or t is None) else f"{t - prev_t:g}d"
             body.append(
                 [
@@ -218,14 +221,12 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             )
             if t is not None:
                 prev_t = t
-        widths = [
-            max(len(headers[c]), *(len(row[c]) for row in body)) for c in range(len(headers))
-        ]
+        widths = [max(len(headers[c]), *(len(row[c]) for row in body)) for c in range(len(headers))]
 
         tw.write_line(_rule(widths, "  ┌", "┬", "┐"))
         tw.write_line(_row(headers, widths, aligns, indent="  "))
         tw.write_line(_rule(widths, "  ├", "┼", "┤"))
-        for (_t, _po, _idx, _prof, _reach, e), cells in zip(merged, body):
+        for (_t, _prof, _idx, _reach, e), cells in zip(merged, body):
             line = _row(cells, widths, aligns, indent="  ")
             if e["verdict"] == "FAIL":
                 exp = f"   ← expected {e['expected']}" if e["expected"] is not None else ""

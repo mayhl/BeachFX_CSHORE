@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -61,6 +62,16 @@ class NourishmentConfig(BaseModel):
     mobilization_threshold: float = 0.0  # minimum total campaign cost ($) to proceed
     mobilization_days: float = 0.0  # lead-time days before crew is on-site
 
+    # Periodic (planned) nourishment cycle — BeachFX's calendar-driven renourishment
+    # (gbPlannedNourishmentFlag / gdatePlannedNourishmentStartDate / the 365 ×
+    # gdwNourishmentTimeIncrement cycle in cShoreResponseIteration.cpp:137-155).
+    # Distinct from the post-storm campaign: the calendar makes the reach *eligible*,
+    # the volume gate still decides (so a healthy beach skips its cycle).  A cycle
+    # landing while the reach is still recovering defers to the recovery completion.
+    # None = no periodic nourishment; the reach nourishes only in response to storms.
+    cycle_interval_years: float | None = None
+    cycle_start_date: datetime | None = None  # first cycle; None = the sim start date
+
     # Campaign scheduling
     blackout_windows: list[tuple[float, float]] = Field(
         default_factory=list
@@ -108,6 +119,21 @@ class NourishmentConfig(BaseModel):
             raise ValueError("emergency_volume must be positive when set")
         if self.production_rate <= 0:
             raise ValueError("production_rate must be positive")
+        if self.cycle_interval_years is not None and self.cycle_interval_years <= 0:
+            raise ValueError("cycle_interval_years must be positive when set")
+        return self
+
+    @model_validator(mode="after")
+    def _cycle_needs_volume_gate(self) -> NourishmentConfig:
+        """A periodic cycle proposes; ``volume_trigger`` disposes.  Without the gate the
+        cycle date has nothing to clear, so the calendar would place fill every cycle
+        regardless of the beach's state — configure the gate, or drop the cycle and let
+        the reach nourish off its storm triggers."""
+        if self.cycle_interval_years is not None and self.volume_trigger is None:
+            raise ValueError(
+                "cycle_interval_years requires volume_trigger — the calendar makes the "
+                "reach eligible but the volume gate decides whether to mobilize"
+            )
         return self
 
     @model_validator(mode="after")

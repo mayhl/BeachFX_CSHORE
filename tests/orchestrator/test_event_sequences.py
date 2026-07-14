@@ -2,7 +2,7 @@
 
 These exercise ``run_lifecycle`` end-to-end and assert the *sequence* of events
 (snapshot labels) each profile accumulates — i.e. that the orchestrator emits
-the right ordering of PreStorm / PostStorm / REC / SSN / ESN across a storm
+the right ordering of PreStorm / PostStorm / REC / SEN / EEN across a storm
 schedule.  They test event handling, not the nourishment/recovery numerics.
 
 CSHORE is the only mock: ``MockCSStorm(depth)`` scoops a uniform chunk off the
@@ -25,6 +25,7 @@ import pytest
 
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
+from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
 from erosion.runner.mock import MockCSStorm
 from erosion.types import DecisionKind as D
@@ -50,6 +51,20 @@ def _nourish_cfg(production_rate=500.0) -> ReachConfig:
     return ReachConfig(
         nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate, assessor="volume")
     )
+
+
+def _emergency_cfg(production_rate=100.0) -> ReachConfig:
+    # No regular volume gate; an emergency_volume threshold forces mobilization instead
+    # (the ≥1-active-trigger validator accepts emergency_volume standing alone).
+    nc = NourishmentConfig.model_validate(
+        {
+            "production_rate": {"value": production_rate, "units": "m3/day"},
+            "emergency_volume": {"value": TRIGGER, "units": "m3"},
+            "assessor": "volume",
+        },
+        context={"input_units": "m"},
+    )
+    return ReachConfig(nourishment=nc)
 
 
 # --- scenario factories → (profiles, RecordingSink) after one lifecycle -----
@@ -162,20 +177,67 @@ def _blackout() -> Made:
     )
 
 
+def _emergency_only() -> Made:
+    # volume_trigger OFF; the same chunk that nourishes in _nourish_single here
+    # mobilizes via the emergency_volume force path → NOURISH_EMERGENCY, not TRIGGER.
+    return run(
+        [template_profile("p0")],
+        storms_df=storms_at([20]),
+        runner=MockCSStorm(1.0),
+        cfg=_emergency_cfg(production_rate=100.0),
+        sink=RecordingSink(),
+    )
+
+
+def _mobilization() -> Made:
+    # 5-day crew lead-time: placement can't start until storm_end + mobilization_days,
+    # so the profile recovers over the lead-time (REC) before SEN — unlike _nourish_single
+    # where the crew arrives at storm_end and no recovery precedes the placement.
+    cfg = _nourish_cfg(production_rate=100.0)
+    cfg.nourishment.mobilization_days = 5.0
+    return run(
+        [template_profile("p0")],
+        storms_df=storms_at([20]),
+        runner=MockCSStorm(1.0),
+        cfg=cfg,
+        sink=RecordingSink(),
+    )
+
+
+def _blackout_block() -> Made:
+    # A blackout spanning the whole first inter-storm gap pushes the placement start
+    # past the next storm → the campaign can't start (BLOCKED), carries forward, and
+    # re-triggers in the second gap once the blackout has lifted.  Distinct from
+    # _blackout (single storm: the start defers *within* the same window).
+    cfg = _nourish_cfg(production_rate=100.0)
+    cfg.nourishment.blackout_windows = [(20.0, 38.0)]
+    return run(
+        [template_profile("p0")],
+        storms_df=storms_at([20, 34]),
+        sim_end=100.0,
+        runner=MockCSStorm(1.0),
+        cfg=cfg,
+        sink=RecordingSink(),
+    )
+
+
 # --- expected full sequences per scenario ----------------------------------
 
 _I, _PRE, _POST = L.INIT, L.PreStorm, L.PostStorm
-_REC, _RECS, _SSN, _ESN, _END = L.REC, L.RECS, L.SSN, L.ESN, L.EndIteration
+_REC, _RECS, _SEN, _EEN, _END = L.REC, L.RECS, L.SEN, L.EEN, L.EndIteration
+_RECN = L.RECN
+_EENS = L.EENS  # storm cut the placement mid-fill
 _INUN = L.INUNDATION
 _PER = L.Periodic
 
 # reach-scope decision aliases
-_TRIG, _SKIP, _DEFER, _INTR, _SDEFER = (
+_TRIG, _SKIP, _DEFER, _INTR, _SDEFER, _EMER = (
     D.NOURISH_TRIGGER,
     D.NOURISH_SKIP,
     D.BLACKOUT_DEFER,
     D.INTERRUPT,
     D.STORM_DEFER,
+    D.NOURISH_EMERGENCY,
 )
 
 
@@ -185,7 +247,10 @@ class Case:
     desc: str
     make: Callable[[], tuple[list[Profile], RecordingSink]]
     expected: dict[str, list]  # per profile: a sequence of L or (L, t) time-pinned entries
-    # interval assertions in days: (profile_id, from_idx, to_idx, days)
+    # Interval assertions in days: (profile_id, from, to, days), where each endpoint is
+    # an (label, nth-occurrence) pair — NOT a position in the sequence.  Naming the
+    # endpoints keeps the interval anchored to the events it measures, so inserting a
+    # label elsewhere in the sequence can't silently re-point it at the wrong pair.
     durations: list = field(default_factory=list)
     # reach-scope decision kinds, in emission order (asserted once per scenario)
     decisions: list = field(default_factory=list)
@@ -197,14 +262,16 @@ CASES = [
         "1_recovery",
         "sub-trigger deficit → NOURISH_SKIP + recovery",
         _recovery,
-        {"p0": [_I, (_PRE, 20.0), (_POST, 20.5), _REC, _END]},
+        # REC lands at storm_end + campaign_offset + T_recover = 20.501 + 21 (true
+        # completion), not the far window end.
+        {"p0": [_I, (_PRE, 20.0), (_POST, 20.5), (_REC, 41.501), _END]},
         decisions=[_SKIP],
     ),
     Case(
         "2_nourish_single",
         "chunk deficit → single nourishment",
         _nourish_single,
-        {"p0": [_I, _PRE, (_POST, 20.5), (_SSN, 20.5), _ESN, _END]},
+        {"p0": [_I, _PRE, (_POST, 20.5), (_SEN, 20.501), _EEN, _END]},
         decisions=[_TRIG],
     ),
     Case(
@@ -212,8 +279,8 @@ CASES = [
         "multi-profile nourishment, serial crew",
         _nourish_multi,
         {
-            "p0": [_I, _PRE, (_POST, 20.5), (_SSN, 20.5), _ESN, _END],
-            "p1": [_I, _PRE, (_POST, 20.5), _REC, _SSN, _ESN, _END],
+            "p0": [_I, _PRE, (_POST, 20.5), (_SEN, 20.501), _EEN, _END],
+            "p1": [_I, _PRE, (_POST, 20.5), _RECN, _SEN, _EEN, _END],
         },
         decisions=[_TRIG],  # one reach-level trigger; crew serves both profiles
     ),
@@ -221,22 +288,24 @@ CASES = [
         "4_interrupt_single",
         "nourishment interrupted 14 days in, then resumes",
         _interrupt_single,
-        # SSN starts at the storm (t=20); the 2nd storm interrupts 14 days later
-        # (t=34); the campaign resumes there (SSN t=34). Placement length is emergent.
+        # SEN starts at the storm (t=20); the 2nd storm interrupts 14 days later
+        # (t=34); the campaign resumes there (SEN t=34). Placement length is emergent.
         {
             "p0": [
                 _I,
                 _PRE,
                 (_POST, 20.5),
-                (_SSN, 20.5),
+                (_SEN, 20.501),
+                (_EENS, 34.0),  # 2nd storm cuts the placement short (partial fill)
                 (_PRE, 34.0),
                 (_POST, 34.5),
-                (_SSN, 34.5),
-                _ESN,
+                (_SEN, 34.501),
+                _EEN,
                 _END,
             ]
         },
-        durations=[("p0", 3, 6, 14.0)],  # SSN(start) → SSN(resume) = 14-day interrupt gap
+        # the crew starts, is cut off, and resumes 14 days later at the 2nd storm
+        durations=[("p0", (_SEN, 0), (_SEN, 1), 14.0)],
         decisions=[_TRIG, _INTR, _TRIG],  # launch → interrupted → resume
     ),
     Case(
@@ -248,11 +317,12 @@ CASES = [
                 _I,
                 _PRE,
                 (_POST, 20.5),
-                (_SSN, 20.5),
+                (_SEN, 20.501),
+                (_EENS, 34.0),  # 2nd storm cuts the placement short (partial fill)
                 (_PRE, 34.0),
                 (_POST, 34.5),
-                (_SSN, 34.5),
-                _ESN,
+                (_SEN, 34.501),
+                _EEN,
                 _END,
             ],
             "p1": [
@@ -262,20 +332,22 @@ CASES = [
                 (_RECS, 34.0),  # 2nd storm cuts recovery short (13.5d < T_recover 21d)
                 _PRE,
                 (_POST, 34.5),
-                _REC,  # recovery up to this profile's own nourishment start (not storm-forced)
-                _SSN,
-                _ESN,
+                _RECN,  # recovery up to this profile's own nourishment start (crew, not storm)
+                _SEN,
+                _EEN,
                 _END,
             ],
         },
-        durations=[("p0", 3, 6, 14.0)],
+        durations=[("p0", (_SEN, 0), (_SEN, 1), 14.0)],
         decisions=[_TRIG, _INTR, _TRIG],
     ),
     Case(
         "7_blackout",
         "nourishment deferred past a blackout window",
         _blackout,
-        {"p0": [_I, _PRE, (_POST, 20.5), _REC, (_SSN, 50.0), _ESN, _END]},
+        # recovery completes (41.501) before the blackout-deferred crew arrives (50),
+        # so it's a full REC at completion, then SEN waits for the window.
+        {"p0": [_I, _PRE, (_POST, 20.5), (_REC, 41.501), (_SEN, 50.0), _EEN, _END]},
         decisions=[_TRIG, _DEFER],
     ),
     Case(
@@ -314,9 +386,9 @@ CASES = [
         "10_storm_defer",
         "storm-conflicting placement deferred to next window (BeachFX defer policy)",
         _defer_single,
-        # Counterpart to 4_interrupt_single: rather than split SSN@20.5 → SSN@34.5,
+        # Counterpart to 4_interrupt_single: rather than split SEN@20.5 → SEN@34.5,
         # the placement is deferred (recovery-only over gap 1), then placed atomically
-        # in gap 2 — one SSN→ESN, no partial.
+        # in gap 2 — one SEN→EEN, no partial.
         {
             "p0": [
                 _I,
@@ -325,12 +397,55 @@ CASES = [
                 (_RECS, 34.0),  # placement deferred → recovery-only, cut short by the 2nd storm
                 (_PRE, 34.0),
                 (_POST, 34.5),
-                (_SSN, 34.5),
-                _ESN,
+                (_SEN, 34.501),
+                _EEN,
                 _END,
             ]
         },
         decisions=[_TRIG, _SDEFER, _TRIG],  # launch → storm-defer → resume in clear window
+    ),
+    Case(
+        "11_emergency_only",
+        "no volume gate → emergency_volume force mobilizes the reach",
+        _emergency_only,
+        # Same sequence as 2_nourish_single, but reached through the force path: the
+        # reach decision is NOURISH_EMERGENCY, not NOURISH_TRIGGER.
+        {"p0": [_I, _PRE, (_POST, 20.5), (_SEN, 20.501), _EEN, _END]},
+        decisions=[_EMER],
+    ),
+    Case(
+        "12_mobilization",
+        "crew lead-time delays SEN and recovers over the gap first",
+        _mobilization,
+        # mobilization_days=5 → crew arrives at storm_end(20.5)+5=25.5; the profile
+        # recovers up to the crew's arrival (REC@25.5) before the placement starts.
+        {"p0": [_I, _PRE, (_POST, 20.5), (_RECN, 25.501), (_SEN, 25.501), _EEN, _END]},
+        # PostStorm → SEN = 5-day mobilization + the 0.001-day campaign-start offset
+        durations=[("p0", (_POST, 0), (_SEN, 0), 5.001)],
+        decisions=[_TRIG],
+    ),
+    Case(
+        "13_blackout_block",
+        "blackout spanning a gap blocks the campaign → re-triggers next gap",
+        _blackout_block,
+        # Gap 1: blackout (20,38) pushes the start past storm 2 (t=34) → BLOCKED, no
+        # SEN, recovery cut short (RECS@34).  Gap 2: re-triggers, defers to the
+        # blackout end (38), recovers up to it, then places.
+        {
+            "p0": [
+                _I,
+                _PRE,
+                (_POST, 20.5),
+                (_RECS, 34.0),
+                (_PRE, 34.0),
+                (_POST, 34.5),
+                (_RECN, 38.0),
+                (_SEN, 38.0),
+                _EEN,
+                _END,
+            ]
+        },
+        decisions=[_TRIG, _DEFER, _TRIG, _DEFER],  # blocked launch → re-launch, both defer
     ),
 ]
 
@@ -349,9 +464,30 @@ def _labels_times(expected: list):
     return labs, times
 
 
+def _nth_time(p, label: L, n: int) -> float:
+    """Time of the ``n``th (0-based) occurrence of ``label`` on this profile."""
+    return times_of(p, label)[n]
+
+
+_MADE: dict[str, Made] = {}
+
+
+def made(make: Callable[[], Made]) -> Made:
+    """Run a scenario once and reuse it.
+
+    Each scenario is a full lifecycle, and three parametrized tests plus the timing
+    tests below all want the same one — re-running it per test bought nothing but
+    wall-clock.  The tests only read the result, so one run serves them all.
+    """
+    key = make.__name__
+    if key not in _MADE:
+        _MADE[key] = make()
+    return _MADE[key]
+
+
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_event_sequence(case: Case, record_event):
-    profiles, _sink = case.make()
+    profiles, _sink = made(case.make)
     by_id = {p.id: p for p in profiles}
     durs_by_pid: dict[str, list] = {}
     for pid_, a, b, days in case.durations:
@@ -382,11 +518,13 @@ def test_event_sequence(case: Case, record_event):
                     f"{case.id}/{pid} {exp_labels[i].value}@idx{i}: {gen_times[i]} != {want_t}"
                 )
 
-    # interval-in-days assertions
+    # interval-in-days assertions, endpoints named by (label, nth occurrence)
     for pid_, a, b, days in case.durations:
-        ts = [s.t for s in by_id[pid_].snapshots]
-        assert (ts[b] - ts[a]) == pytest.approx(days), (
-            f"{case.id}/{pid_} interval [{a}→{b}]: {ts[b] - ts[a]} != {days}d"
+        p = by_id[pid_]
+        elapsed = _nth_time(p, *b) - _nth_time(p, *a)
+        assert elapsed == pytest.approx(days), (
+            f"{case.id}/{pid_} interval [{a[0].value}#{a[1]}→{b[0].value}#{b[1]}]: "
+            f"{elapsed} != {days}d"
         )
 
 
@@ -394,7 +532,7 @@ def test_event_sequence(case: Case, record_event):
 def test_snapshot_times_non_decreasing(case: Case):
     """Generic invariant across all scenarios (INIT-first/EndIteration-last are
     already pinned by the exact-sequence assertions above)."""
-    profiles, _ = case.make()
+    profiles, _ = made(case.make)
     for p in profiles:
         ts = [s.t for s in p.snapshots]
         assert ts == sorted(ts)
@@ -403,7 +541,7 @@ def test_snapshot_times_non_decreasing(case: Case):
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_reach_decisions(case: Case):
     """Reach-scope decision stream — asserted once per scenario (not per profile)."""
-    _profiles, sink = case.make()
+    _profiles, sink = made(case.make)
     assert sink.decision_kinds == case.decisions, f"{case.id}: {sink.decisions}"
 
 
@@ -412,33 +550,33 @@ def test_reach_decisions(case: Case):
 
 def test_multi_nourish_crew_is_serial():
     """Single crew: the second profile starts only after the first completes."""
-    (p0, p1), _ = _nourish_multi()
-    assert times_of(p0, L.ESN)[0] <= times_of(p1, L.SSN)[0]
+    (p0, p1), _ = made(_nourish_multi)
+    assert times_of(p0, L.EEN)[0] <= times_of(p1, L.SEN)[0]
 
 
 def test_blackout_start_after_window():
-    (p0,), _ = _blackout()
-    assert times_of(p0, L.SSN)[0] >= 50.0
+    (p0,), _ = made(_blackout)
+    assert times_of(p0, L.SEN)[0] >= 50.0
 
 
 def test_interrupt_completes_once_after_resume():
-    (p0,), _ = _interrupt_single()
-    esns = times_of(p0, L.ESN)
-    assert len(esns) == 1
-    assert esns[0] > times_of(p0, L.PreStorm)[1]  # completed after the 2nd storm
+    (p0,), _ = made(_interrupt_single)
+    completions = times_of(p0, L.EEN)
+    assert len(completions) == 1  # the partial closes as EENS; only the resume completes
+    assert completions[0] > times_of(p0, L.PreStorm)[1]  # completed after the 2nd storm
 
 
 def test_interrupt_multi_queued_profile_last():
     """p1 waits for the crew and finishes after p0."""
-    (p0, p1), _ = _interrupt_multi()
-    assert times_of(p1, L.ESN)[0] >= times_of(p0, L.ESN)[0]
+    (p0, p1), _ = made(_interrupt_multi)
+    assert times_of(p1, L.EEN)[0] >= times_of(p0, L.EEN)[0]
 
 
 # --- INUNDATION: interim skip-and-reuse handling ---------------------------
 
 
 def test_inundation_no_poststorm_and_marks_snapshot():
-    (p0,), _ = _inundation()
+    (p0,), _ = made(_inundation)
     inun = [s for s in p0.snapshots if s.label == L.INUNDATION]
     assert L.PostStorm not in labels(p0)  # storm skipped, no CSHORE response
     assert len(inun) == 1
@@ -447,9 +585,9 @@ def test_inundation_no_poststorm_and_marks_snapshot():
 
 def test_inundation_skips_phase3_no_recovery():
     """HACK (interim): no storm ⇒ no recovery/nourishment for an inundated profile."""
-    (p0,), _ = _inundation()
+    (p0,), _ = made(_inundation)
     assert L.REC not in labels(p0)
-    assert L.SSN not in labels(p0)
+    assert L.SEN not in labels(p0)
 
 
 def test_inundation_isolated_per_profile():
@@ -462,7 +600,7 @@ def test_inundation_isolated_per_profile():
         cfg=_nourish_cfg(production_rate=100.0),
     )[0]
     assert L.INUNDATION in labels(p0) and L.PostStorm not in labels(p0)
-    assert L.ESN in labels(p1)
+    assert L.EEN in labels(p1)
 
 
 def test_inundation_records_output_warning():

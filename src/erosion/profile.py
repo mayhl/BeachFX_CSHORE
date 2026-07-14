@@ -281,9 +281,10 @@ class Recovery(ProfileEvent):
     (shifted by shoreline offset) by the phase runner before constructing this event.
     Only nodes below ``z_berm`` are blended; nodes at or above are left unchanged.
 
-    ``interrupted`` marks a recovery a following storm cut short before ``T_recover``
-    elapsed (BeachFX's forced-recovery ``RECS``); a recovery that ran its full period
-    snapshots ``REC``.
+    ``interrupted`` marks a recovery cut short before ``T_recover`` elapsed; ``by_nourishment``
+    then says which agent cut it: the crew arriving to nourish (``RECN``) vs a following
+    storm (BeachFX's forced-recovery ``RECS``).  A recovery that ran its full period (or to
+    the sim/window end) snapshots ``REC``.
     """
 
     event_type: ClassVar[str] = "Recovery"
@@ -292,6 +293,7 @@ class Recovery(ProfileEvent):
     zb_pre_storm: np.ndarray
     z_berm: float | None = None
     interrupted: bool = False
+    by_nourishment: bool = False  # cut short by the crew, not a storm → RECN vs RECS
 
     def _payload(self) -> dict:
         return {"fraction": float(self.fraction), "interrupted": bool(self.interrupted)}
@@ -300,22 +302,30 @@ class Recovery(ProfileEvent):
         profile.zb = recovered_bed(
             self.zb_post_storm, self.zb_pre_storm, self.fraction, self.z_berm, base_zb=profile.zb
         )
-        label = SnapshotLabel.RECS if self.interrupted else SnapshotLabel.REC
+        if self.interrupted:
+            label = SnapshotLabel.RECN if self.by_nourishment else SnapshotLabel.RECS
+        else:
+            label = SnapshotLabel.REC
         profile.snapshot(label, self.t)
         self._emit(profile, label)
 
 
 @dataclass
 class FullNourishment(ProfileEvent):
-    """Place complete nourishment template (campaign reaches this profile fully)."""
+    """Place complete nourishment template (campaign reaches this profile fully).
+
+    ``label`` is the campaign's end marker — ``EEN`` for a post-storm response,
+    ``ESN`` for a periodic planned cycle (``CampaignKind.end_label``).
+    """
 
     event_type: ClassVar[str] = "FullNourishment"
     template_zb: np.ndarray
+    label: SnapshotLabel = SnapshotLabel.EEN
 
     def apply(self, profile: Profile) -> None:
         profile.zb = self.template_zb.copy()
-        profile.snapshot(SnapshotLabel.ESN, self.t)
-        self._emit(profile, SnapshotLabel.ESN)
+        profile.snapshot(self.label, self.t)
+        self._emit(profile, self.label)
         # Reset ref_metrics to the post-nourishment shape so subsequent storm
         # fits are constrained to the new equilibrium dune position.
         if profile.snapshots and profile.snapshots[-1].metrics is not None:
@@ -326,21 +336,22 @@ class FullNourishment(ProfileEvent):
 class PartialNourishment(ProfileEvent):
     """Place partial nourishment toward template (campaign interrupted before completion).
 
-    Applied mid-segment after ``run_campaign`` has already emitted the ``SSN``
-    start marker, so this takes no snapshot of its own — the campaign records the
-    partial via ``record_nourishment`` and the interrupted bed is captured by the
-    next storm's ``PreStorm`` snapshot.  An ``ESN`` is emitted only on resume-to-
-    completion, so a partial segment is ``SSN`` with no matching ``ESN``.
+    Closes the segment the campaign's start marker (``SEN``/``SSN``) opened, with the
+    storm-cut end marker (``EENS``/``ESNS`` — ``CampaignKind.partial_label``).  The
+    full-fill end markers (``EEN``/``ESN``) are emitted only on resume-to-completion, so
+    every placement segment is a matched pair and the label alone says whether the crew
+    finished.  A resumed campaign opens a fresh segment with its own start marker.
     """
 
     event_type: ClassVar[str] = "PartialNourishment"
     template_zb: np.ndarray
     fraction: float
+    label: SnapshotLabel = SnapshotLabel.EENS
 
     def _payload(self) -> dict:
         return {"fraction": float(self.fraction)}
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb + self.fraction * (self.template_zb - profile.zb)
-        # No snapshot of its own (see class docstring); the log still records the placement.
-        self._emit(profile, None)
+        profile.snapshot(self.label, self.t)
+        self._emit(profile, self.label)

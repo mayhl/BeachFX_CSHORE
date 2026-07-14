@@ -2,29 +2,33 @@
 
 from erosion.types import SnapshotLabel, StormResponseType
 
-# Canonical snapshot-label vocabulary — must stay in sync with the C++/RAG label
-# set (see the morphology-labels reference). Pinned deliberately: changing a
-# label is a contract change that should require editing this set too.
-CPLUS_LABELS = {
+# Canonical snapshot-label vocabulary — the C++/RAG label set (see the
+# morphology-labels reference) plus the Python-model extensions the port adds
+# (``Periodic``, ``INUNDATION``, ``RECN``).  Pinned deliberately: changing a label
+# is a contract change that should require editing this set too.
+SNAPSHOT_LABELS = {
     "INIT",
     "PreStorm",
     "PostStorm",
-    "INUNDATION",
+    "INUNDATION",  # Python-model: CSHORE failure, profile reused
     "RECS",
     "REC",
+    "RECN",  # Python-model: recovery cut short by the crew arriving to nourish
     "Pre-PDI",
     "Post-PDI",
     "SSN",
     "ESN",
     "SEN",
     "EEN",
+    "EENS",  # Python-model: storm-triggered campaign cut short by the next storm
+    "ESNS",  # Python-model: planned cycle cut short by the next storm
     "EndIteration",
-    "Periodic",
+    "Periodic",  # Python-model: inter-storm erosion tick
 }
 
 
 def test_snapshot_label_vocabulary():
-    assert {label.value for label in SnapshotLabel} == CPLUS_LABELS
+    assert {label.value for label in SnapshotLabel} == SNAPSHOT_LABELS
 
 
 def test_storm_response_type_contract():

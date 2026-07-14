@@ -103,8 +103,8 @@ class ResultsSink:
     def record_decision(self, kind, t: float, profile_id: str | None = None, **payload) -> None:
         """Record a reach/SIM-scope orchestrator decision (NOURISH_TRIGGER, …).
 
-        No-op in the base sink; a capturing/recording sink collects them, and the
-        (future) event-log sink persists them as ``scope=REACH/SIM`` rows.
+        No-op in the base sink; the parquet sink persists them to
+        ``decisions.parquet`` (the reach-scope counterpart of ``events.parquet``).
         """
 
     def flush(self, profiles: list[Profile], meta: RunMeta) -> None: ...
@@ -124,6 +124,7 @@ class ParquetResultsSink(ResultsSink):
             storm_hazard.parquet    # CSHORE spatial output — one row per (profile, storm, node)
             profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
             profile_events.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+            decisions.parquet       # reach-scope orchestrator decisions — one row each
             segment_events.csv      # nourishment placement events
             run_metadata.json
             run_summary.txt
@@ -144,6 +145,7 @@ class ParquetResultsSink(ResultsSink):
         self._storm_times: set[float] = set()
         self._nourishment_rows: list[dict] = []
         self._warning_rows: list[dict] = []
+        self._decision_rows: list[dict] = []
         # Run config embedded in every parquet footer (self-describing outputs).
         self._config_json = config.model_dump_json() if config is not None else None
         self._footer: dict | None = None
@@ -203,6 +205,25 @@ class ParquetResultsSink(ResultsSink):
             }
         )
 
+    def record_decision(self, kind, t: float, profile_id: str | None = None, **payload) -> None:
+        """Persist a reach-scope orchestrator decision (why the crew mobilized, deferred,
+        or placed a partial fill) — the audit trail behind the profile-scope events.
+
+        ``decision_seq`` is the emission order, and it is the only ordering that holds:
+        a decision is logged at the time it *concerns*, which is not the time it was
+        taken (INTERRUPT carries the next storm's date, BLACKOUT_DEFER the window's), so
+        ``t`` alone is not monotone.  Payload keys vary by kind, so absent keys land null.
+        """
+        self._decision_rows.append(
+            {
+                "decision_seq": len(self._decision_rows),
+                "kind": getattr(kind, "value", kind),
+                "t": float(t),
+                "profile_id": profile_id,
+                **payload,
+            }
+        )
+
     def record_warning(self, profile_id: str, t: float, message: str) -> None:
         """Record a non-fatal run warning (e.g. a skipped/inundated storm).
 
@@ -220,6 +241,7 @@ class ParquetResultsSink(ResultsSink):
         self._write_storm_hazard()
         self._write_profile_metrics(profiles)
         self._write_profile_events(profiles)
+        self._write_decisions()
         self._write_segment_events()
         self._write_warnings()
         self._write_metadata(meta, profiles)
@@ -332,6 +354,17 @@ class ParquetResultsSink(ResultsSink):
         if rows:
             self._to_parquet(pd.DataFrame(rows), "profile_events.parquet")
 
+    def _write_decisions(self) -> None:
+        """Reach-scope decision log — the counterpart of ``events.parquet``.  Always
+        written (an empty frame is the honest record of a run that decided nothing)."""
+        base_cols = ["decision_seq", "kind", "t", "profile_id"]
+        df = (
+            pd.DataFrame(self._decision_rows)
+            if self._decision_rows
+            else pd.DataFrame(columns=base_cols)
+        )
+        self._to_parquet(df, "decisions.parquet")
+
     def _write_segment_events(self) -> None:
         cols = [
             "event_type",
@@ -365,6 +398,7 @@ class ParquetResultsSink(ResultsSink):
             "n_storms": len(self._storm_times),
             "n_events": sum(len(p.events) for p in profiles),
             "n_nourishment": len(self._nourishment_rows),
+            "n_decisions": len(self._decision_rows),
             "n_warnings": len(self._warning_rows),
         }
         with open(os.path.join(self.out_dir, "run_metadata.json"), "w") as f:
@@ -386,6 +420,7 @@ class ParquetResultsSink(ResultsSink):
             f.write(f"Hazard rows:  {n_hazard_rows}\n")
             f.write(f"Metric rows:  {n_metrics}\n")
             f.write(f"Nourishment:  {len(self._nourishment_rows)}\n")
+            f.write(f"Decisions:    {len(self._decision_rows)}\n")
             f.write(f"Warnings:     {len(self._warning_rows)}\n")
             for w in self._warning_rows:
                 f.write(f"  ! t={w['t']:.1f}d  {w['profile_id']}: {w['message']}\n")
