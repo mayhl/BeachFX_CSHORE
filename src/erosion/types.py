@@ -71,8 +71,6 @@ class DecisionKind(Enum):
     NOURISH_EMERGENCY = "NOURISH_EMERGENCY"  # dune below geometric trigger → forced mobilization
     NOURISH_CYCLE = "NOURISH_CYCLE"  # periodic cycle came due and cleared the volume gate
     CYCLE_DEFER = "CYCLE_DEFER"  # cycle pushed past an in-progress recovery or into a later gap
-    MOBILIZE = "MOBILIZE"  # crew lead-time before it can start
     BLACKOUT_DEFER = "BLACKOUT_DEFER"  # placement start pushed past a blackout window
     INTERRUPT = "INTERRUPT"  # next storm cut the campaign (partial place) — interrupt policy
     STORM_DEFER = "STORM_DEFER"  # start delayed past a storm-conflicting window — defer policy
-    WINDOW_EXTENDED = "WINDOW_EXTENDED"  # sim window extended to finish a campaign

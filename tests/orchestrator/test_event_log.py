@@ -3,7 +3,7 @@
 Complements ``test_event_sequences`` (which asserts snapshot-label ordering) by
 checking the parallel ``profile.events`` log that the Phase-A output spine
 persists — event types, scalar payloads, and the inert ``ref_pos`` seam.
-Physics-independent via ``MockCSStorm``.
+Physics-independent via ``ScriptedRunner``.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
 from erosion.profile import Profile, StormResponse
 from erosion.runner.base import CSHOREResult
-from erosion.runner.mock import MockCSStorm
 from erosion.types import SnapshotLabel as L
 from tests.builders import RecordingSink, ncfg, run, storms_at, template_profile
+from tests.doubles import MASSIVE, MINOR, NONE, SEVERE, Inundation, ScriptedRunner
 
 # Observation snapshots (not state transitions) carry no event-log entry.
 _OBSERVATION_LABELS = {L.INIT.value, L.PreStorm.value, L.EndIteration.value}
@@ -27,9 +27,15 @@ def _etypes(p) -> list[str]:
     return [e.event_type for e in p.events]
 
 
+# z_berm masks recovery to the sub-berm face — without it recovery blends the dune
+# toward the shoreline-shifted pre-storm bed (see test_event_sequences._STORM).
+_STORM = {"z_berm": 2.0}
+
+
 def _nourish_cfg(production_rate: float = 100.0) -> ReachConfig:
     return ReachConfig(
-        nourishment=ncfg(volume_trigger=30.0, production_rate=production_rate, assessor="volume")
+        storm=_STORM,
+        nourishment=ncfg(volume_trigger=30.0, production_rate=production_rate, assessor="volume"),
     )
 
 
@@ -45,7 +51,7 @@ def _run_one(runner, cfg):
 
 
 def test_storm_and_recovery_logged():
-    p = _run_one(MockCSStorm(0.2), _nourish_cfg())  # small chunk -> recover, no nourish
+    p = _run_one(ScriptedRunner(MINOR), _nourish_cfg())  # under the gate -> recover, no nourish
     types = _etypes(p)
     assert "StormResponse" in types
     assert "Recovery" in types
@@ -54,30 +60,30 @@ def test_storm_and_recovery_logged():
 
 
 def test_full_nourishment_logged():
-    p = _run_one(MockCSStorm(1.0), _nourish_cfg())  # big chunk -> campaign
+    p = _run_one(ScriptedRunner(SEVERE), _nourish_cfg())  # over the gate -> campaign
     types = _etypes(p)
     assert "NourishmentStart" in types  # SEN marker
     assert "FullNourishment" in types  # EEN completion
 
 
 def test_inundation_logged():
-    p = _run_one(MockCSStorm("inundation"), _nourish_cfg())
+    p = _run_one(ScriptedRunner(Inundation()), _nourish_cfg())
     assert "Inundation" in _etypes(p)
 
 
 def test_erosion_tick_logged_with_payload():
-    cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=10.0))
-    p = _run_one(MockCSStorm(0.5), cfg)
+    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, interval=10.0))
+    p = _run_one(ScriptedRunner(MINOR), cfg)
     ticks = [e for e in p.events if e.event_type == "ErosionTick"]
     assert ticks
     assert set(ticks[0].payload) == {"dz_erosion", "dz_slc"}
 
 
 def test_storm_response_payload_carries_valid_domain_metadata():
-    p = _run_one(MockCSStorm(0.2), _nourish_cfg())
+    p = _run_one(ScriptedRunner(MINOR), _nourish_cfg())
     sr = next(e for e in p.events if e.event_type == "StormResponse")
     assert set(sr.payload) >= {"runup_m", "jr", "n_extrapolated"}
-    # MockCSStorm returns result.x == profile.x -> nothing extrapolated, whole domain wet
+    # ScriptedRunner returns result.x == profile.x -> nothing extrapolated, whole domain wet
     assert sr.payload["n_extrapolated"] == 0
     assert sr.payload["jr"] == len(p.x)
 
@@ -101,7 +107,7 @@ def test_event_labels_match_transition_snapshots():
     # Every mutating snapshot has a matching event; observation snapshots
     # (INIT / PreStorm / EndIteration) do not.  No partial nourishment here, so
     # every event carries a snapshot label.
-    p = _run_one(MockCSStorm(1.0), _nourish_cfg())
+    p = _run_one(ScriptedRunner(SEVERE), _nourish_cfg())
     snap_labels = {s.label.value for s in p.snapshots} - _OBSERVATION_LABELS
     event_labels = {e.label for e in p.events if e.label is not None}
     assert event_labels == snap_labels
@@ -109,13 +115,13 @@ def test_event_labels_match_transition_snapshots():
 
 def test_ref_pos_seam_is_inert():
     # ``ref_pos`` is recorded but unused until Phase C — every entry is None.
-    p = _run_one(MockCSStorm(1.0), _nourish_cfg())
+    p = _run_one(ScriptedRunner(SEVERE), _nourish_cfg())
     assert p.events
     assert all(e.ref_pos is None for e in p.events)
 
 
 def test_events_are_time_ordered():
-    p = _run_one(MockCSStorm(1.0), _nourish_cfg())
+    p = _run_one(ScriptedRunner(SEVERE), _nourish_cfg())
     ts = [e.t for e in p.events]
     assert ts == sorted(ts)
 
@@ -142,8 +148,8 @@ def test_events_parquet_roundtrips_full_lifecycle():
             [template_profile("p0")],
             storms_df=storms_at([20, 34]),
             sim_end=100.0,
-            runner=MockCSStorm({"p0": [2.0, 0.2]}),  # big chunk → slow-rate interrupt → partial
-            cfg=_nourish_cfg(production_rate=5.0),
+            runner=ScriptedRunner({"p0": [MASSIVE, NONE]}),  # ~15.5d fill vs 13.5d gap → partial
+            cfg=_nourish_cfg(production_rate=4.0),
             sink=sink,
         )
         p = profiles[0]

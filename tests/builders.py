@@ -177,13 +177,19 @@ def template_profile(pid: str = "p0") -> Profile:
     """A clean as-built berm+dune profile, fit to ``ref_metrics`` so the parametric
     restore template reconstructs its own shape (fresh deficit ≈ 0).
 
-    Pair with ``MockCSStorm(depth)``: a uniform scoop drops the bed below the
-    synthesized restore target, so the assessor sizes a deficit that scales with
-    depth — a small chunk stays sub-trigger (→ recovery), a large chunk trips it
-    (→ nourishment).  Pair with ``ncfg(assessor="volume")`` so the dune doesn't
-    auto-classify to the legacy geometric assessor.
+    The dune is trapezoidal — an engineered dune is built to a design crest width, so a
+    flat top is the case worth defaulting to; a triangular knife-edge is the exception.
+
+    Damage it with the forms in ``tests/doubles.py`` (``BermCut``, ``DuneCut``,
+    ``Overwash``): each states the damage as morphology and leaves a deficit the real
+    assessor measures, so a scenario says what it means instead of tuning a scoop depth
+    against a threshold.
     """
-    x, z, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=DuneSpec(crest_elevation=5.0))
+    x, z, _ = make_profile(
+        berm_elevation=2.0,
+        berm_width=30.0,
+        dune=DuneSpec(shape="trapezoidal", crest_elevation=5.0, top_width=10.0),
+    )
     ref, _ = fit_profile(x, z, 2.0, 0.0)
     return Profile(id=pid, x=x, zb=z.copy(), d50=0.3, ref_metrics=ref)
 

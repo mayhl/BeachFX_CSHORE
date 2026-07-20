@@ -1,6 +1,6 @@
 """Post-processing tests: common-grid establishment + hydro registration.
 
-Runs a lifecycle through ``MockCSStorm``, flushes, then exercises the distinct
+Runs a lifecycle through ``ScriptedRunner``, flushes, then exercises the distinct
 ``postprocess_lifecycle`` pass — physics-independent.
 """
 
@@ -21,19 +21,20 @@ from erosion.postprocess import (
 )
 from erosion.profile import Georef
 from erosion.results import ParquetResultsSink, read_parquet_footer
-from erosion.runner.mock import MockCSStorm
 from tests.builders import ncfg, run, storms_at, template_profile
+from tests.doubles import SEVERE, ScriptedRunner
 
 
 def _flush_lifecycle(root):
     cfg = ReachConfig(
-        nourishment=ncfg(volume_trigger=30.0, production_rate=100.0, assessor="volume")
+        storm={"z_berm": 2.0},
+        nourishment=ncfg(volume_trigger=30.0, production_rate=100.0, assessor="volume"),
     )
     sink = ParquetResultsSink(root, "reach1", "FWP", lifecycle=0, config=cfg)
     profiles, _ = run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=cfg,
         sink=sink,
     )
@@ -130,7 +131,7 @@ def test_georef_produces_lonlat_grid_and_reach_polygon():
         p = template_profile("p0")
         p.georef = Georef(origin_lon=-78.0, origin_lat=34.0, azimuth_deg=90.0)
         sink = ParquetResultsSink(root, "reach1", "FWP", lifecycle=0, config=cfg)
-        run([p], storms_df=storms_at([20]), runner=MockCSStorm(1.0), cfg=cfg, sink=sink)
+        run([p], storms_df=storms_at([20]), runner=ScriptedRunner(SEVERE), cfg=cfg, sink=sink)
         postprocess_lifecycle(sink.out_dir)
         grid = pd.read_parquet(os.path.join(sink.out_dir, "grid.parquet"))
         assert {"lon", "lat"} <= set(grid.columns)

@@ -1,19 +1,24 @@
-"""The periodic (planned) nourishment cycle — calendar-driven renourishment.
+"""The management calendar — cycle backlog and campaign carry-forward.
 
-BeachFX lays every cycle down up front: the first at ``gdatePlannedNourishmentStartDate``,
-then one every ``365 × gdwNourishmentTimeIncrement`` days to the end of the simulation
-(cShoreResponseIteration.cpp:137-155).  We do the same, then track which cycle the reach
-still owes — a cycle that can't run in its own inter-storm gap (the reach is still
-recovering, or the next storm is too close) stays owed and is retried in the next gap.
+This is the decision layer's persistent state: everything the reach remembers
+about management time between storm intervals, gathered so it can cross a
+process boundary in one picklable piece.  BeachFX lays every planned cycle down
+up front: the first at ``gdatePlannedNourishmentStartDate``, then one every
+``365 × gdwNourishmentTimeIncrement`` days to the end of the simulation
+(cShoreResponseIteration.cpp:137-155).  We do the same, then track which cycle
+the reach still owes.
 """
 
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from typing import TYPE_CHECKING
 
-from .config import NourishmentConfig
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from ..nourishment.config import NourishmentConfig
 
 _DAYS_PER_YEAR = 365.0
 
@@ -78,3 +83,24 @@ class CycleTracker:
     def clear(self) -> None:
         """The owed cycle ran — the reach owes nothing until the next one comes due."""
         self.owed = None
+
+
+@dataclass
+class ActiveCampaign:
+    """Carry-forward state when a nourishment campaign is interrupted by a storm."""
+
+    crew_on_site: bool
+    priority_order: list[str]  # profile IDs in remaining campaign order
+
+
+@dataclass
+class CalendarState:
+    """Everything the decision layer remembers between intervals — one picklable piece.
+
+    The crew clock is deliberately NOT here: it lives only inside one planning call
+    (a fold over that campaign's placements); its cross-interval residue is
+    ``campaign.crew_on_site``.
+    """
+
+    cycles: CycleTracker = field(default_factory=CycleTracker)
+    campaign: ActiveCampaign | None = None

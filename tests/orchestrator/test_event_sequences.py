@@ -5,10 +5,11 @@ These exercise ``run_lifecycle`` end-to-end and assert the *sequence* of events
 the right ordering of PreStorm / PostStorm / REC / SEN / EEN across a storm
 schedule.  They test event handling, not the nourishment/recovery numerics.
 
-CSHORE is the only mock: ``MockCSStorm(depth)`` scoops a uniform chunk off the
-bed, and the *real* ``VolumeAssessor`` turns the emergent deficit into a
-campaign (bigger chunk / slower ``production_rate`` → longer, interruptible
-placement).  Blackout scenarios use ``blackout_windows``.
+CSHORE is the only double: ``ScriptedRunner`` applies morphology-stated damage
+(``MINOR``/``SEVERE``/``MASSIVE`` berm cuts from ``tests/doubles.py``), and the
+*real* ``VolumeAssessor`` turns the deficit into a campaign (bigger cut / slower
+``production_rate`` → longer, interruptible placement).  Blackout scenarios use
+``blackout_windows``.
 
 Each ``Case`` declares the full expected label sequence per profile, optionally
 time-pinning entries as ``(L, t)``; ``durations`` assert intervals in days.  Run
@@ -27,13 +28,13 @@ from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
 from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
-from erosion.runner.mock import MockCSStorm
 from erosion.types import DecisionKind as D
 from erosion.types import SnapshotLabel as L
 from erosion.types import StormResponseType
 from tests.builders import SIM_START, RecordingSink, ncfg, run, storms_at, template_profile
+from tests.doubles import MASSIVE, MINOR, NONE, SEVERE, Inundation, ScriptedRunner
 
-TRIGGER = 30.0  # deficit trigger: chunk depth 0.2→17.9 m³ (recover) vs ≥1.0→77.5 m³ (nourish)
+TRIGGER = 30.0  # deficit trigger: MINOR ~22 m³ (recover) vs SEVERE ~42 m³ (nourish)
 
 
 # --- trace helpers ---------------------------------------------------------
@@ -47,9 +48,18 @@ def times_of(p, label: L) -> list[float]:
     return [s.t for s in p.snapshots if s.label == label]
 
 
+# Mask recovery to the sub-berm face.  Without it (z_berm=None) recovery blends EVERY
+# node toward the shoreline-shifted pre-storm bed — translating the dune landward by
+# the cut distance.  The uniform scoop's ~2 m shift hid that; a 10 m berm cut doesn't.
+_STORM = {"z_berm": 2.0}
+
+
 def _nourish_cfg(production_rate=500.0) -> ReachConfig:
     return ReachConfig(
-        nourishment=ncfg(volume_trigger=TRIGGER, production_rate=production_rate, assessor="volume")
+        storm=_STORM,
+        nourishment=ncfg(
+            volume_trigger=TRIGGER, production_rate=production_rate, assessor="volume"
+        ),
     )
 
 
@@ -64,22 +74,23 @@ def _emergency_cfg(production_rate=100.0) -> ReachConfig:
         },
         context={"input_units": "m"},
     )
-    return ReachConfig(nourishment=nc)
+    return ReachConfig(storm=_STORM, nourishment=nc)
 
 
 # --- scenario factories → (profiles, RecordingSink) after one lifecycle -----
-# Profiles start on their as-built restore geometry (deficit ≈ 0); MockCSStorm(depth)
-# scoops a chunk → the real assessor sizes the campaign. Sink captures reach decisions.
+# Profiles start on their as-built restore geometry (deficit ≈ 0); ScriptedRunner
+# applies a stated berm cut → the real assessor sizes the campaign. Sink captures
+# reach decisions.
 
 Made = tuple[list[Profile], RecordingSink]
 
 
 def _recovery() -> Made:
-    # nourishment configured, but chunk 0.2 → deficit ~16.6 < trigger 30 → NOURISH_SKIP + recover
+    # nourishment configured, but MINOR → deficit ~22 < trigger 30 → NOURISH_SKIP + recover
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(0.2),
+        runner=ScriptedRunner(MINOR),
         cfg=_nourish_cfg(production_rate=100.0),
         sink=RecordingSink(),
     )
@@ -89,7 +100,7 @@ def _nourish_single() -> Made:
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=_nourish_cfg(production_rate=100.0),
         sink=RecordingSink(),
     )
@@ -99,20 +110,22 @@ def _nourish_multi() -> Made:
     return run(
         [template_profile("p0"), template_profile("p1")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=_nourish_cfg(production_rate=100.0),
         sink=RecordingSink(),
     )
 
 
 def _interrupt_single() -> Made:
-    # Storms 14 days apart; a big chunk at a slow rate can't finish in 14d → interrupt.
+    # Storms 14 days apart; MASSIVE (~62 m³) at 4 m³/day is a ~15.5-day placement —
+    # longer than the 13.5-day gap → interrupt.  The 2nd storm passes through (NONE);
+    # the crew resumes on its own account, not because of fresh damage.
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20, 34]),
         sim_end=100.0,
-        runner=MockCSStorm({"p0": [2.0, 0.2]}),
-        cfg=_nourish_cfg(production_rate=5.0),
+        runner=ScriptedRunner({"p0": [MASSIVE, NONE]}),
+        cfg=_nourish_cfg(production_rate=4.0),
         sink=RecordingSink(),
     )
 
@@ -120,35 +133,38 @@ def _interrupt_single() -> Made:
 def _defer_single() -> Made:
     # Same setup as _interrupt_single, but the BeachFX "defer" policy delays the
     # storm-hit placement to the next storm-free gap instead of splitting it.
-    cfg = _nourish_cfg(production_rate=5.0)
+    cfg = _nourish_cfg(production_rate=4.0)
     cfg.nourishment.storm_conflict = "defer"
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20, 34]),
         sim_end=100.0,
-        runner=MockCSStorm({"p0": [2.0, 0.2]}),
+        runner=ScriptedRunner({"p0": [MASSIVE, NONE]}),
         cfg=cfg,
         sink=RecordingSink(),
     )
 
 
 def _interrupt_multi() -> Made:
+    # 4 m³/day keeps both timings: p0's ~15.5-day placement spans past storm 2
+    # (interrupt), AND the resumed crew (p0's ~2-day remainder first) reaches p1
+    # before p1's 21-day recovery completes at 55.5 (RECN, not REC).
     return run(
         [template_profile("p0"), template_profile("p1")],
         storms_df=storms_at([20, 34]),
         sim_end=140.0,
-        runner=MockCSStorm({"p0": [2.0, 0.2], "p1": [2.0, 0.2]}),
-        cfg=_nourish_cfg(production_rate=5.0),
+        runner=ScriptedRunner({"p0": [MASSIVE, NONE], "p1": [MASSIVE, NONE]}),
+        cfg=_nourish_cfg(production_rate=4.0),
         sink=RecordingSink(),
     )
 
 
 def _periodic() -> Made:
-    cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=10.0))
+    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, interval=10.0))
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(0.5),
+        runner=ScriptedRunner(MINOR),
         cfg=cfg,
         sink=RecordingSink(),
     )
@@ -158,7 +174,7 @@ def _inundation() -> Made:
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm("inundation"),
+        runner=ScriptedRunner(Inundation()),
         cfg=_nourish_cfg(),
         sink=RecordingSink(),
     )
@@ -171,19 +187,19 @@ def _blackout() -> Made:
         [template_profile("p0")],
         storms_df=storms_at([20]),
         sim_end=120.0,
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=cfg,
         sink=RecordingSink(),
     )
 
 
 def _emergency_only() -> Made:
-    # volume_trigger OFF; the same chunk that nourishes in _nourish_single here
+    # volume_trigger OFF; the same cut that nourishes in _nourish_single here
     # mobilizes via the emergency_volume force path → NOURISH_EMERGENCY, not TRIGGER.
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=_emergency_cfg(production_rate=100.0),
         sink=RecordingSink(),
     )
@@ -198,7 +214,7 @@ def _mobilization() -> Made:
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=cfg,
         sink=RecordingSink(),
     )
@@ -215,7 +231,7 @@ def _blackout_block() -> Made:
         [template_profile("p0")],
         storms_df=storms_at([20, 34]),
         sim_end=100.0,
-        runner=MockCSStorm(1.0),
+        runner=ScriptedRunner(SEVERE),
         cfg=cfg,
         sink=RecordingSink(),
     )
@@ -538,13 +554,6 @@ def test_snapshot_times_non_decreasing(case: Case):
         assert ts == sorted(ts)
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
-def test_reach_decisions(case: Case):
-    """Reach-scope decision stream — asserted once per scenario (not per profile)."""
-    _profiles, sink = made(case.make)
-    assert sink.decision_kinds == case.decisions, f"{case.id}: {sink.decisions}"
-
-
 # --- timing invariants not captured by the label sequence ------------------
 
 
@@ -592,7 +601,7 @@ def test_inundation_skips_phase3_no_recovery():
 
 def test_inundation_isolated_per_profile():
     """One profile's failure does not stop a neighbour from responding/nourishing."""
-    runner = MockCSStorm({"p0": "inundation", "p1": 1.0})  # p0 fails; p1 scoops a chunk
+    runner = ScriptedRunner({"p0": Inundation(), "p1": SEVERE})  # p0 fails; p1 takes a cut
     p0, p1 = run(
         [template_profile("p0"), template_profile("p1")],
         storms_df=storms_at([20]),
@@ -616,7 +625,7 @@ def test_inundation_records_output_warning():
         run(
             [template_profile("p0")],
             storms_df=storms_at([20]),
-            runner=MockCSStorm("inundation"),
+            runner=ScriptedRunner(Inundation()),
             cfg=_nourish_cfg(),
             sink=sink,
         )

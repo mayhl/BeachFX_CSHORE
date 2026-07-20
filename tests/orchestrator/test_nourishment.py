@@ -1,4 +1,4 @@
-"""Unit tests for campaign runner: _next_available and run_campaign."""
+"""Unit tests for the campaign runner and the Tier-1 assessors."""
 
 import tempfile
 
@@ -6,23 +6,19 @@ import numpy as np
 import pytest
 
 from erosion.config import ReachConfig
+from erosion.decision import ActiveCampaign
 from erosion.metrics import fit_profile
 from erosion.nourishment import (
-    ActiveCampaign,
     FittedAssessor,
-    ProfileNourishmentPlan,
-    ReachNourishmentDecider,
     VolumeAssessor,
     _depth_of_closure,
-    _next_available,
-    _Work,
     run_campaign,
 )
 from erosion.profile import Profile, ProfileGeometryConfig
 from erosion.results import NullResultsSink, ParquetResultsSink
 from erosion.runner.base import CSHOREResult
 from erosion.storm import StormOutcome
-from erosion.types import DecisionKind, SnapshotLabel
+from erosion.types import SnapshotLabel
 from tests.builders import ncfg as _ncfg
 from tests.builders import profile as _p
 from tests.builders import template_profile
@@ -57,26 +53,6 @@ def _outcomes(profiles: list[Profile], zb_pre=None) -> list[StormOutcome]:
     """Wrap profiles + pre-storm beds as (non-inundated) StormOutcomes for run_campaign."""
     zb = zb_pre if zb_pre is not None else _zb_pre(profiles)
     return [StormOutcome(p, _OK_RESULT, zbp) for p, zbp in zip(profiles, zb)]
-
-
-class TestNextAvailable:
-    def test_no_blackout_returns_t(self):
-        assert _next_available(10.0, 5.0, []) == pytest.approx(10.0)
-
-    def test_inside_blackout_defers_to_end(self):
-        # [10, 15) overlaps [12, 20) → defer to 20
-        assert _next_available(10.0, 5.0, [(12.0, 20.0)]) == pytest.approx(20.0)
-
-    def test_entirely_after_blackout_no_defer(self):
-        assert _next_available(25.0, 5.0, [(12.0, 20.0)]) == pytest.approx(25.0)
-
-    def test_consecutive_blackouts_skips_both(self):
-        # [0,6) hits [5,15) → defer to 15; [15,21) hits [15,25) → defer to 25
-        assert _next_available(0.0, 6.0, [(5.0, 15.0), (15.0, 25.0)]) == pytest.approx(25.0)
-
-    def test_start_exactly_at_blackout_end_ok(self):
-        # t=20, duration=5: [20,25) — blackout ends at 20 → no overlap
-        assert _next_available(20.0, 5.0, [(12.0, 20.0)]) == pytest.approx(20.0)
 
 
 class TestRunCampaignNoNourishment:
@@ -157,37 +133,6 @@ class TestRunCampaignStormInterrupt:
         )
         assert campaign is not None
         assert campaign.crew_on_site is True  # folded from the deleted test_interrupts.py
-
-
-class TestReachNourishmentDecider:
-    """Tier-2 gate + placement ordering in isolation."""
-
-    def _work(self, pid: str, deficit: float) -> _Work:
-        p = _p(pid)
-        w = _Work(p, p.zb.copy(), p.zb.copy(), 1.0)
-        w.plan = ProfileNourishmentPlan(pid, deficit, p.zb.copy(), priority_score=deficit)
-        return w
-
-    def test_below_trigger_skips(self):
-        works = [self._work("p0", 1.0)]
-        d = ReachNourishmentDecider().decide(works, None, _ncfg(volume_trigger=1e9))
-        assert d.mobilize is False
-        assert d.kind is DecisionKind.NOURISH_SKIP
-        assert d.order == []
-
-    def test_above_trigger_orders_by_priority_desc(self):
-        works = [self._work("p0", 1.0), self._work("p1", 5.0)]
-        d = ReachNourishmentDecider().decide(works, None, _ncfg(volume_trigger=0.001))
-        assert d.mobilize is True
-        assert d.kind is DecisionKind.NOURISH_TRIGGER
-        assert [w.profile.id for w in d.order] == ["p1", "p0"]  # higher deficit first
-
-    def test_crew_on_site_bypasses_gate_with_prior_order_first(self):
-        works = [self._work("p0", 1.0), self._work("p1", 5.0)]
-        prior = ActiveCampaign(crew_on_site=True, priority_order=["p0", "p1"])
-        d = ReachNourishmentDecider().decide(works, prior, _ncfg(volume_trigger=1e9))
-        assert d.mobilize is True and d.resume is True  # gate bypassed
-        assert [w.profile.id for w in d.order] == ["p0", "p1"]  # prior rank wins over priority
 
 
 class TestFittedAssessor:
@@ -680,26 +625,6 @@ class TestEmergencyTrigger:
         assert FittedAssessor().emergency_force(a, cfg) is False
         ncfg.emergency_volume = 50.0
         assert FittedAssessor().emergency_force(a, cfg) is True  # volume fallback
-
-    def test_decider_force_override_mobilizes_below_gate(self):
-        w = _Work(_p("p0"), np.zeros(1), np.zeros(1), 1.0)
-        w.plan = ProfileNourishmentPlan("p0", 1.0, np.zeros(1), priority_score=1.0)
-        d = ReachNourishmentDecider().decide([w], None, _ncfg(volume_trigger=1e9), forced=True)
-        assert d.mobilize is True
-        assert d.forced is True  # emergency, not the volume gate
-        assert d.kind is DecisionKind.NOURISH_EMERGENCY
-
-    def test_emergency_only_has_no_volume_gate(self):
-        """volume_trigger=None (emergency-only reach): no deficit ever mobilizes the
-        regular gate; only an emergency force does."""
-        ncfg = _ncfg()
-        ncfg.volume_trigger = None  # regular gate off
-        w = _Work(_p("p0"), np.zeros(1), np.zeros(1), 1.0)
-        w.plan = ProfileNourishmentPlan("p0", 1e9, np.zeros(1), priority_score=1.0)  # huge deficit
-        cold = ReachNourishmentDecider().decide([w], None, ncfg, forced=False)
-        assert cold.mobilize is False  # no gate, no force -> skip
-        hot = ReachNourishmentDecider().decide([w], None, ncfg, forced=True)
-        assert hot.mobilize is True and hot.kind is DecisionKind.NOURISH_EMERGENCY
 
     def test_forced_dune_only_profile_gets_placed(self):
         """A profile whose dune trips the emergency but whose berm is intact

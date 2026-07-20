@@ -14,12 +14,13 @@ import pytest
 from pydantic import ValidationError
 
 from erosion.config import ReachConfig
+from erosion.decision import CycleTracker, cycle_times
 from erosion.interstorm import UniformErosionConfig
-from erosion.nourishment import CycleTracker, NourishmentConfig, cycle_times
-from erosion.runner.mock import MockCSStorm
+from erosion.nourishment import NourishmentConfig
 from erosion.types import DecisionKind as D
 from erosion.types import SnapshotLabel as L
 from tests.builders import SIM_START, RecordingSink, run, storms_at, template_profile
+from tests.doubles import MINOR, ScriptedRunner
 
 YEAR = 365.0
 
@@ -43,7 +44,8 @@ def _cycle_cfg(
         payload["cycle_start_date"] = SIM_START + timedelta(days=start_day)
     nc = NourishmentConfig.model_validate(payload, context={"input_units": "m"})
     erosion = UniformErosionConfig(rate=erosion_rate, interval=10.0) if erosion_rate else None
-    return ReachConfig(nourishment=nc, erosion=erosion)
+    # z_berm masks recovery to the sub-berm face (see test_event_sequences._STORM)
+    return ReachConfig(storm={"z_berm": 2.0}, nourishment=nc, erosion=erosion)
 
 
 # --- cycle dates -----------------------------------------------------------
@@ -148,7 +150,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20]),
             sim_end=300.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -166,7 +168,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20]),
             sim_end=300.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -181,7 +183,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20]),
             sim_end=300.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -204,7 +206,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20]),
             sim_end=300.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -227,7 +229,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20]),
             sim_end=400.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -246,7 +248,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([20, 210]),
             sim_end=400.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
@@ -266,7 +268,7 @@ class TestPlannedCycleRun:
             [template_profile("p0")],
             storms_df=storms_at([], sim_start=datetime(2030, 1, 1)),
             sim_end=300.0,
-            runner=MockCSStorm(0.2),
+            runner=ScriptedRunner(MINOR),
             cfg=cfg,
             sink=RecordingSink(),
         )
