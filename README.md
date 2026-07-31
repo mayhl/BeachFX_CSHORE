@@ -2,47 +2,71 @@
 
 The **erosion module** of CHART FEAT — a Python simulation framework for storm-driven erosion of ocean-facing sandy beaches, using CSHORE as the 1D cross-shore morphology engine. It couples a multi-decade lifecycle orchestrator with CSHORE per-storm response to support Coastal Storm Risk Management (CSRM) feasibility studies, and supports multi-reach, multi-alternative (FWOP/FWP), and multi-lifecycle Monte Carlo simulations.
 
+## Orientation
+
+One run expands into independent jobs, one per (reach × alternative × lifecycle), dispatched on a Dask process pool. Each job replays its lifecycle's storm schedule through an interval loop (`reach.py::Reach.run`): between storms the bed is lowered by background erosion and sea-level ticks; at each storm every profile gets its own CSHORE subprocess, and the resulting bed is interpolated back onto the profile's fixed grid; after each storm a campaign assesses each profile's sand deficit against its restore template, a reach-level decider compares the total to the volume trigger (or emergency dune thresholds), and a single serial crew places fill profile-by-profile at the production rate — everything the crew doesn't reach relaxes back toward its pre-storm shape over `T_recover` days. Calendar-driven nourishment cycles can also fire in quiet gaps. Every bed change appends a labeled snapshot; each job flushes parquet tables (beds, hydro, metrics, events, decisions) into `output/{reach}/{alt}/lc_NNNN/`.
+
 ## Structure
 
 ```
 src/
-  erosion/             # the erosion module (interval-loop simulation engine)
-    reach.py           # run_lifecycle() — the lifecycle orchestrator
-    interstorm.py      # Phase 1: background erosion + sea-level-change ticks
-    storm.py           # Phase 2: parallel CSHORE driver + storm scheduling
-    nourishment.py     # Phase 3: berm recovery + nourishment campaigns
-    profile.py         # Profile data + profile events (StormResponse, Recovery, ...)
-    metrics.py         # BeachFX morphology classification + 0-D metrics
-    config.py          # ReachConfig, CSHOREParams, NourishmentConfig, ...
-    units.py           # unit-aware config fields (ft/m, cy/m3)
-    results.py         # ParquetResultsSink (output writer)
-    geometry.py        # profile CSV loading
-    viz.py             # plotting helpers
-    runner/            # CSHORE execution boundary
-      base.py          # CSHORERunner ABC, CSHOREResult
-      local.py         # LocalCSHORERunner (subprocess)
-      mock.py          # MockCSHORERunner (tests)
-      cshore_io.py     # CSHORE infile generation + ODOC/OBPROF/OSETUP parsing
-      vfall.py         # sediment fall-velocity (CSHORE wf input)
-    pipeline.py      # main entry point (run-pipeline console script)
-  executables/         # CSHORE binaries (macOS, Linux, Windows)
+  erosion/               # the erosion module (interval-loop simulation engine)
+    pipeline.py          # config → jobs → Dask dispatch; the run-pipeline CLI
+    reach.py             # Reach.run() — the interval loop; decides with `decision`, executes physics
+    storm.py             # storm scheduling + parallel CSHORE driver + response classification
+    interstorm.py        # background erosion + sea-level-change ticks between storms
+    profile.py           # Profile data + profile events (StormResponse, Recovery, ...)
+    decision/            # pure management-calendar planning (no physics imports)
+      calendar.py        #   persistent state: cycle backlog + campaign carry-forward
+      model.py           #   the decision vocabulary (frozen dataclasses)
+      planner.py         #   the interval planner: campaign gate, crew-clock fold, cycle logic
+      emit.py            #   the one decision→sink funnel
+    nourishment/         # assess deficits, execute campaigns (the physics side)
+      config.py          #   NourishmentConfig + geometry thresholds
+      assess.py          #   Tier-1 assessors + parametric template synthesis
+      campaign.py        #   work bundles + recovery application
+      execute.py         #   the campaign executor (plays the planner's decisions)
+    metrics/             # morphology fitting (berm/dune detection + idealized forms)
+    runner/              # CSHORE execution boundary
+      base.py            #   CSHORERunner ABC, CSHOREResult
+      local.py           #   LocalCSHORERunner (subprocess)
+      mock.py            #   MockCSHORERunner (tests)
+      cshore_io.py       #   CSHORE infile generation + ODOC/OBPROF/OSETUP parsing (vendored)
+      vfall.py           #   sediment fall-velocity (CSHORE wf input)
+    config.py            # ReachConfig root model
+    types.py             # shared enums: snapshot labels, campaign/decision kinds
+    units.py             # unit-aware config fields (ft/m, cy/m3)
+    results.py           # ParquetResultsSink (output writer)
+    postprocess.py       # after-the-run registration pass (common grid + hydro)
+    summary.py           # after-the-run derived metrics
+    sweep.py             # gen-alternatives CLI (offline cartesian plan generator)
+    geometry.py          # profile CSV loading
+    viz.py               # plotting helpers
+  executables/           # CSHORE binaries (macOS, Linux, Windows)
 data/
-  profiles/            # cross-shore profile CSVs (x ft, z ft, NAVD88)
-  storms/              # storm forcing parquets (one row per hydrograph timestep)
+  profiles/              # cross-shore profile CSVs (x ft, z ft, NAVD88)
+  storms/                # storm forcing parquets (one row per hydrograph timestep)
 examples/
-  configs/             # example config files (ex1–ex4)
-tests/                 # unit + integration test suite
+  configs/               # example config files (ex1–ex4)
+tests/                   # unit + integration test suite
 ```
 
 ## Architecture
 
 Each lifecycle runs as an **interval loop** over the storm schedule
-(`erosion/reach.py::run_lifecycle`). For every storm, three phases execute in order:
+(`erosion/reach.py::Reach.run`). For every storm, the phases execute in order:
 
-1. **Inter-storm** (`run_interstorm`) — apply background erosion and sea-level-change ticks from the previous storm up to this one.
-2. **Storm response** (`run_parallel_cshore`) — run CSHORE for every profile in parallel (one subprocess per profile, capped at CPU count); interpolate each result back onto the profile's fixed grid.
-3. **Campaign** (`run_campaign`) — post-storm berm recovery, then any triggered nourishment, scheduled by priority across profiles.
+1. **Phase 1 — pre-storm erosion/SLC** (`run_interstorm`) — background erosion and sea-level-change ticks from the previous storm up to this one.
+2. **Phase 1.5 — planned cycle** — a calendar-driven nourishment cycle due in the pre-storm gap.
+3. **Phase 2 — storm response** (`run_parallel_cshore`) — run CSHORE for every profile in parallel (one subprocess per profile, capped at CPU count); interpolate each result back onto the profile's fixed grid.
+4. **Phase 2.5 — gap erosion** (`run_interstorm` over [storm, next]) — pauses at a due cycle's date so the cycle assesses the beach as of its own date.
+5. **Phase 3 — campaign** (`run_campaign`) — post-storm recovery plus any triggered nourishment, placed by a serial crew in priority order.
+6. **Phase 3.5 — planned cycle** — a cycle due in the post-storm gap.
 
+Decision-making and physics are separate layers. The `decision` package is a pure,
+picklable planner — it sees only scalars, dates, and config, and returns decision
+dataclasses (launch/skip/defer/interrupt); it never imports physics. The physics
+side (`nourishment`, `storm`, `interstorm`, `profile`) executes those decisions.
 Profiles are pure data; physics is applied through small `ProfileEvent` types
 (`StormResponse`, `Recovery`, `FullNourishment`, `PartialNourishment`, `ErosionTick`).
 CSHORE is pluggable behind the `CSHORERunner` interface (`LocalCSHORERunner` for the
@@ -57,16 +81,21 @@ against `examples/configs/`) or by path:
 uv run run-pipeline ex1    # single reach, single profile, FWOP
 uv run run-pipeline ex2    # single reach, 3 profiles with priority ordering
 uv run run-pipeline ex3    # 3 reaches, 2-3 profiles each
-uv run run-pipeline ex4    # single reach, FWOP vs FWP (with nourishment)
+uv run run-pipeline ex4    # single reach, FWOP vs FWP nourishment plans
 
-# By path, and with a worker cap:
+# By path, with a worker cap, or running a subset of alternatives:
 uv run run-pipeline examples/configs/ex3_multi_reach_multi_profile.json --workers 4
+uv run run-pipeline ex4 --run FWP
 
 # Equivalent module form:
 uv run python -m erosion ex1
 ```
 
 Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
+
+> **NOTE:** input paths (`paths.storms`, profile CSVs) resolve against the
+> repository root, but `paths.output` resolves against the current working
+> directory — run from a checkout.
 
 ## Config Format
 
@@ -83,11 +112,9 @@ Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
     },
     "FWP": {
       "nourishment": {
-        "template_x": [0, 100, 120, 140, 200, 370, 800, 1600],
-        "template_z": [1.8, 1.8, 2.4, 2.4, 1.2, -1.5, -5.5, -9.3],
         "volume_trigger": 25000,
-        "production_rate": 5000,
-        "evaluation_interval": 365
+        "production_rate": 500000,
+        "template_geometry": { "berm_width": 200, "dune_height": 5.0 }
       }
     }
   },
@@ -100,6 +127,41 @@ Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
 }
 ```
 
+The restore target is **parametric** (`template_geometry`: berm width/height,
+foreshore slope, dune height/width/form) and is synthesized per profile on its
+own grid; any field left unset falls back to the profile's measured as-built
+geometry, so an empty `template_geometry` means restore-to-as-built. Nourishment
+triggers: `volume_trigger` (reach-level deficit gate), `emergency_volume`
+(per-profile forced mobilization), and `trigger_geometry` dune thresholds
+(dune-aware assessors); at least one must be active. Calendar-driven cycles
+(`cycle_interval_years`, `cycle_start_date`) propose on schedule and the volume
+gate disposes, so a healthy beach skips its cycle.
+
+### Nourishment plan table (schema v2)
+
+Instead of spelling alternatives out, a top-level `nourishment` table keyed by
+plan id can be referenced per reach — each referenced plan becomes an
+alternative, and shared `storm`/`erosion`/`slc` sections are hoisted to the
+global level (see `ex4`):
+
+```json
+{
+  "storm":   { "T_recover": 21.0 },
+  "nourishment": {
+    "FWOP": { "volume_trigger": 50000, "production_rate": 500000 },
+    "FWP":  { "volume_trigger": 25000, "production_rate": 500000 }
+  },
+  "reaches": {
+    "Reach1": { "profiles": ["data/profiles/reach1_p0.csv"], "nourishment": ["FWOP", "FWP"] }
+  }
+}
+```
+
+A top-level `"run"` key (or the `--run` CLI flag, e.g. `--run FWP` or
+`--run '1-4,8'`) selects which alternative ids to execute; the default runs all.
+The `gen-alternatives` console script (`sweep.py`) generates cartesian plan
+tables offline.
+
 ### Parameter override hierarchy
 
 CSHORE parameters merge in three layers — each layer overrides only the keys it specifies:
@@ -110,7 +172,10 @@ global "cshore"          ← shared defaults (dx, gamma, iprofl, ...)
         └── alt "cshore" ← per-alternative overrides (rare)
 ```
 
-Alternative sub-dicts (`storm`, `erosion`, `slc`, `nourishment`) follow the same pattern independently — FWP only needs to declare what differs from FWOP. Keys absent at a lower level fall through to the level above.
+The other sections (`storm`, `erosion`, `slc`, `nourishment`) follow the same
+pattern independently, whether declared globally or per alternative — FWP only
+needs to declare what differs from FWOP. Keys absent at a lower level fall
+through to the level above.
 
 ## Unit Awareness
 
@@ -129,11 +194,9 @@ No `units` key needed. All dimensional length fields are interpreted as feet. No
     },
     "FWP": {
       "nourishment": {
-        "template_x":      [0, 328, 394, 459, 656, 1214, 2625, 5249],
-        "template_z":      [5.9, 5.9, 7.9, 7.9, 3.9, -4.9, -18.0, -30.5],
         "volume_trigger":  90000,
         "production_rate": 1500000,
-        "evaluation_interval": 365
+        "template_geometry": { "berm_width": 200, "dune_height": 6.5 }
       }
     }
   },
@@ -146,7 +209,7 @@ No `units` key needed. All dimensional length fields are interpreted as feet. No
 }
 ```
 
-`template_x`/`template_z` in feet. `volume_trigger` = 90,000 cy (3-D reach total). `production_rate` = 1,500,000 cy/yr. `longshore_width` = 1,000 ft.
+`template_geometry` lengths in feet. `volume_trigger` = 90,000 cy (3-D reach total). `production_rate` = 1,500,000 cy/yr. `longshore_width` = 1,000 ft.
 
 ### Switching to meters globally
 
@@ -162,11 +225,9 @@ Add `"units": {"input": "m"}` at the top level. Length fields interpret bare num
     },
     "FWP": {
       "nourishment": {
-        "template_x":      [0, 100, 120, 140, 200, 370, 800, 1600],
-        "template_z":      [1.8, 1.8, 2.4, 2.4, 1.2, -1.5, -5.5, -9.3],
         "volume_trigger":  75000,
-        "production_rate": 1200000,
-        "evaluation_interval": 365
+        "production_rate": 3300,
+        "template_geometry": { "berm_width": 60, "dune_height": 2.0 }
       }
     }
   },
@@ -179,7 +240,7 @@ Add `"units": {"input": "m"}` at the top level. Length fields interpret bare num
 }
 ```
 
-`volume_trigger` = 75,000 m³. `production_rate` = 1,200,000 m³/yr (bare float interpreted as m³/yr when `input_units=m`). `longshore_width` = 305 m.
+`volume_trigger` = 75,000 m³. `production_rate` = 3,300 m³/day (bare float interpreted as m³/day when `input_units=m`). `longshore_width` = 305 m.
 
 ### Explicit per-field units (override global)
 
@@ -189,11 +250,11 @@ Any field can take `{"value": ..., "units": "..."}` to override the global setti
 {
   "units": { "input": "m" },
   "nourishment": {
-    "template_x":      [0, 100, 120, 200, 800],
-    "template_z":      [1.8, 1.8, 2.4, 1.2, -5.5],
     "volume_trigger":  { "value": 90000,   "units": "cy" },
     "production_rate": { "value": 1500000, "units": "cy/yr" },
-    "evaluation_interval": 365
+    "template_geometry": {
+      "berm_width": { "value": 200, "units": "ft" }
+    }
   },
   "reaches": {
     "Reach1": {
@@ -268,27 +329,41 @@ uv run examples/chs_to_parquet.py \
 ## Output Layout
 
 ```
-output/{reach}/{alternative}/lc_{lc:04d}/
-  profiles.parquet        # all labeled snapshots — profile_id, label, t, node_idx, x, zb
-  storm_hazard.parquet    # per-storm CSHORE output — profile_id, t_storm, node_idx, x, mwl, Hs, runup_m
-  profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
-  profile_events.parquet  # per-(profile, snapshot) log + storm_response_type
-  segment_events.csv      # nourishment events — event_type, profile_id, t_start, t_end, volume_m3, volume_cy
-  run_metadata.json
-  run_summary.txt
+output/
+  storm_events.csv          # run-level storm log across lifecycles
+  {reach}/{alternative}/lc_{lc:04d}/
+    profiles.parquet        # all labeled snapshots — profile_id, label, t, node_idx, x, zb
+    storm_hazard.parquet    # per-storm CSHORE output — profile_id, t_storm, node_idx, x, mwl, Hs, runup_m
+    profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
+    profile_events.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+    events.parquet          # append-only profile event log (the audit trail of applied physics)
+    decisions.parquet       # reach-scope decisions — launches, skips, defers, interrupts
+    segment_events.csv      # nourishment placement events — profile_id, t_start, t_end, volumes
+    warnings.csv            # surfaced run warnings (e.g. CSHORE failures)
+    run_metadata.json
+    run_summary.txt
 ```
 
-Snapshot labels follow the Beach-fx convention: `INIT`, `PreStorm`, `PostStorm`, `INUNDATION`, `RECS`, `REC`, `Pre-PDI`, `Post-PDI`, `SSN`, `ESN`, `SEN`, `EEN`, `Periodic`, `EndIteration`.
+Every parquet carries the full `ReachConfig` and run identity in its key-value
+footer (`results.read_parquet_footer`), so outputs are self-describing.
+
+Snapshot labels follow the Beach-fx convention: `INIT`, `PreStorm`, `PostStorm`,
+`INUNDATION`, `RECS`, `REC`, `RECN`, `Pre-PDI`, `Post-PDI`, `SSN`, `ESN`, `SEN`,
+`EEN`, `EENS`, `ESNS`, `Periodic`, `EndIteration`. The nourishment pairs mark
+segment start/end: `SEN`/`EEN` = storm-triggered campaign, `SSN`/`ESN` = planned
+cycle, with a trailing `S` (`EENS`, `ESNS`) when a storm cut the placement short.
 
 ## Parallelism
 
-Lifecycles within each (reach, alternative) pair run in parallel via Dask:
+Jobs — one per (reach, alternative, lifecycle) — run in parallel on a Dask
+process pool; each worker receives only its own lifecycle's storm slice:
 
 ```bash
 uv run run-pipeline ex3 --workers 4
 ```
 
-Workers share the storms DataFrame in memory (thread mode — no serialisation overhead). Dask dashboard available at `http://localhost:8787` during the run.
+Within each storm, CSHORE subprocesses run per profile on a thread pool capped
+at CPU count. Dask dashboard available at `http://localhost:8787` during the run.
 
 ## Dependencies
 

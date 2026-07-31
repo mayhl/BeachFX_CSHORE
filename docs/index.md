@@ -6,15 +6,16 @@ change, and emergency nourishment layered on the gridded-array chain.
 
 ## Where to start
 
-- **[Nourishment model](design/NOURISHMENT_MODEL.md)** — the per-storm decision
-  tree (flowchart) and the numerics behind each node (equations), each pinned to
-  its code site. Start here for *how the model decides*.
-- **[Architecture of record](design/ARCHITECTURE_nourishment.md)** — the design
-  rationale: the BeachFX ↔ MATLAB lineage merge, the two-tier decider, and the
-  phased build plan.
+- **The repository `README.md`** — orientation, quick start, config format,
+  output layout. Start here.
 - **API reference** — generated from the source docstrings:
   [Nourishment](api/nourishment.md) · [Metrics / fitter](api/metrics.md) ·
   [Storm & recovery](api/storm.md).
+- **Design specs (local only)** — [Nourishment model](design/NOURISHMENT_MODEL.md)
+  (the per-storm decision tree and its numerics) and
+  [Architecture of record](design/ARCHITECTURE_nourishment.md) (the BeachFX ↔
+  MATLAB lineage merge and design rationale). These are untracked working
+  documents — the links resolve only in a checkout that has them.
 
 ## The one-paragraph model
 

@@ -1,99 +1,66 @@
-# BeachFX-CSHORE Configuration Guide
+# CSHORE Parameter Reference
 
-All runtime inputs are declared in `config.json` at the project root.
+Run configuration (paths, simulation window, alternatives, reaches, units) is
+documented in the [README](README.md#config-format). This page is the reference
+for the `cshore` section only — every key lives flat under `cshore` (globally,
+per reach, or per alternative; see the README's override hierarchy) and maps
+onto `CSHOREParams` (`src/erosion/runner/local.py`), which carries the defaults
+listed here.
 
-## 1. Paths (`paths`)
+The CSHORE binary is selected automatically by platform from `src/executables/`
+— no config needed.
 
-| Key | Description |
-|---|---|
-| `data` | Root folder for input data files |
-| `storms` | Path to storm forcing parquet file |
-| `infiles` | Where generated CSHORE input files are written |
-| `outfiles` | Where results and plots are written |
+## Calibration parameters
 
-The CSHORE binary is selected automatically by platform from `src/executables/` — no config needed.
+| Key | Default | Description |
+|---|---|---|
+| `d50` | 0.3 | Median sediment grain size (mm); also the reach-wide default for profile init |
+| `blp` | 0.001 | Bedload parameter |
+| `effb` | 0.002 | Suspension efficiency from wave breaking |
+| `gamma` | 0.7 | Breaking wave height-to-depth ratio |
+| `efff` | 0.005 | Suspension efficiency from bottom friction |
+| `slp` | 0.5 | Suspended load parameter |
+| `slpot` | 0.1 | Overtopping suspended load parameter |
+| `tanphi` | 0.63 | Tangent of sediment friction angle |
+| `dx` | 1.0 | Cross-shore grid spacing (m) — CSHORE-native units, immune to the global `units` setting |
+| `rwh` | 0.02 | Numerical runup wire height (m) |
+| `fw` | 0.015 | Bed friction factor applied at every node |
 
-## 2. Profile (`profile`)
+## Physical constants (rarely changed)
 
-Each reach is a named entry with two fields:
+| Key | Default | Description |
+|---|---|---|
+| `sg` | 2.65 | Specific gravity of sand (quartz) |
+| `sporo` | 0.4 | Sediment porosity |
+| `temp` | 20.0 | Water temperature (°C) for fall-velocity calculation |
+| `salin` | 0.0 | Salinity (ppt) |
 
-```json
-"profile": {
-    "Reach1": { "d50": 0.3, "file": "data/Profile.csv" }
-}
-```
+## Model logic flags
 
-| Key | Description |
-|---|---|
-| `d50` | Median sediment grain size (mm) |
-| `file` | Path to cross-shore profile CSV (feet, Beach-FX seaward-positive convention) |
+CSHORE Fortran engine control flags — same section, same flat keys.
 
-Profile CSV format: two columns `x, z` (no header), values in feet. The loader converts to meters and reverses to CSHORE's landward-positive convention automatically. To add a new reach, add an entry here — no code changes needed.
+| Key | Default | Description |
+|---|---|---|
+| `iprofl` | 1.1 | Morphology update: `1.1` = active erosion/accretion, `0` = fixed bed |
+| `iline` | 1 | Wave transformation mode |
+| `isedav` | 0 | Sediment availability: `0` = unlimited, `1` = hard bottom |
+| `iperm` | 0 | Permeability: `0` = impermeable, `1` = permeable |
+| `iover` | 1 | Overtopping: `1` = on, `0` = off |
+| `infilt` | 0 | Infiltration landward of dune crest: `1` = on |
+| `iwtran` | 0 | Wave transmission through overtopping |
+| `ipond` | 0 | Ponding landward of structure |
+| `iwcint` | 0 | Wave-current interaction |
+| `iroll` | 0 | Wave roller physics |
+| `iwind` | 0 | Wind effects |
+| `itide` | 0 | Tidal effect on currents |
+| `ilab` | 0 | Boundary condition timing — **must be `0` for field conditions** |
 
-## 3. CSHORE Physics (`cshore`)
+## Profile CSVs
 
-| Key | Description |
-|---|---|
-| `dx` | Cross-shore grid spacing (m) |
-| `gamma` | Breaking wave height-to-depth ratio (default 0.7) |
-| `effb` | Suspension efficiency from wave breaking (default 0.002) |
-| `efff` | Suspension efficiency from bottom friction (default 0.005) |
-| `slp` | Suspended load parameter |
-| `slpot` | Overtopping suspended load parameter |
-| `tanphi` | Tangent of sediment friction angle |
-| `blp` | Bedload parameter |
-| `rwh` | Wave runup height parameter |
-| `sporo` | Sediment porosity (typically 0.4) |
-| `sg` | Specific gravity of sand (typically 2.65 for quartz) |
-| `temp` | Water temperature (°C) for fall velocity calculation |
-| `salin` | Salinity (ppt) |
-| `fw` | Bed friction factor applied at every node |
+Profile files are listed per reach (`reaches.<name>.profiles`). Format: two
+columns `x, z` (no header), values in feet, Beach-FX seaward-positive
+convention. The loader converts to meters and reverses to CSHORE's
+landward-positive convention automatically.
 
-## 4. Model Logic (`model_logic`)
-
-CSHORE Fortran engine control flags.
-
-| Key | Description |
-|---|---|
-| `iprofl` | Morphology update: `1.1` = active erosion/accretion, `0` = fixed bed |
-| `iline` | Wave transformation mode |
-| `isedav` | Sediment availability: `0` = unlimited, `1` = hard bottom |
-| `iperm` | Permeability: `0` = impermeable, `1` = permeable |
-| `iover` | Overtopping: `1` = on, `0` = off |
-| `infilt` | Infiltration landward of dune crest: `1` = on |
-| `iwtran` | Wave transmission through overtopping |
-| `ipond` | Ponding landward of structure |
-| `iwcint` | Wave-current interaction |
-| `iroll` | Wave roller physics |
-| `iwind` | Wind effects |
-| `itide` | Tidal effect on currents |
-| `ilab` | Boundary condition timing — **must be `0` for field conditions** |
-
-## 5. Vegetation (`vegetation`)
-
-| Key | Description |
-|---|---|
-| `enabled` | `false` disables vegetation entirely (default) |
-
-When enabling vegetation, add the following fields:
-
-```json
-"vegetation": {
-    "enabled": true,
-    "Cd": 1.0,
-    "n": 100.0,
-    "dia": 0.01,
-    "ht": 0.2,
-    "rod": 0.1,
-    "extent": [0.7, 1.0]
-}
-```
-
-| Key | Description |
-|---|---|
-| `Cd` | Drag coefficient |
-| `n` | Stem density (stems/m²) |
-| `dia` | Stem diameter (m) |
-| `ht` | Canopy height (m) |
-| `rod` | Erosion depth below sand for stem failure (m) |
-| `extent` | Fractional cross-shore extent of vegetation `[start, end]` |
+> **NOTE:** vegetation is not currently exposed through config — the runner
+> hardcodes it off (`_build_cshore_config`, `src/erosion/runner/local.py`).
