@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .metrics import ProfileMetrics, fit_profile, last_wet_dry_crossing
 from .types import SnapshotLabel, StormResponseType
@@ -54,6 +54,8 @@ class ProfileGeometryConfig(BaseModel):
     means use the reach-wide default.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     berm_elevation: ufloat("m", "ft")
     datum: float = 0.0
     recovery_duration: ufloat("days") | None = None
@@ -69,6 +71,8 @@ class Georef(BaseModel):
     No data carries this yet; it's the seam that lets postprocess emit real geometry when
     a georeferenced dataset arrives.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     origin_lon: float
     origin_lat: float

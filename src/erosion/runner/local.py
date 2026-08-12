@@ -7,7 +7,7 @@ import sys
 import uuid
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..profile import Profile
 from .base import CSHOREResult, CSHORERunner
@@ -22,6 +22,8 @@ class CSHOREParams(BaseModel):
     ``cshoreIO.make_CSHORE_infile()``.  Defaults are taken from the
     project reference ``config.json``.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     # SOW calibration parameters
     d50: float = 0.3  # median grain size (mm); used as reach-wide default for profile init

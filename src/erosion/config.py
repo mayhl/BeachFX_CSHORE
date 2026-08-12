@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .interstorm import ErosionConfig, GenCadeErosionConfig, SLCConfig, UniformErosionConfig
 from .nourishment import GeometryThresholds, NourishmentConfig
@@ -24,6 +24,8 @@ __all__ = [
 
 class ReachConfig(BaseModel):
     """All policy parameters for one reach."""
+
+    model_config = ConfigDict(extra="forbid")
 
     storm: StormConfig = Field(default_factory=StormConfig)
     cshore: CSHOREParams = Field(default_factory=CSHOREParams)

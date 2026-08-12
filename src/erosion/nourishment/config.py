@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..units import ufloat
 
@@ -24,6 +24,8 @@ class GeometryThresholds(BaseModel):
     positive, x=0 offshore) — so there is no coordinate array to mis-orient.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     berm_width: ufloat("m", "ft") | None = None
     berm_height: ufloat("m", "ft") | None = None  # BE: berm crest elevation above datum
     foreshore_slope: float | None = None  # beach-face |dz/dx| (m/m)
@@ -38,6 +40,8 @@ class GeometryThresholds(BaseModel):
 
 class NourishmentConfig(BaseModel):
     """Reach-level nourishment policy parameters."""
+
+    model_config = ConfigDict(extra="forbid")
 
     # Template profile — parametric restore geometry, synthesized on the profile
     # grid (CSHORE-frame by construction).  The former ``template_x/template_z``

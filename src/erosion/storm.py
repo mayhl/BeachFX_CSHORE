@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .metrics import MorphType
 from .profile import Profiles, StormResponse, _shoreline_shift
@@ -40,6 +40,8 @@ class StormConfig(BaseModel):
     Per-profile ``recovery_duration`` in ``ProfileGeometryConfig`` overrides
     this reach-wide default when set.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     T_recover: ufloat("days") = 21.0
     recovery_model: Literal["linear", "exponential"] = "linear"

@@ -4,7 +4,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .profile import ErosionTick
 from .units import ufloat
@@ -28,6 +28,8 @@ class SLCConfig(BaseModel):
     ``per_profile_rates`` overrides ``rate`` for specific profiles.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
     interval: ufloat("days") = 30.0
@@ -41,6 +43,8 @@ class UniformErosionConfig(BaseModel):
     if non-empty, takes precedence over ``rate`` for those profiles.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["uniform"] = "uniform"
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
@@ -53,6 +57,8 @@ class GenCadeErosionConfig(BaseModel):
     Params TBD — discriminator keeps the schema extensible without changing
     ``ReachConfig`` once GenCade is implemented.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     type: Literal["gencade"] = "gencade"
 
