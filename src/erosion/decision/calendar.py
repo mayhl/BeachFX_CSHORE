@@ -86,7 +86,7 @@ class CycleTracker:
 
 
 @dataclass
-class ActiveCampaign:
+class CampaignCarryover:
     """Carry-forward state when a nourishment campaign is interrupted by a storm."""
 
     crew_on_site: bool
@@ -103,4 +103,4 @@ class CalendarState:
     """
 
     cycles: CycleTracker = field(default_factory=CycleTracker)
-    campaign: ActiveCampaign | None = None
+    campaign: CampaignCarryover | None = None

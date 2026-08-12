@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, ClassVar
 from ..types import DecisionKind
 
 if TYPE_CHECKING:
-    from .calendar import ActiveCampaign
+    from .calendar import CampaignCarryover
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class LaunchCampaign:
     forced: bool
     order: tuple[str, ...]  # profile IDs in placement order
     placements: tuple = ()  # Placement | DeferBlackout | DeferStorm | Interrupt
-    carry_forward: ActiveCampaign | None = None
+    carry_forward: CampaignCarryover | None = None
 
     def row(self) -> dict:
         return {"deficit": self.total_deficit, "resume": self.resume, "forced": self.forced}

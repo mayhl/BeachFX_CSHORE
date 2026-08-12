@@ -6,7 +6,7 @@ proceeds.  This package must never import physics at runtime (``profile`` /
 ``campaign`` / ``assess``) — its currency is scalars, dates, and config.
 """
 
-from .calendar import ActiveCampaign, CalendarState, CycleTracker, cycle_times
+from .calendar import CalendarState, CampaignCarryover, CycleTracker, cycle_times
 from .emit import emit
 from .model import (
     DeferBlackout,
@@ -29,7 +29,7 @@ from .planner import (
 )
 
 __all__ = [
-    "ActiveCampaign",
+    "CampaignCarryover",
     "CalendarState",
     "CycleTracker",
     "DeferBlackout",

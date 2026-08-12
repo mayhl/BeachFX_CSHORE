@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ..types import CampaignKind, DecisionKind
-from .calendar import ActiveCampaign, CalendarState
+from .calendar import CalendarState, CampaignCarryover
 from .model import (
     DeferBlackout,
     DeferCycle,
@@ -66,7 +66,7 @@ class ReachNourishmentDecider:
     def decide(
         self,
         metrics: list[PlanMetrics],
-        prior: ActiveCampaign | None,
+        prior: CampaignCarryover | None,
         ncfg: NourishmentConfig,
         forced: bool = False,
     ) -> ReachDecision:
@@ -106,7 +106,7 @@ _DEFAULT_DECIDER = ReachNourishmentDecider()
 
 def decide_campaign(
     metrics: list[PlanMetrics],
-    prior: ActiveCampaign | None,
+    prior: CampaignCarryover | None,
     ncfg: NourishmentConfig,
     forced: bool,
     origin: CampaignKind,
@@ -164,7 +164,7 @@ def plan_placements(
     t_next: float,
     ncfg: NourishmentConfig,
     resume: bool,
-) -> tuple[list[Decision], ActiveCampaign | None]:
+) -> tuple[list[Decision], CampaignCarryover | None]:
     """Schedule the campaign's placements serially within ``[t_base, t_next]``.
 
     ``t_base`` anchors the campaign (storm end, or the cycle date for a planned
@@ -186,7 +186,7 @@ def plan_placements(
             )
         if t_start >= t_next:  # can't start before the next storm
             remaining = [x.profile_id for x in order[i:]]
-            return decisions, ActiveCampaign(crew_on_site=False, priority_order=remaining)
+            return decisions, CampaignCarryover(crew_on_site=False, priority_order=remaining)
 
         t_end = t_start + duration
         storm_conflict = t_end >= t_next  # next storm would land during placement
@@ -205,7 +205,7 @@ def plan_placements(
                 )
             )
             remaining = [x.profile_id for x in order[i:]]
-            return decisions, ActiveCampaign(crew_on_site=False, priority_order=remaining)
+            return decisions, CampaignCarryover(crew_on_site=False, priority_order=remaining)
 
         if storm_conflict:  # INTERRUPT policy: place what fits, resume after the storm
             fraction = (t_next - t_start) / duration
@@ -222,7 +222,7 @@ def plan_placements(
                 )
             )
             remaining = [m.profile_id] + [x.profile_id for x in order[i + 1 :]]
-            return decisions, ActiveCampaign(crew_on_site=True, priority_order=remaining)
+            return decisions, CampaignCarryover(crew_on_site=True, priority_order=remaining)
 
         decisions.append(
             Placement(

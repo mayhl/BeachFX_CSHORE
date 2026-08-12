@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..decision import Placement, SkipCampaign, emit
-from ..decision.calendar import ActiveCampaign
+from ..decision.calendar import CampaignCarryover
 from ..decision.model import PlanMetrics
 from ..decision.planner import decide_campaign, plan_placements
 from ..profile import FullNourishment, PartialNourishment
@@ -83,7 +83,7 @@ class _CampaignScheduler:
             )
         w.recovered = True
 
-    def run(self, order: list[_Work], works: _Works, resume: bool) -> ActiveCampaign | None:
+    def run(self, order: list[_Work], works: _Works, resume: bool) -> CampaignCarryover | None:
         """Plan the placements, then play the plan: audit decisions are emitted in
         emission order, placements are applied, and every profile the crew never
         reached is recovered.  ``works`` is the full (non-inundated) set for that
@@ -112,10 +112,10 @@ def _run_decided(
     t_next: float,
     cfg: ReachConfig,
     sink: ResultsSink,
-    prior: ActiveCampaign | None,
+    prior: CampaignCarryover | None,
     origin: CampaignKind,
     storm_at_next: bool = False,
-) -> ActiveCampaign | None:
+) -> CampaignCarryover | None:
     """Assess → decide → execute, for either origin.
 
     The two origins share the whole pipeline; their differences ride on ``origin``
@@ -147,9 +147,9 @@ def run_campaign(
     cfg: ReachConfig,
     sink: ResultsSink,
     longshore_widths: list[float] | None = None,
-    prior: ActiveCampaign | None = None,
+    prior: CampaignCarryover | None = None,
     storm_at_next: bool = False,
-) -> tuple[float, ActiveCampaign | None]:
+) -> tuple[float, CampaignCarryover | None]:
     """Run the post-storm campaign: recovery + (optionally) nourishment.
 
     Applies one Recovery event per profile at the appropriate time, then
@@ -186,8 +186,8 @@ def run_scheduled_campaign(
     cfg: ReachConfig,
     sink: ResultsSink,
     longshore_widths: list[float] | None = None,
-    prior: ActiveCampaign | None = None,
-) -> ActiveCampaign | None:
+    prior: CampaignCarryover | None = None,
+) -> CampaignCarryover | None:
     """Run a periodic planned nourishment cycle in the quiet window ``[t_cycle, t_next]``.
 
     The calendar proposes and the volume gate disposes: every profile is assessed as in

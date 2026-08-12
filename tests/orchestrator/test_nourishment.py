@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from erosion.config import ReachConfig
-from erosion.decision import ActiveCampaign
+from erosion.decision import CampaignCarryover
 from erosion.metrics import fit_profile
 from erosion.nourishment import (
     FittedAssessor,
@@ -735,7 +735,7 @@ class TestRunCampaignCrewOnSite:
         p = _eroded()
         cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9, production_rate=500.0, assessor="volume"))
         cfg.storm.T_recover = 21.0
-        prior = ActiveCampaign(crew_on_site=True, priority_order=["p0"])
+        prior = CampaignCarryover(crew_on_site=True, priority_order=["p0"])
         run_campaign(
             _outcomes([p], [p.zb.copy()]),
             t_storm=0.0,

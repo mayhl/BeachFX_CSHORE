@@ -14,8 +14,8 @@ from collections import deque
 import pytest
 
 from erosion.decision import (
-    ActiveCampaign,
     CalendarState,
+    CampaignCarryover,
     CycleTracker,
     DeferBlackout,
     DeferCycle,
@@ -67,7 +67,7 @@ class TestDecideCampaign:
 
     def test_crew_on_site_bypasses_gate_with_prior_order_first(self):
         ms = [_m("p0", 1.0), _m("p1", 5.0)]
-        prior = ActiveCampaign(crew_on_site=True, priority_order=["p0", "p1"])
+        prior = CampaignCarryover(crew_on_site=True, priority_order=["p0", "p1"])
         d = decide_campaign(ms, prior, ncfg(volume_trigger=1e9), False, STORM, t=20.5)
         assert isinstance(d, LaunchCampaign) and d.resume is True  # gate bypassed
         assert d.order == ("p0", "p1")  # prior rank wins over priority
@@ -76,7 +76,7 @@ class TestDecideCampaign:
         """The interrupted campaign's order is a promise: profiles the crew already
         owed keep their rank, and only the newcomers re-sort by deficit behind them."""
         ms = [_m("new_small", 1.0), _m("new_big", 5.0), _m("owed", 0.5)]
-        prior = ActiveCampaign(crew_on_site=True, priority_order=["owed"])
+        prior = CampaignCarryover(crew_on_site=True, priority_order=["owed"])
         d = decide_campaign(ms, prior, ncfg(volume_trigger=1e9), False, STORM, t=20.5)
         assert d.order == ("owed", "new_big", "new_small")
 
@@ -193,7 +193,7 @@ class TestPlanPlacements:
         nc.blackout_windows = [(20.0, 50.0)]
         plan, carry = plan_placements([_m("p0", 42.0)], 20.5, 34.0, nc, resume=True)
         assert [type(d) for d in plan] == [DeferBlackout]  # no placement started
-        assert carry == ActiveCampaign(crew_on_site=False, priority_order=["p0"])
+        assert carry == CampaignCarryover(crew_on_site=False, priority_order=["p0"])
 
     def test_blocked_at_exactly_the_storm_instant(self):
         """Precedence rule: the storm closes the interval, so a start AT ``t_next``
@@ -202,7 +202,7 @@ class TestPlanPlacements:
         nc.mobilization_days = 13.5
         plan, carry = plan_placements([_m("p0", 42.0)], 20.5, 34.0, nc, resume=False)
         assert plan == []
-        assert carry == ActiveCampaign(crew_on_site=False, priority_order=["p0"])
+        assert carry == CampaignCarryover(crew_on_site=False, priority_order=["p0"])
 
     def test_defer_policy_holds_the_whole_placement(self):
         nc = _nc(production_rate=4.0)
@@ -211,7 +211,7 @@ class TestPlanPlacements:
         (d,) = plan
         assert isinstance(d, DeferStorm)
         assert d.storm == pytest.approx(34.0)
-        assert carry == ActiveCampaign(crew_on_site=False, priority_order=["p0"])
+        assert carry == CampaignCarryover(crew_on_site=False, priority_order=["p0"])
 
     def test_interrupt_places_the_fraction_that_fits(self):
         plan, carry = plan_placements(
@@ -223,7 +223,7 @@ class TestPlanPlacements:
         assert place.cut_by_storm is True
         assert place.placed_m3 == pytest.approx(62.0 * 13.499 / 15.5)
         # interrupted profile first in the carry-forward, the unreached one behind it
-        assert carry == ActiveCampaign(crew_on_site=True, priority_order=["p0", "p1"])
+        assert carry == CampaignCarryover(crew_on_site=True, priority_order=["p0", "p1"])
 
     def test_a_placement_ending_exactly_at_the_storm_is_a_partial(self):
         """The boundary that motivated ``cut_by_storm``: fraction is exactly 1.0 here,
@@ -273,7 +273,9 @@ class TestPlanNextCycle:
         assert d == FireCycle(t_fire=41.501, erode_to=41.501)
 
     def test_defers_when_the_crew_is_busy(self):
-        cal = _cal(times=[50.0], campaign=ActiveCampaign(crew_on_site=True, priority_order=["p0"]))
+        cal = _cal(
+            times=[50.0], campaign=CampaignCarryover(crew_on_site=True, priority_order=["p0"])
+        )
         d = plan_next_cycle(cal, 100.0, 0.0)
         assert isinstance(d, DeferCycle)
         assert d.t == pytest.approx(50.0)  # logged at the date it concerns

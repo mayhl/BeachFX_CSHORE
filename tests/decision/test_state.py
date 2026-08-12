@@ -16,8 +16,8 @@ from collections import deque
 import pytest
 
 from erosion.decision import (
-    ActiveCampaign,
     CalendarState,
+    CampaignCarryover,
     CycleTracker,
     DeferBlackout,
     DeferCycle,
@@ -35,7 +35,7 @@ STATES = [
     CalendarState(),
     CalendarState(
         cycles=CycleTracker(times=deque([100.0, 465.0]), owed=100.0),
-        campaign=ActiveCampaign(crew_on_site=True, priority_order=["p1", "p0"]),
+        campaign=CampaignCarryover(crew_on_site=True, priority_order=["p1", "p0"]),
     ),
 ]
 
@@ -50,7 +50,7 @@ DECISIONS = [
         forced=False,
         order=("p0", "p1"),
         placements=(Placement("p0", 20.501, 36.0, 62.0, 62.0, fraction=0.87),),
-        carry_forward=ActiveCampaign(crew_on_site=True, priority_order=["p1"]),
+        carry_forward=CampaignCarryover(crew_on_site=True, priority_order=["p1"]),
     ),
     SkipCampaign(t=20.5, total_deficit=22.0, trigger=30.0, cycle=True),
     Interrupt(t=34.0, profile_id="p0", placed_fraction=0.87),
