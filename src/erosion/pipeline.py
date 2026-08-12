@@ -505,6 +505,14 @@ def _build_jobs(
 # ---------------------------------------------------------------------------
 
 
+def _require(mapping: dict, key: str, where: str):
+    """Fetch a required config key, failing with the key's location instead of a bare KeyError."""
+    try:
+        return mapping[key]
+    except KeyError:
+        raise ValueError(f"config is missing the required key {key!r} ({where})") from None
+
+
 def run(
     config_path: str,
     max_workers: int | None = None,
@@ -515,24 +523,41 @@ def run(
         cfg_raw = json.load(f)
     cfg_raw = _expand_plans(cfg_raw)  # schema-v2 nourishment plans -> alternatives (no-op for v1)
 
-    paths = cfg_raw["paths"]
-    sim = cfg_raw["simulation"]
+    paths = _require(cfg_raw, "paths", "top level")
+    sim = _require(cfg_raw, "simulation", "top level")
     global_sections = {s: cfg_raw[s] for s in _LAYERED_SECTIONS if s in cfg_raw}
     global_alts = cfg_raw.get("alternatives", {})
-    reaches = cfg_raw["reaches"]
+    reaches = _require(cfg_raw, "reaches", "top level")
     # Which alternative ids to run: CLI --run overrides the config "run" (default all).
     run_spec = run_select if run_select is not None else cfg_raw.get("run", "all")
 
-    sim_start = datetime.fromisoformat(sim["sim_start"])
-    sim_end = float(sim["sim_end_days"])
-    out_root = paths["output"]
+    sim_start = datetime.fromisoformat(_require(sim, "sim_start", 'in "simulation"'))
+    sim_end = float(_require(sim, "sim_end_days", 'in "simulation"'))
+    out_root = _require(paths, "output", 'in "paths"')
     save_cshore = paths.get("save_cshore", False)
 
     input_units = cfg_raw.get("units", {}).get("input", "ft")
     units_context = {"input_units": input_units}
 
-    storms_df = pd.read_parquet(os.path.join(ROOT, paths["storms"]))
+    storms_df = pd.read_parquet(os.path.join(ROOT, _require(paths, "storms", 'in "paths"')))
     lifecycles = sorted(storms_df["lifecycle"].unique())
+
+    # Validate every reach/alternative config BEFORE the cluster spins up, so a
+    # config typo fails in seconds instead of after workers are provisioned.
+    all_jobs = _build_jobs(
+        reaches,
+        global_alts,
+        global_sections,
+        units_context,
+        storms_df,
+        sim_start,
+        sim_end,
+        out_root,
+        save_cshore,
+        lifecycles,
+        run_spec=run_spec,
+    )
+    log.info("Alternative selection: run=%s", run_spec)
 
     cpu_count = os.cpu_count() or 1
     n_slots = max(1, int(cpu_count * oversubscription))
@@ -582,21 +607,6 @@ def run(
             len(lifecycles),
         )
 
-        all_jobs = _build_jobs(
-            reaches,
-            global_alts,
-            global_sections,
-            units_context,
-            storms_df,
-            sim_start,
-            sim_end,
-            out_root,
-            save_cshore,
-            lifecycles,
-            run_spec=run_spec,
-        )
-
-        log.info("Alternative selection: run=%s", run_spec)
         log.info("Submitting %d job(s) total", len(all_jobs))
         # pure=False → random task keys; skips deterministic tokenization of the
         # job payload (Profile dataclasses w/ numpy arrays, storms_df), which
