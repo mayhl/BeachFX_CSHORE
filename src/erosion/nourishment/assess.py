@@ -41,8 +41,14 @@ def _dune_emergency_force(metrics: dict, tg: GeometryThresholds) -> bool:
     """Geometric emergency trigger (cReach.cpp:509): forced when the measured dune
     height (front relief) OR width falls below a configured threshold.  Each
     criterion is active only when its threshold is set; berm width is not a
-    trigger.  Reads the fitted ``metrics`` dict, so a profile with no measured dune
-    never fires.  Shared by the dune-aware assessors (Fitted, Geometric)."""
+    trigger.  Reads the fitted ``metrics`` dict: a profile that never had a dune
+    never fires, while a reference dune the storm erased (``dune_lost``) counts
+    as below every active threshold.  Shared by the dune-aware assessors
+    (Fitted, Geometric)."""
+    # An erased dune measures as NaN relief / zero width -- below every active
+    # threshold by definition, not unmeasurable
+    if metrics.get("dune_lost", False):
+        return tg.dune_height is not None or tg.dune_width is not None
     relief = metrics.get("dune_front_relief", np.nan)
     width = metrics.get("dune_width", np.nan)
     if tg.dune_height is not None and np.isfinite(relief) and relief < float(tg.dune_height):
@@ -216,6 +222,12 @@ class FittedAssessor(ProfileAssessor):
             "dune_crest_elevation": m.dune_crest_elevation,
             "dune_front_relief": m.dune_front_relief,
             "dune_width": m.dune_width,
+            # The ref had a dune but the post-storm fit measures none (the
+            # HIGH_UPLAND flip past the prominence floor) -- storm-erased,
+            # not never-there
+            "dune_lost": bool(
+                np.isfinite(ref.dune_crest_elevation) and not np.isfinite(m.dune_crest_elevation)
+            ),
         }
         dune_fill = self._extra_placement(profile, cfg, ref, m, width_m)
         if dune_fill > 0.0:

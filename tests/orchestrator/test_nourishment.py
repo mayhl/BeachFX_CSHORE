@@ -600,6 +600,27 @@ class TestEmergencyTrigger:
         a = VolumeAssessor().assess(p, cfg, 50.0)
         assert a.force is False  # no dune trigger, and emergency_volume unset
 
+    def test_force_when_ref_dune_is_storm_erased(self):
+        """A dune shaved past the fitter's prominence floor measures as NaN crest
+        (HIGH_UPLAND), which must read as below-threshold, not unmeasurable."""
+        p, _m = self._profile_with_dune()
+        p.zb = np.minimum(p.zb, p.ref_metrics.berm_elevation)  # plane the dune off
+        cfg = self._cfg_trigger(dune_height=0.5)
+        a = FittedAssessor().assess(p, cfg, 50.0)
+        assert a.metrics["dune_lost"] is True
+        assert a.force is True
+
+    def test_no_force_when_profile_never_had_a_dune(self):
+        from erosion.metrics import fit_profile
+
+        x, z0, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=None)
+        ref, _ = fit_profile(x, z0, 2.0, 0.0)
+        p = Profile("p0", x, z0.copy(), 0.3, ref_metrics=ref)
+        cfg = self._cfg_trigger(dune_height=0.5, dune_width=5.0)
+        a = FittedAssessor().assess(p, cfg, 50.0)
+        assert a.metrics["dune_lost"] is False
+        assert a.force is False
+
     def test_base_volume_emergency_force(self):
         """The assessor-agnostic base trigger: a deficit at/above emergency_volume
         forces, below does not, and an unset threshold never fires."""

@@ -122,9 +122,10 @@ class DuneCut(Damage):
 
     Mind the cliff: shaving a trapezoidal crest widens its flat top, so the dune's
     prominence over the upland collapses.  Past ~1.5 m on ``template_profile`` the fitter
-    stops calling it a dune at all (morph_type flips to HIGH_UPLAND, crest goes NaN) and
-    ``FittedAssessor`` then reports a *constant* deficit no matter how much more sand is
-    taken.  Scenarios that lean on this form must stay on the near side of that.
+    stops calling it a dune at all (morph_type flips to HIGH_UPLAND, crest goes NaN).
+    The emergency trigger survives the flip (``dune_lost`` reads an erased ref dune as
+    below every threshold), but ``FittedAssessor``'s *deficit* still goes constant there
+    (berm-width based) — scenarios asserting deficit growth must stay on the near side.
     """
 
     metres: float
