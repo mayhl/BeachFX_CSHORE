@@ -3,7 +3,11 @@
 import numpy as np
 import pytest
 
-from erosion.profile import Recovery
+from erosion.config import ReachConfig
+from erosion.metrics import ProfileMetrics
+from erosion.nourishment.campaign import _resolve_z_berm
+from erosion.profile import ProfileGeometryConfig, Recovery
+from erosion.storm import StormConfig
 from erosion.types import SnapshotLabel
 from tests.builders import profile as _p
 
@@ -84,3 +88,31 @@ class TestRecoveryEvent:
         p.zb = zb_post.copy()
         Recovery(t=21.0, fraction=1.0, zb_post_storm=zb_post, zb_pre_storm=zb_pre).apply(p)
         np.testing.assert_allclose(p.zb, zb_pre, atol=1e-14)
+
+
+class TestResolveZBerm:
+    """Per-profile z_berm derivation: explicit config, ref fit, geometry, warn."""
+
+    def test_explicit_config_wins(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics(berm_elevation=1.8)
+        cfg = ReachConfig(storm=StormConfig(z_berm=2.5))  # bare number: ft in, stored m
+        assert _resolve_z_berm(p, cfg) == pytest.approx(float(cfg.storm.z_berm))
+
+    def test_derives_from_ref_metrics(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics(berm_elevation=1.8)
+        p.geometry = ProfileGeometryConfig(berm_elevation=2.0)
+        assert _resolve_z_berm(p, ReachConfig()) == pytest.approx(1.8)
+
+    def test_falls_back_to_geometry(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics()  # berm_elevation NaN — fit found no berm
+        p.geometry = ProfileGeometryConfig(berm_elevation=2.0)  # bare number: ft in, stored m
+        assert _resolve_z_berm(p, ReachConfig()) == pytest.approx(float(p.geometry.berm_elevation))
+
+    def test_warns_and_blends_all_when_unknown(self, caplog):
+        p = _p()
+        with caplog.at_level("WARNING"):
+            assert _resolve_z_berm(p, ReachConfig()) is None
+        assert "no berm elevation" in caplog.text

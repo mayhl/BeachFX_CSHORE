@@ -3,6 +3,7 @@ active-campaign carry-forward collection, and profile recovery."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,8 @@ from .assess import _select_assessor
 if TYPE_CHECKING:
     from ..config import ReachConfig
     from ..profile import Profile
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -135,6 +138,30 @@ def recovery_duration(profile: Profile, cfg: ReachConfig) -> float:
     return cfg.storm.T_recover
 
 
+def _resolve_z_berm(profile: Profile, cfg: ReachConfig) -> float | None:
+    """Below-berm mask elevation for recovery blending, per profile.
+
+    An explicit reach-wide ``storm.z_berm`` wins; otherwise derive from the
+    as-built berm (``ref_metrics.berm_elevation``), falling back to the design
+    value (``geometry.berm_elevation``).  ``None`` (blend every node) survives
+    only when no berm elevation is known at all — the blend then translates the
+    dune landward with the shifted pre-storm target, so warn.
+    """
+    if cfg.storm.z_berm is not None:
+        return float(cfg.storm.z_berm)
+    ref = profile.ref_metrics
+    if ref is not None and np.isfinite(ref.berm_elevation):
+        return float(ref.berm_elevation)
+    if profile.geometry is not None:
+        return float(profile.geometry.berm_elevation)
+    log.warning(
+        "recovery: profile %s has no berm elevation (config, ref fit, or geometry); "
+        "blending all nodes — the dune will track the shifted pre-storm bed",
+        profile.id,
+    )
+    return None
+
+
 def _apply_recovery_one(
     profile: Profile,
     zb_post: np.ndarray,
@@ -183,7 +210,7 @@ def _apply_recovery_one(
         fraction=fraction,
         zb_post_storm=zb_post,
         zb_pre_storm=zb_pre,
-        z_berm=cfg.storm.z_berm,
+        z_berm=_resolve_z_berm(profile, cfg),
         interrupted=interrupted,
         by_nourishment=(not completed) and nourish_at_end,
     ).apply(profile)

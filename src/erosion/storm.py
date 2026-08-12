@@ -45,7 +45,7 @@ class StormConfig(BaseModel):
 
     T_recover: ufloat("days") = 21.0
     recovery_model: Literal["linear", "exponential"] = "linear"
-    z_berm: ufloat("m", "ft") | None = None  # below-berm mask; None = blend all nodes
+    z_berm: ufloat("m", "ft") | None = None  # below-berm mask; None = derive per profile
     hydro_dt: ufloat("hours") | None = None  # resample hydrograph; None = raw CHS intervals
 
 
