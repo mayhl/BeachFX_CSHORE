@@ -27,7 +27,7 @@ from .model import (
     Interrupt,
     LaunchCampaign,
     Placement,
-    PlanMetrics,
+    ProfileDemand,
     SkipCampaign,
 )
 
@@ -65,7 +65,7 @@ class ReachNourishmentDecider:
 
     def decide(
         self,
-        metrics: list[PlanMetrics],
+        metrics: list[ProfileDemand],
         prior: CampaignCarryover | None,
         ncfg: NourishmentConfig,
         forced: bool = False,
@@ -105,7 +105,7 @@ _DEFAULT_DECIDER = ReachNourishmentDecider()
 
 
 def decide_campaign(
-    metrics: list[PlanMetrics],
+    metrics: list[ProfileDemand],
     prior: CampaignCarryover | None,
     ncfg: NourishmentConfig,
     forced: bool,
@@ -159,7 +159,7 @@ def _next_available(
 
 
 def plan_placements(
-    order: list[PlanMetrics],
+    order: list[ProfileDemand],
     t_base: float,
     t_next: float,
     ncfg: NourishmentConfig,

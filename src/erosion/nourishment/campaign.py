@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..decision.model import PlanMetrics
+from ..decision.model import ProfileDemand
 from ..profile import Recovery
 from ..storm import StormOutcome, _recovery_fraction
 from .assess import _select_assessor
@@ -101,11 +101,11 @@ class _Works(list):
         return [w for w in self if w.plan is not None]
 
     @property
-    def metrics(self) -> list[PlanMetrics]:
-        """The scalar boundary to Tier-2: one ``PlanMetrics`` per planned profile.
+    def metrics(self) -> list[ProfileDemand]:
+        """The scalar boundary to Tier-2: one ``ProfileDemand`` per planned profile.
         The decider never sees a ``_Work`` — beds and templates stay on this side."""
         return [
-            PlanMetrics(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
+            ProfileDemand(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
             for w in self.plans
         ]
 

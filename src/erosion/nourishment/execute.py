@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..decision import Placement, SkipCampaign, emit
 from ..decision.calendar import CampaignCarryover
-from ..decision.model import PlanMetrics
+from ..decision.model import ProfileDemand
 from ..decision.planner import decide_campaign, plan_placements
 from ..profile import FullNourishment, PartialNourishment
 from ..types import CampaignKind
@@ -90,7 +90,8 @@ class _CampaignScheduler:
         trailing sweep.
         """
         metrics = [
-            PlanMetrics(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force) for w in order
+            ProfileDemand(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
+            for w in order
         ]
         plan, campaign = plan_placements(
             metrics, self.t_storm, self.t_next, self.cfg.nourishment, resume

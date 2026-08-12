@@ -16,7 +16,7 @@ from .model import (
     Interrupt,
     LaunchCampaign,
     Placement,
-    PlanMetrics,
+    ProfileDemand,
     SkipCampaign,
 )
 from .planner import (
@@ -39,7 +39,7 @@ __all__ = [
     "Interrupt",
     "LaunchCampaign",
     "Placement",
-    "PlanMetrics",
+    "ProfileDemand",
     "SkipCampaign",
     "ReachDecision",
     "ReachNourishmentDecider",

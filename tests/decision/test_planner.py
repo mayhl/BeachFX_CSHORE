@@ -24,7 +24,7 @@ from erosion.decision import (
     Interrupt,
     LaunchCampaign,
     Placement,
-    PlanMetrics,
+    ProfileDemand,
     SkipCampaign,
     decide_campaign,
     erosion_split,
@@ -39,7 +39,7 @@ STORM, CYCLE = CampaignKind.STORM, CampaignKind.SCHEDULED
 
 
 def _m(pid: str, deficit: float, placement: float | None = None, force: bool = False):
-    return PlanMetrics(pid, deficit, deficit if placement is None else placement, force)
+    return ProfileDemand(pid, deficit, deficit if placement is None else placement, force)
 
 
 def _cal(times=(), owed=None, campaign=None) -> CalendarState:

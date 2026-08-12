@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class PlanMetrics:
+class ProfileDemand:
     """Scalar view of one profile's Tier-1 assessment — the decider's entire input.
 
     The decision layer never sees a bed or a template: a profile is a deficit, a

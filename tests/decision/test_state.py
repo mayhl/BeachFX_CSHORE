@@ -26,7 +26,7 @@ from erosion.decision import (
     Interrupt,
     LaunchCampaign,
     Placement,
-    PlanMetrics,
+    ProfileDemand,
     SkipCampaign,
 )
 from erosion.types import DecisionKind
@@ -40,7 +40,7 @@ STATES = [
 ]
 
 DECISIONS = [
-    PlanMetrics("p0", 42.0, 42.0, force=True),
+    ProfileDemand("p0", 42.0, 42.0, force=True),
     Placement("p0", 20.501, 20.921, 42.0, 42.0),
     LaunchCampaign(
         kind=DecisionKind.NOURISH_TRIGGER,
