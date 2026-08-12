@@ -371,6 +371,36 @@ class TestGeometricAssessor:
         np.testing.assert_allclose(tmpl, p.zb)  # no basis -> no fill
 
 
+class TestNoDuneTemplateAnchor:
+    """The no-dune-``ref`` branch of template synthesis: ``berm_width`` is the crest
+    FLAT (landward of the foreshore foot), so the berm's landward edge sits a
+    foreshore-run + crest-width landward of the shoreline.  Dropping the foreshore
+    run drops the whole template a foreshore-width seaward, overtopping the intact
+    foreshore into a phantom deficit."""
+
+    def _no_dune_profile(self):
+        from erosion.metrics import fit_profile
+
+        x, z0, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=None)
+        ref, _ = fit_profile(x, z0, 2.0, 0.0)
+        assert not np.isfinite(ref.dune_crest_x)  # fixture premise: no dune in the ref
+        return Profile("p0", x, z0.copy(), 0.3, ref_metrics=ref)
+
+    def test_undamaged_profile_reports_no_deficit(self):
+        p = self._no_dune_profile()
+        cfg = _cfg(nourishment=_ncfg())
+        a = VolumeAssessor().assess(p, cfg, 50.0)
+        # Idealized-vs-actual reconstruction roundoff leaves a few tens of m³ over
+        # the 50 m width; the seaward-dropped anchor manufactured ~40× that (2063 m³)
+        assert a.volume_m3 < 100.0
+
+    def test_template_never_overtops_the_asbuilt_bed(self):
+        p = self._no_dune_profile()
+        cfg = _cfg(nourishment=_ncfg())
+        tmpl = VolumeAssessor().restore_template(p, cfg)
+        assert float(np.max(tmpl - p.zb)) == pytest.approx(0.0, abs=0.05)
+
+
 class TestDuneFormSynthesis:
     """The three synthesized dune-crest forms (``template_geometry.dune_form``):
     a sharp ``triangle`` apex, a flat-topped ``trapezoid``, a rounded ``gaussian``.

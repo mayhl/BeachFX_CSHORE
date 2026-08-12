@@ -316,7 +316,12 @@ def _synthesize_berm_template(
         if np.isfinite(ref.dune_crest_x):
             x_bl = float(ref.dune_crest_x) - float(ref.dune_front_width)  # seaward dune toe
         else:
-            x_bl = float(ref.shoreline_x) + float(ref.berm_width)
+            # No dune at all: anchor the berm's LANDWARD edge at the reference berm's
+            # back.  ``berm_width`` is the crest FLAT, measured landward of the foreshore
+            # foot, so the back sits a foreshore-run + crest-width landward of the
+            # shoreline; dropping the foreshore run drops the berm a foreshore-width
+            # seaward and overtops the existing foreshore -> phantom deficit.
+            x_bl = float(ref.shoreline_x) + (be - datum) / slope + float(ref.berm_width)
     x_bl = min(max(x_bl, float(x[0])), float(x[-1]))
 
     x_bs = x_bl - target_bw  # seaward berm edge (foreshore crest)
