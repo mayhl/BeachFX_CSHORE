@@ -10,6 +10,7 @@ fitter change:
 
 Render the fits (zoomed to the subaerial beach) with ``--plot``.
 """
+
 import glob
 import json
 import math

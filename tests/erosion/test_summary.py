@@ -31,15 +31,48 @@ def metrics():
     # One profile over a storm: INIT → PreStorm → PostStorm → EndIteration.
     return pd.DataFrame(
         [
-            _row("P1", "INIT", 0.0, dune_crest_elevation=6.0, berm_elevation=2.0,
-                 berm_width=40.0, volume_above_datum=500.0, dune_front_relief=4.0),
-            _row("P1", "PreStorm", 10.0, dune_crest_elevation=6.0, berm_elevation=2.0,
-                 berm_width=40.0, volume_above_datum=500.0, dune_front_relief=4.0),
-            _row("P1", "PostStorm", 10.0, dune_crest_elevation=5.0, berm_elevation=1.5,
-                 berm_width=25.0, volume_above_datum=430.0, dune_front_relief=3.5,
-                 dune_scarp=True, scarp_height=0.8),
-            _row("P1", "EndIteration", 20.0, dune_crest_elevation=5.2, berm_elevation=1.7,
-                 berm_width=30.0, volume_above_datum=455.0, dune_front_relief=3.5),
+            _row(
+                "P1",
+                "INIT",
+                0.0,
+                dune_crest_elevation=6.0,
+                berm_elevation=2.0,
+                berm_width=40.0,
+                volume_above_datum=500.0,
+                dune_front_relief=4.0,
+            ),
+            _row(
+                "P1",
+                "PreStorm",
+                10.0,
+                dune_crest_elevation=6.0,
+                berm_elevation=2.0,
+                berm_width=40.0,
+                volume_above_datum=500.0,
+                dune_front_relief=4.0,
+            ),
+            _row(
+                "P1",
+                "PostStorm",
+                10.0,
+                dune_crest_elevation=5.0,
+                berm_elevation=1.5,
+                berm_width=25.0,
+                volume_above_datum=430.0,
+                dune_front_relief=3.5,
+                dune_scarp=True,
+                scarp_height=0.8,
+            ),
+            _row(
+                "P1",
+                "EndIteration",
+                20.0,
+                dune_crest_elevation=5.2,
+                berm_elevation=1.7,
+                berm_width=30.0,
+                volume_above_datum=455.0,
+                dune_front_relief=3.5,
+            ),
         ]
     )
 
