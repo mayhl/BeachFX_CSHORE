@@ -1,8 +1,8 @@
 {
   "_description": "Restore-test harness: 3 reaches by BeachFX morphology type (2 profiles each), one strong storm per lifecycle (6 lifecycles, screened peak WL < min-crest so none inundate), parametric nourishment restore (no template_x/z array). 6 profiles x 6 storms = 36 simulations. Exercises the CSHORE-frame parametric restore end-to-end after a storm damages each profile.",
   "paths": {
-    "storms": "data/storms/restore_test_6lc.parquet",
-    "output": "output/restore_test"
+    "storms": "../../data/storms/restore_test_6lc.parquet",
+    "output": "../../output/restore_test"
   },
   "simulation": {
     "sim_start":    "2025-01-01",
@@ -51,8 +51,8 @@
     "Reach1": {
       "_type": "LOW_UPLAND",
       "profiles": [
-        "data/profiles_test/reach1_p0.csv",
-        "data/profiles_test/reach1_p1.csv"
+        "../../data/profiles_test/reach1_p0.csv",
+        "../../data/profiles_test/reach1_p1.csv"
       ],
       "profile_priority": [0, 1],
       "longshore_width":  {"value": 1000, "units": "ft"},
@@ -64,8 +64,8 @@
     "Reach2": {
       "_type": "LOW_BERM",
       "profiles": [
-        "data/profiles_test/reach2_p0.csv",
-        "data/profiles_test/reach2_p1.csv"
+        "../../data/profiles_test/reach2_p0.csv",
+        "../../data/profiles_test/reach2_p1.csv"
       ],
       "profile_priority": [0, 1],
       "longshore_width":  {"value": 1000, "units": "ft"},
@@ -77,8 +77,8 @@
     "Reach3": {
       "_type": "HIGH_UPLAND",
       "profiles": [
-        "data/profiles_test/reach3_p0.csv",
-        "data/profiles_test/reach3_p1.csv"
+        "../../data/profiles_test/reach3_p0.csv",
+        "../../data/profiles_test/reach3_p1.csv"
       ],
       "profile_priority": [0, 1],
       "longshore_width":  {"value": 1000, "units": "ft"},

@@ -1,8 +1,8 @@
 {
   "_description": "Example 1 — single reach, single profile, FWOP only",
   "paths": {
-    "storms": "data/storms/ex_storms_10s_45d.parquet",
-    "output": "output/ex1"
+    "storms": "../../data/storms/ex_storms_10s_45d.parquet",
+    "output": "../../output/ex1"
   },
   "simulation": {
     "sim_start":    "2025-01-01",
@@ -45,7 +45,7 @@
   },
   "reaches": {
     "Reach1": {
-      "profiles": ["data/profiles/reach1_p1.csv"],
+      "profiles": ["../../data/profiles/reach1_p1.csv"],
       "berm_elevation": 1.83,
       "datum": 0.0,
       "cshore":   { "d50": 0.3 }

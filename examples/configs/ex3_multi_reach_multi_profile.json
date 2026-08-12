@@ -1,8 +1,8 @@
 {
   "_description": "Example 3 — 3 reaches, 2-3 profiles each, FWOP only",
   "paths": {
-    "storms": "data/storms/ex_storms_10s_45d.parquet",
-    "output": "output/ex3"
+    "storms": "../../data/storms/ex_storms_10s_45d.parquet",
+    "output": "../../output/ex3"
   },
   "simulation": {
     "sim_start":    "2025-01-01",
@@ -43,26 +43,26 @@
     "Reach1": {
       "_description": "Barrier island — berm width varies N/mid/S",
       "profiles": [
-        "data/profiles/reach1_p0.csv",
-        "data/profiles/reach1_p1.csv",
-        "data/profiles/reach1_p2.csv"
+        "../../data/profiles/reach1_p0.csv",
+        "../../data/profiles/reach1_p1.csv",
+        "../../data/profiles/reach1_p2.csv"
       ],
       "cshore": { "d50": 0.3 }
     },
     "Reach2": {
       "_description": "Steeper beach face — coarser sand / higher wave energy",
       "profiles": [
-        "data/profiles/reach2_p0.csv",
-        "data/profiles/reach2_p1.csv",
-        "data/profiles/reach2_p2.csv"
+        "../../data/profiles/reach2_p0.csv",
+        "../../data/profiles/reach2_p1.csv",
+        "../../data/profiles/reach2_p2.csv"
       ],
       "cshore": { "d50": 0.4, "gamma": 0.68 }
     },
     "Reach3": {
       "_description": "Dissipative — low berm, gentler slopes",
       "profiles": [
-        "data/profiles/reach3_p0.csv",
-        "data/profiles/reach3_p1.csv"
+        "../../data/profiles/reach3_p0.csv",
+        "../../data/profiles/reach3_p1.csv"
       ],
       "cshore": { "d50": 0.25, "gamma": 0.65, "effb": 0.003 }
     }

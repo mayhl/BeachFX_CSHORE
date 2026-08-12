@@ -421,6 +421,7 @@ def _build_jobs(
     save_cshore: bool,
     lifecycles: list,
     run_spec="all",
+    base_dir: str = ".",
 ) -> list[_LifecycleJob]:
     """Expand the config into one ``_LifecycleJob`` per (reach × selected alternative
     × lifecycle).  ``run_spec`` (``"all"`` or a range/list like ``"1-4,8"``) picks
@@ -434,7 +435,7 @@ def _build_jobs(
         alts = _resolve_alternatives(global_alts, reach_data.get("alternatives", {}))
         selected = _parse_run_spec(run_spec, list(alts))
         alts = {aid: alts[aid] for aid in selected}
-        profile_paths = [os.path.join(ROOT, p) for p in reach_data["profiles"]]
+        profile_paths = [os.path.join(base_dir, p) for p in reach_data["profiles"]]
         priorities = reach_data.get("profile_priority")
 
         order = _priority_order(priorities, len(profile_paths))
@@ -522,6 +523,10 @@ def run(
     with open(config_path) as f:
         cfg_raw = json.load(f)
     cfg_raw = _expand_plans(cfg_raw)  # schema-v2 nourishment plans -> alternatives (no-op for v1)
+    # Every relative path in the config resolves against the config file's own
+    # directory (absolute paths pass through), so a config + its data travel as
+    # one relocatable bundle
+    base_dir = os.path.dirname(os.path.abspath(config_path))
 
     paths = _require(cfg_raw, "paths", "top level")
     sim = _require(cfg_raw, "simulation", "top level")
@@ -533,13 +538,13 @@ def run(
 
     sim_start = datetime.fromisoformat(_require(sim, "sim_start", 'in "simulation"'))
     sim_end = float(_require(sim, "sim_end_days", 'in "simulation"'))
-    out_root = _require(paths, "output", 'in "paths"')
+    out_root = os.path.join(base_dir, _require(paths, "output", 'in "paths"'))
     save_cshore = paths.get("save_cshore", False)
 
     input_units = cfg_raw.get("units", {}).get("input", "ft")
     units_context = {"input_units": input_units}
 
-    storms_df = pd.read_parquet(os.path.join(ROOT, _require(paths, "storms", 'in "paths"')))
+    storms_df = pd.read_parquet(os.path.join(base_dir, _require(paths, "storms", 'in "paths"')))
     lifecycles = sorted(storms_df["lifecycle"].unique())
 
     # Validate every reach/alternative config BEFORE the cluster spins up, so a
@@ -556,6 +561,7 @@ def run(
         save_cshore,
         lifecycles,
         run_spec=run_spec,
+        base_dir=base_dir,
     )
     log.info("Alternative selection: run=%s", run_spec)
 

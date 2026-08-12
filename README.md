@@ -93,15 +93,15 @@ uv run python -m erosion ex1
 
 Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
 
-> **NOTE:** input paths (`paths.storms`, profile CSVs) resolve against the
-> repository root, but `paths.output` resolves against the current working
-> directory — run from a checkout.
+> **NOTE:** every relative path in a config (`paths.storms`, `paths.output`,
+> profile CSVs) resolves against the config file's own directory, so a config
+> and its data travel as one relocatable bundle; absolute paths pass through.
 
 ## Config Format
 
 ```json
 {
-  "paths":      { "storms": "data/storms/ex_storms_10s_45d.parquet", "output": "output/ex1" },
+  "paths":      { "storms": "../../data/storms/ex_storms_10s_45d.parquet", "output": "../../output/ex1" },
   "simulation": { "sim_start": "2025-01-01", "sim_end_days": 500 },
   "cshore":     { "d50": 0.3, "gamma": 0.7, "dx": 2.0, "iprofl": 1.1 },
   "alternatives": {
@@ -120,7 +120,7 @@ Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
   },
   "reaches": {
     "Reach1": {
-      "profiles": ["data/profiles/reach1_p0.csv"],
+      "profiles": ["../../data/profiles/reach1_p0.csv"],
       "cshore":   { "d50": 0.3 }
     }
   }
@@ -152,7 +152,7 @@ global level (see `ex4`):
     "FWP":  { "volume_trigger": 25000, "production_rate": 500000 }
   },
   "reaches": {
-    "Reach1": { "profiles": ["data/profiles/reach1_p0.csv"], "nourishment": ["FWOP", "FWP"] }
+    "Reach1": { "profiles": ["../../data/profiles/reach1_p0.csv"], "nourishment": ["FWOP", "FWP"] }
   }
 }
 ```
@@ -203,7 +203,7 @@ No `units` key needed. All dimensional length fields are interpreted as feet. No
   "reaches": {
     "Reach1": {
       "longshore_width": 1000,
-      "profiles": ["data/profiles/reach1_p0.csv"]
+      "profiles": ["../../data/profiles/reach1_p0.csv"]
     }
   }
 }
@@ -234,7 +234,7 @@ Add `"units": {"input": "m"}` at the top level. Length fields interpret bare num
   "reaches": {
     "Reach1": {
       "longshore_width": 305,
-      "profiles": ["data/profiles/reach1_p0.csv"]
+      "profiles": ["../../data/profiles/reach1_p0.csv"]
     }
   }
 }
@@ -288,7 +288,7 @@ Any field can take `{"value": ..., "units": "..."}` to override the global setti
 "reaches": {
   "Reach1": {
     "longshore_width": 1000,
-    "profiles": ["data/profiles/reach1_p0.csv", "data/profiles/reach1_p1.csv"]
+    "profiles": ["../../data/profiles/reach1_p0.csv", "../../data/profiles/reach1_p1.csv"]
   }
 }
 ```
@@ -297,7 +297,7 @@ Any field can take `{"value": ..., "units": "..."}` to override the global setti
 "reaches": {
   "Reach1": {
     "longshore_width": [500, 500],
-    "profiles": ["data/profiles/reach1_p0.csv", "data/profiles/reach1_p1.csv"]
+    "profiles": ["../../data/profiles/reach1_p0.csv", "../../data/profiles/reach1_p1.csv"]
   }
 }
 ```

@@ -1,8 +1,8 @@
 {
   "_description": "Example 4 — single reach, 3 profiles, FWOP (current authorized schedule) vs FWP (proposed, more proactive nourishment). Schema-v2 authoring: a global `nourishment` plan table keyed by plan id, referenced per reach by key; `storm`/`erosion`/`slc` are hoisted to the global level (shared across plans, layered global->reach->alt). The restore geometry is parametric (synthesized per profile from its as-built fit; omit `template_geometry` to restore to as-built), so the two plans share the restore target, production rate, and costs and differ only in the volume trigger. 8 storms at 90-day spacing leaves room for annual nourishment windows.",
   "paths": {
-    "storms": "data/storms/ex_storms_8s_90d.parquet",
-    "output": "output/ex4"
+    "storms": "../../data/storms/ex_storms_8s_90d.parquet",
+    "output": "../../output/ex4"
   },
   "simulation": {
     "sim_start":    "2025-01-01",
@@ -57,9 +57,9 @@
   "reaches": {
     "Reach1": {
       "profiles": [
-        "data/profiles/reach1_p0.csv",
-        "data/profiles/reach1_p1.csv",
-        "data/profiles/reach1_p2.csv"
+        "../../data/profiles/reach1_p0.csv",
+        "../../data/profiles/reach1_p1.csv",
+        "../../data/profiles/reach1_p2.csv"
       ],
       "profile_priority": [1, 0, 2],
       "longshore_width":  {"value": 1000, "units": "ft"},
