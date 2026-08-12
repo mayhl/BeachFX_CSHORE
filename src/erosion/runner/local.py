@@ -133,6 +133,15 @@ class LocalCSHORERunner(CSHORERunner):
         self.config = _build_cshore_config(params)
         self.work_dir = work_dir
         self.exe = _exe_path()
+        # Failing fast here keeps a broken install from masquerading as
+        # per-storm INUNDATION downstream
+        if not os.path.isfile(self.exe):
+            raise FileNotFoundError(
+                f"CSHORE binary not found: {self.exe} "
+                f"(expected {os.path.basename(self.exe)!r} for platform {sys.platform!r})"
+            )
+        if not os.access(self.exe, os.X_OK):
+            raise PermissionError(f"CSHORE binary is not executable: {self.exe}")
         self.infile_dir = infile_dir
         if infile_dir:
             os.makedirs(infile_dir, exist_ok=True)
@@ -164,18 +173,22 @@ class LocalCSHORERunner(CSHORERunner):
             dest = os.path.join(self.infile_dir, f"{profile.id}_{storm_uuid}.infile")
             shutil.copy2(infile_path, dest)
 
-        subprocess.run(
+        proc = subprocess.run(
             [self.exe],
             cwd=storm_dir,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
         )
 
         odoc_path = os.path.join(storm_dir, "ODOC")
         if not os.path.exists(odoc_path):
+            stderr_tail = (proc.stderr or "").strip()[-300:]
             raise RuntimeError(
-                f"CSHORE produced no output in {storm_dir}. "
-                "Surge likely exceeded profile crest elevation."
+                f"CSHORE produced no output in {storm_dir} "
+                f"(exit code {proc.returncode}"
+                + (f", stderr: {stderr_tail}" if stderr_tail else "")
+                + "). Surge may have exceeded the profile crest elevation."
             )
 
         params, bc, veg, hydro, sed, morpho = csio.load_CSHORE_results(storm_dir)
