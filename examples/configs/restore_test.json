@@ -1,0 +1,91 @@
+{
+  "_description": "Restore-test harness: 3 reaches by BeachFX morphology type (2 profiles each), one strong storm per lifecycle (6 lifecycles, screened peak WL < min-crest so none inundate), parametric nourishment restore (no template_x/z array). 6 profiles x 6 storms = 36 simulations. Exercises the CSHORE-frame parametric restore end-to-end after a storm damages each profile.",
+  "paths": {
+    "storms": "data/storms/restore_test_6lc.parquet",
+    "output": "output/restore_test"
+  },
+  "simulation": {
+    "sim_start":    "2025-01-01",
+    "sim_end_days": 45
+  },
+  "units": {
+    "input": "m"
+  },
+  "cshore": {
+    "blp":    0.001,
+    "effb":   0.002,
+    "gamma":  0.7,
+    "efff":   0.005,
+    "slp":    0.5,
+    "slpot":  0.1,
+    "tanphi": 0.63,
+    "dx":     1.0,
+    "rwh":    0.02,
+    "fw":     0.015,
+    "iprofl": 1.1
+  },
+  "storm": {
+    "T_recover":      21.0,
+    "recovery_model": "linear"
+  },
+  "erosion": {
+    "type":     "uniform",
+    "rate":     0.00082,
+    "interval": 30.0
+  },
+  "slc": {
+    "rate":     1.1e-5,
+    "interval": 30.0,
+    "scenario": "mid"
+  },
+  "nourishment": {
+    "RESTORE": {
+      "volume_trigger":         500,
+      "production_rate":        500000,
+      "cost_per_cy":            12.50,
+      "mobilization_cost":      100000,
+      "mobilization_threshold": 0
+    }
+  },
+  "reaches": {
+    "Reach1": {
+      "_type": "LOW_UPLAND",
+      "profiles": [
+        "data/profiles_test/reach1_p0.csv",
+        "data/profiles_test/reach1_p1.csv"
+      ],
+      "profile_priority": [0, 1],
+      "longshore_width":  {"value": 1000, "units": "ft"},
+      "berm_elevation": 2.4,
+      "datum": 0.0,
+      "cshore": { "d50": 0.3 },
+      "nourishment": ["RESTORE"]
+    },
+    "Reach2": {
+      "_type": "LOW_BERM",
+      "profiles": [
+        "data/profiles_test/reach2_p0.csv",
+        "data/profiles_test/reach2_p1.csv"
+      ],
+      "profile_priority": [0, 1],
+      "longshore_width":  {"value": 1000, "units": "ft"},
+      "berm_elevation": 1.8,
+      "datum": 0.0,
+      "cshore": { "d50": 0.3 },
+      "nourishment": ["RESTORE"]
+    },
+    "Reach3": {
+      "_type": "HIGH_UPLAND",
+      "profiles": [
+        "data/profiles_test/reach3_p0.csv",
+        "data/profiles_test/reach3_p1.csv"
+      ],
+      "profile_priority": [0, 1],
+      "longshore_width":  {"value": 1000, "units": "ft"},
+      "berm_elevation": 2.4,
+      "datum": 0.0,
+      "cshore": { "d50": 0.3 },
+      "nourishment": ["RESTORE"]
+    }
+  }
+}
