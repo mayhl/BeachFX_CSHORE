@@ -37,7 +37,7 @@ class CampaignExecutor:
     window, so it has none left to run.
     """
 
-    t_storm: float  # campaign start — storm end, or the cycle date for a planned cycle
+    t_base: float  # campaign start — storm end, or the cycle date for a planned cycle
     t_next: float
     cfg: ReachConfig
     sink: ResultsSink
@@ -49,7 +49,7 @@ class CampaignExecutor:
         # recovery up to the placement start; cut short here → RECN (crew, not storm).
         # A planned cycle has none to run — it only fires past the recovery completion.
         if self.kind is CampaignKind.STORM:
-            _recover_profile(w, self.t_storm, p.t_start, self.cfg, nourish_at_end=True)
+            _recover_profile(w, self.t_base, p.t_start, self.cfg, nourish_at_end=True)
         label = self.kind.start_label
         w.profile.snapshot(label, p.t_start)
         w.profile.record_event("NourishmentStart", p.t_start, label)
@@ -94,7 +94,7 @@ class CampaignExecutor:
             for w in order
         ]
         plan, campaign = plan_placements(
-            metrics, self.t_storm, self.t_next, self.cfg.nourishment, resume
+            metrics, self.t_base, self.t_next, self.cfg.nourishment, resume
         )
         by_id = {w.profile.id: w for w in order}
         for d in plan:
@@ -103,7 +103,7 @@ class CampaignExecutor:
             else:
                 emit(self.sink, d.kind, d.t, profile_id=d.profile_id, **d.row())
 
-        works.recover_unreached(self.t_storm, self.t_next, self.cfg, self.storm_at_next)
+        works.recover_unreached(self.t_base, self.t_next, self.cfg, self.storm_at_next)
         return campaign
 
 
@@ -131,7 +131,7 @@ def _run_decided(
         return None
 
     scheduler = CampaignExecutor(
-        t_storm=t_base,
+        t_base=t_base,
         t_next=t_next,
         cfg=cfg,
         sink=sink,
@@ -143,7 +143,7 @@ def _run_decided(
 
 def run_campaign(
     outcomes: list[StormOutcome],
-    t_storm: float,
+    t_base: float,
     t_next: float,
     cfg: ReachConfig,
     sink: ResultsSink,
@@ -165,18 +165,18 @@ def run_campaign(
 
     Returns (t_next, active_campaign):
         active_campaign is non-None only if the campaign was interrupted by
-        the next storm or couldn't finish within [t_storm, t_next].
+        the next storm or couldn't finish within [t_base, t_next].
     """
     widths = longshore_widths or [1.0] * len(outcomes)
     works = Workset.build(outcomes, widths)
 
     # No nourishment configured: pure recovery
     if cfg.nourishment is None:
-        works.recover_unreached(t_storm, t_next, cfg, storm_at_next)
+        works.recover_unreached(t_base, t_next, cfg, storm_at_next)
         return t_next, None
 
     return t_next, _run_decided(
-        works, t_storm, t_next, cfg, sink, prior, CampaignKind.STORM, storm_at_next
+        works, t_base, t_next, cfg, sink, prior, CampaignKind.STORM, storm_at_next
     )
 
 

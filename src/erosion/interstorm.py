@@ -108,16 +108,16 @@ def _apply_tick(
 def run_interstorm(
     profiles: list[Profile],
     t_start: float,
-    t_storm: float,
+    t_end: float,
     cfg: ReachConfig,
 ) -> None:
-    """Apply erosion + SLC ticks to all profiles from t_start to t_storm.
+    """Apply erosion + SLC ticks to all profiles from t_start to t_end.
 
     Each tick fires at the minimum of the two configured intervals.  Per-tick
     work is GIL-bound numpy + metric fitting with no cross-profile dependency,
     so profiles are processed serially within each tick.
     """
-    if t_storm <= t_start:
+    if t_end <= t_start:
         return
 
     ecfg: UniformErosionConfig | None = (
@@ -133,11 +133,11 @@ def run_interstorm(
         return  # no erosion or SLC configured
 
     t = t_start
-    while t < t_storm:
-        dt = min(interval, t_storm - t)
+    while t < t_end:
+        dt = min(interval, t_end - t)
         t_tick = t + dt
         for p in profiles:
             _apply_tick(p, dt, t_tick, ecfg, slc)
         t = t_tick
 
-    log.debug("run_interstorm: %.1fd → %.1fd (%d profiles)", t_start, t_storm, len(profiles))
+    log.debug("run_interstorm: %.1fd → %.1fd (%d profiles)", t_start, t_end, len(profiles))

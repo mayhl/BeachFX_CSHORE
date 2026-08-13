@@ -59,7 +59,7 @@ class TestRunCampaignNoNourishment:
     def test_returns_t_next(self):
         p = _p()
         t, campaign = run_campaign(
-            _outcomes([p]), t_storm=10.0, t_next=30.0, cfg=_cfg(), sink=NullResultsSink()
+            _outcomes([p]), t_base=10.0, t_next=30.0, cfg=_cfg(), sink=NullResultsSink()
         )
         assert t == pytest.approx(30.0)
         assert campaign is None
@@ -71,7 +71,7 @@ class TestRunCampaignNoNourishment:
         cfg = _cfg()
         cfg.storm.T_recover = 20.0
         run_campaign(
-            _outcomes([p], zb_pre), t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
+            _outcomes([p], zb_pre), t_base=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
         )
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-12)
 
@@ -81,7 +81,7 @@ class TestRunCampaignBelowTrigger:
         p = _p()
         cfg = _cfg(nourishment=_ncfg(volume_trigger=1e9))
         t, campaign = run_campaign(
-            _outcomes([p]), t_storm=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
+            _outcomes([p]), t_base=10.0, t_next=30.0, cfg=cfg, sink=NullResultsSink()
         )
         assert campaign is None
 
@@ -91,7 +91,7 @@ class TestRunCampaignBelowTrigger:
         cfg.storm.T_recover = 20.0
         zb_pre = [np.ones(50)]
         run_campaign(
-            _outcomes([p], zb_pre), t_storm=0.0, t_next=20.0, cfg=cfg, sink=NullResultsSink()
+            _outcomes([p], zb_pre), t_base=0.0, t_next=20.0, cfg=cfg, sink=NullResultsSink()
         )
         np.testing.assert_allclose(p.zb, 1.0, atol=1e-12)
 
@@ -107,7 +107,7 @@ class TestRunCampaignWithNourishment:
             cfg.storm.T_recover = 21.0
             run_campaign(
                 _outcomes([p], [p.zb.copy()]),
-                t_storm=0.0,
+                t_base=0.0,
                 t_next=200.0,
                 cfg=cfg,
                 sink=sink,
@@ -125,7 +125,7 @@ class TestRunCampaignStormInterrupt:
         cfg.storm.T_recover = 21.0
         t, campaign = run_campaign(
             _outcomes([p0, p1], [p0.zb.copy(), p1.zb.copy()]),
-            t_storm=0.0,
+            t_base=0.0,
             t_next=0.001,
             cfg=cfg,
             sink=NullResultsSink(),
@@ -694,7 +694,7 @@ class TestEmergencyTrigger:
             sink = ParquetResultsSink(root, "r", "FWP", lifecycle=0)
             run_campaign(
                 _outcomes([p], [p.zb.copy()]),
-                t_storm=0.0,
+                t_base=0.0,
                 t_next=1e6,
                 cfg=cfg,
                 sink=sink,
@@ -716,7 +716,7 @@ class TestBorrowDrivesDuration:
             cfg.storm.T_recover = 21.0
             run_campaign(
                 _outcomes([p], [p.zb.copy()]),
-                t_storm=0.0,
+                t_base=0.0,
                 t_next=1e6,
                 cfg=cfg,
                 sink=sink,
@@ -738,7 +738,7 @@ class TestRunCampaignCrewOnSite:
         prior = CampaignCarryover(crew_on_site=True, priority_order=["p0"])
         run_campaign(
             _outcomes([p], [p.zb.copy()]),
-            t_storm=0.0,
+            t_base=0.0,
             t_next=200.0,
             cfg=cfg,
             sink=NullResultsSink(),
