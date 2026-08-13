@@ -14,14 +14,15 @@ from .assess import (
     _depth_of_closure,
     _select_assessor,
 )
-from .campaign import (
+from .config import GeometryThresholds, NourishmentConfig
+from .execute import (
     FillSpec,
     WorkItem,
     Workset,
     recovery_duration,
+    run_campaign,
+    run_planned_campaign,
 )
-from .config import GeometryThresholds, NourishmentConfig
-from .execute import run_campaign, run_planned_campaign
 
 __all__ = [
     "FittedAssessor",

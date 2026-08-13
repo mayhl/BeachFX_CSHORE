@@ -5,7 +5,7 @@ import pytest
 
 from erosion.config import ReachConfig
 from erosion.metrics import ProfileMetrics
-from erosion.nourishment.campaign import _resolve_z_berm
+from erosion.nourishment.execute import _resolve_z_berm
 from erosion.profile import ProfileGeometryConfig, Recovery
 from erosion.storm import StormConfig
 from erosion.types import SnapshotLabel
