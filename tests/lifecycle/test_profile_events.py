@@ -1,19 +1,24 @@
-"""Unit tests for all ProfileEvent concrete types.
-
-Covers: ErosionTick, StormResponse, Recovery, FullNourishment, PartialNourishment.
-"""
+"""Unit tests for the profile-scope physics: every ProfileEvent concrete type
+(ErosionTick, StormResponse, Recovery incl. the z_berm mask, Full/PartialNourishment),
+the ``run_interstorm`` tick runner over them, and per-profile z_berm resolution."""
 
 import numpy as np
 import pytest
 
+from erosion.config import ReachConfig
+from erosion.interstorm import SLCConfig, UniformErosionConfig, run_interstorm
+from erosion.metrics import ProfileMetrics
+from erosion.nourishment.execute import _resolve_z_berm
 from erosion.profile import (
     ErosionTick,
     FullNourishment,
     PartialNourishment,
+    ProfileGeometryConfig,
     Recovery,
     StormResponse,
 )
 from erosion.runner.base import CSHOREResult
+from erosion.storm import StormConfig
 from erosion.types import SnapshotLabel
 from tests.builders import profile
 
@@ -162,6 +167,21 @@ class TestRecovery:
         Recovery(t=5.0, fraction=0.5, zb_post_storm=zb_post, zb_pre_storm=zb_pre).apply(p)
         assert p.snapshots[-1].label == SnapshotLabel.REC
 
+    def test_interrupted_takes_recs_snapshot(self):
+        """A storm-forced (interrupted) recovery snapshots RECS, not REC."""
+        p = _p()
+        zb_post, zb_pre = self._pre_post()
+        Recovery(
+            t=5.0, fraction=0.5, zb_post_storm=zb_post, zb_pre_storm=zb_pre, interrupted=True
+        ).apply(p)
+        assert p.snapshots[-1].label == SnapshotLabel.RECS
+
+    def test_snapshot_t_stored(self):
+        p = _p()
+        zb_post, zb_pre = self._pre_post()
+        Recovery(t=7.5, fraction=0.5, zb_post_storm=zb_post, zb_pre_storm=zb_pre).apply(p)
+        assert p.snapshots[-1].t == pytest.approx(7.5)
+
 
 class TestFullNourishment:
     def test_sets_template(self):
@@ -216,3 +236,127 @@ class TestPartialNourishment:
         p = _p()
         PartialNourishment(t=10.0, template_zb=np.ones(len(p.x)), fraction=0.5).apply(p)
         assert p.snapshots[-1].label == SnapshotLabel.EENS
+
+
+class TestResolveZBerm:
+    """Per-profile z_berm derivation: explicit config, ref fit, geometry, warn."""
+
+    def test_explicit_config_wins(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics(berm_elevation=1.8)
+        cfg = ReachConfig(storm=StormConfig(z_berm=2.5))  # bare number: ft in, stored m
+        assert _resolve_z_berm(p, cfg) == pytest.approx(float(cfg.storm.z_berm))
+
+    def test_derives_from_ref_metrics(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics(berm_elevation=1.8)
+        p.geometry = ProfileGeometryConfig(berm_elevation=2.0)
+        assert _resolve_z_berm(p, ReachConfig()) == pytest.approx(1.8)
+
+    def test_falls_back_to_geometry(self):
+        p = _p()
+        p.ref_metrics = ProfileMetrics()  # berm_elevation NaN — fit found no berm
+        p.geometry = ProfileGeometryConfig(berm_elevation=2.0)  # bare number: ft in, stored m
+        assert _resolve_z_berm(p, ReachConfig()) == pytest.approx(float(p.geometry.berm_elevation))
+
+    def test_warns_and_blends_all_when_unknown(self, caplog):
+        p = _p()
+        with caplog.at_level("WARNING"):
+            assert _resolve_z_berm(p, ReachConfig()) is None
+        assert "no berm elevation" in caplog.text
+
+
+def _cfg(erosion=None, slc=None) -> ReachConfig:
+    return ReachConfig(erosion=erosion, slc=slc)
+
+
+class TestRunInterstorm:
+    def test_no_config_no_change(self):
+        p = profile()
+        zb_before = p.zb.copy()
+        run_interstorm([p], t_start=0.0, t_end=30.0, cfg=_cfg())
+        np.testing.assert_array_equal(p.zb, zb_before)
+
+    def test_t_start_eq_t_end_immediate_return(self):
+        p = profile()
+        zb_before = p.zb.copy()
+        run_interstorm(
+            [p], t_start=10.0, t_end=10.0, cfg=_cfg(erosion=UniformErosionConfig(rate=0.01))
+        )
+        np.testing.assert_array_equal(p.zb, zb_before)
+
+    def test_uniform_erosion_lowers_zb(self):
+        p = profile()
+        run_interstorm(
+            [p],
+            t_start=0.0,
+            t_end=30.0,
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=30.0)),
+        )
+        np.testing.assert_allclose(p.zb, -0.3, atol=1e-12)
+
+    def test_slc_lowers_zb(self):
+        p = profile()
+        run_interstorm(
+            [p], t_start=0.0, t_end=30.0, cfg=_cfg(slc=SLCConfig(rate=0.005, tick_days=30.0))
+        )
+        np.testing.assert_allclose(p.zb, -0.15, atol=1e-12)
+
+    def test_erosion_and_slc_combined(self):
+        p = profile()
+        run_interstorm(
+            [p],
+            t_start=0.0,
+            t_end=30.0,
+            cfg=_cfg(
+                erosion=UniformErosionConfig(rate=0.01, tick_days=30.0),
+                slc=SLCConfig(rate=0.005, tick_days=30.0),
+            ),
+        )
+        np.testing.assert_allclose(p.zb, -(0.3 + 0.15), atol=1e-12)
+
+    def test_tick_count_matches_interval(self):
+        """tick_days=10 over 30 days → 3 Periodic snapshots."""
+        p = profile()
+        run_interstorm(
+            [p],
+            t_start=0.0,
+            t_end=30.0,
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=10.0)),
+        )
+        periodic = [s for s in p.snapshots if s.label == SnapshotLabel.Periodic]
+        assert len(periodic) == 3
+
+    def test_two_profiles_both_updated(self):
+        p0, p1 = profile("p0"), profile("p1")
+        run_interstorm(
+            [p0, p1],
+            t_start=0.0,
+            t_end=30.0,
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=30.0)),
+        )
+        np.testing.assert_allclose(p0.zb, -0.3, atol=1e-12)
+        np.testing.assert_allclose(p1.zb, -0.3, atol=1e-12)
+
+    def test_per_profile_rate(self):
+        p0, p1 = profile("p0"), profile("p1")
+        cfg = _cfg(
+            erosion=UniformErosionConfig(
+                per_profile_rates={"p0": 0.01, "p1": 0.02},
+                tick_days=30.0,
+            )
+        )
+        run_interstorm([p0, p1], t_start=0.0, t_end=30.0, cfg=cfg)
+        np.testing.assert_allclose(p0.zb, -0.3, atol=1e-12)
+        np.testing.assert_allclose(p1.zb, -0.6, atol=1e-12)
+
+    def test_partial_last_tick(self):
+        """tick_days=10, t_end=25 → 2 full ticks + 1 partial tick of 5 days."""
+        p = profile()
+        run_interstorm(
+            [p],
+            t_start=0.0,
+            t_end=25.0,
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=10.0)),
+        )
+        np.testing.assert_allclose(p.zb, -0.25, atol=1e-12)
