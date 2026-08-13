@@ -109,7 +109,7 @@ class TestParquetResultsSinkOutputFiles:
 
     def test_segment_events_csv_columns(self, out_dir):
         df = pd.read_csv(os.path.join(out_dir, "segment_events.csv"))
-        assert {"event_type", "profile_id", "t_start", "t_end", "volume_m3", "volume_cy"}.issubset(
+        assert {"event_type", "profile_id", "t_start", "t_end", "placed_m3", "placed_cy"}.issubset(
             set(df.columns)
         )
 
@@ -134,8 +134,8 @@ class TestRecordNourishment:
         assert len(sink._nourishment_rows) == 1
         row = sink._nourishment_rows[0]
         assert row["event_type"] == "FullNourishment"
-        assert row["volume_m3"] == pytest.approx(500.0)
-        assert row["volume_cy"] == pytest.approx(500.0 * 1.30795)
+        assert row["placed_m3"] == pytest.approx(500.0)
+        assert row["placed_cy"] == pytest.approx(500.0 * 1.30795)
 
     def test_null_sink_noop(self):
         sink = NullResultsSink()

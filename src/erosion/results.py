@@ -93,7 +93,7 @@ class ResultsSink:
         profile_id: str,
         t_start: float,
         t_end: float,
-        volume_m3: float,
+        placed_m3: float,
         event_type: str,
         borrow_m3: float = 0.0,
     ) -> None: ...
@@ -185,12 +185,12 @@ class ParquetResultsSink(ResultsSink):
         profile_id: str,
         t_start: float,
         t_end: float,
-        volume_m3: float,
+        placed_m3: float,
         event_type: str,
         borrow_m3: float = 0.0,
     ) -> None:
         CY_PER_M3 = 1.30795
-        # volume_m3 = placement (geometry-effective, on the beach); borrow_m3 =
+        # placed_m3 = placement (geometry-effective, on the beach); borrow_m3 =
         # dredged volume (placement × ratio) — the basis for duration and cost.
         self._nourishment_rows.append(
             {
@@ -198,8 +198,8 @@ class ParquetResultsSink(ResultsSink):
                 "profile_id": profile_id,
                 "t_start": t_start,
                 "t_end": t_end,
-                "volume_m3": volume_m3,
-                "volume_cy": volume_m3 * CY_PER_M3,
+                "placed_m3": placed_m3,
+                "placed_cy": placed_m3 * CY_PER_M3,
                 "borrow_m3": borrow_m3,
                 "borrow_cy": borrow_m3 * CY_PER_M3,
             }
@@ -371,8 +371,8 @@ class ParquetResultsSink(ResultsSink):
             "profile_id",
             "t_start",
             "t_end",
-            "volume_m3",
-            "volume_cy",
+            "placed_m3",
+            "placed_cy",
             "borrow_m3",
             "borrow_cy",
         ]

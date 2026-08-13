@@ -75,7 +75,7 @@ class Scenario:
     decision_columns: set
     labels: list  # profile_events.parquet label stream, time-ordered
     events: list  # events.parquet (event_type, t) stream, in event_seq order
-    segments: list  # segment_events.csv (event_type, t_start, t_end, volume_m3)
+    segments: list  # segment_events.csv (event_type, t_start, t_end, placed_m3)
     durations: dict = field(default_factory=dict)
 
 
@@ -267,4 +267,4 @@ def test_segment_events_nourishment_rows(sc, outputs):
         if t1 is not None:
             assert row["t_end"] == pytest.approx(t1, abs=1e-3)
         if vol is not None:
-            assert row["volume_m3"] == pytest.approx(vol, abs=0.05)
+            assert row["placed_m3"] == pytest.approx(vol, abs=0.05)

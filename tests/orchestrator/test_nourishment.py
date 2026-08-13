@@ -724,7 +724,7 @@ class TestBorrowDrivesDuration:
             )
             row = sink._nourishment_rows[0]
             assert row["event_type"] == "FullNourishment"
-            assert row["borrow_m3"] == pytest.approx(row["volume_m3"] * 2.0)
+            assert row["borrow_m3"] == pytest.approx(row["placed_m3"] * 2.0)
             # duration ran off the borrow volume, not the placement volume
             assert row["t_end"] - row["t_start"] == pytest.approx(row["borrow_m3"] / 500.0)
 
