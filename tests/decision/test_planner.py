@@ -35,7 +35,7 @@ from erosion.decision.planner import _next_available
 from erosion.types import CampaignKind, DecisionKind
 from tests.builders import ncfg
 
-STORM, CYCLE = CampaignKind.STORM, CampaignKind.SCHEDULED
+STORM, CYCLE = CampaignKind.STORM, CampaignKind.PLANNED
 
 
 def _m(pid: str, deficit: float, placement: float | None = None, force: bool = False):

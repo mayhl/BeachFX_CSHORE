@@ -45,7 +45,7 @@ class CampaignKind(Enum):
     """
 
     STORM = "storm"  # post-storm damage response — deficit or emergency trigger
-    SCHEDULED = "scheduled"  # periodic planned cycle — calendar-driven
+    PLANNED = "planned"  # periodic planned cycle — calendar-driven
 
     @property
     def start_label(self) -> SnapshotLabel:

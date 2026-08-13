@@ -121,7 +121,7 @@ def _run_decided(
 
     The two origins share the whole pipeline; their differences ride on ``origin``
     (the NOURISH_CYCLE remap and the label pair) and on the works themselves (a
-    scheduled cycle's items arrive pre-recovered, so its recover sweeps are no-ops).
+    planned cycle's items arrive pre-recovered, so its recover sweeps are no-ops).
     """
     works.assess(cfg)
     decision = decide_campaign(works.metrics, prior, cfg.nourishment, works.forced, origin, t_base)
@@ -180,7 +180,7 @@ def run_campaign(
     )
 
 
-def run_scheduled_campaign(
+def run_planned_campaign(
     profiles: list[Profile],
     t_cycle: float,
     t_next: float,
@@ -205,5 +205,5 @@ def run_scheduled_campaign(
         return None
 
     widths = longshore_widths or [1.0] * len(profiles)
-    works = Workset.build_scheduled(list(profiles), widths)
-    return _run_decided(works, t_cycle, t_next, cfg, sink, prior, CampaignKind.SCHEDULED)
+    works = Workset.build_planned(list(profiles), widths)
+    return _run_decided(works, t_cycle, t_next, cfg, sink, prior, CampaignKind.PLANNED)

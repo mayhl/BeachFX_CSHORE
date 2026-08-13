@@ -11,7 +11,7 @@ from .config import ReachConfig
 from .decision import CalendarState, CycleTracker, DeferCycle, emit
 from .decision.planner import erosion_split, plan_next_cycle
 from .interstorm import run_interstorm
-from .nourishment import recovery_duration, run_campaign, run_scheduled_campaign
+from .nourishment import recovery_duration, run_campaign, run_planned_campaign
 from .profile import Profiles
 from .results import ResultsSink, RunMeta
 from .storm import build_storm_schedule, run_parallel_cshore
@@ -97,7 +97,7 @@ class Reach:
             run_interstorm(self.profiles, t_eroded, d.erode_to, self.cfg)
             t_eroded = d.erode_to
 
-            self.calendar.campaign = run_scheduled_campaign(
+            self.calendar.campaign = run_planned_campaign(
                 self.profiles,
                 d.t_fire,
                 t_b,

@@ -127,10 +127,10 @@ def decide_campaign(
             t=t,
             total_deficit=d.total_deficit,
             trigger=trigger,
-            cycle=origin is CampaignKind.SCHEDULED,
+            cycle=origin is CampaignKind.PLANNED,
         )
     kind = d.kind
-    if origin is CampaignKind.SCHEDULED and kind is DecisionKind.NOURISH_TRIGGER:
+    if origin is CampaignKind.PLANNED and kind is DecisionKind.NOURISH_TRIGGER:
         kind = DecisionKind.NOURISH_CYCLE
     return LaunchCampaign(
         kind=kind,

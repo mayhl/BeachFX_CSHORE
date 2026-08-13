@@ -69,7 +69,7 @@ class Workset(list):
         )
 
     @classmethod
-    def build_scheduled(cls, profiles: list[Profile], widths: list[float]) -> Workset:
+    def build_planned(cls, profiles: list[Profile], widths: list[float]) -> Workset:
         """Bundle each profile for a periodic cycle — no storm, so no recovery.
 
         A planned cycle only ever fires in a quiet window (past the last recovery,

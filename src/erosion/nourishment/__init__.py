@@ -21,7 +21,7 @@ from .campaign import (
     recovery_duration,
 )
 from .config import GeometryThresholds, NourishmentConfig
-from .execute import run_campaign, run_scheduled_campaign
+from .execute import run_campaign, run_planned_campaign
 
 __all__ = [
     "FittedAssessor",
@@ -38,5 +38,5 @@ __all__ = [
     "_select_assessor",
     "recovery_duration",
     "run_campaign",
-    "run_scheduled_campaign",
+    "run_planned_campaign",
 ]
