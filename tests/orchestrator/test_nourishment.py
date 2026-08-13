@@ -152,9 +152,9 @@ class TestFittedAssessor:
     def test_eroded_berm_needs_fill(self):
         a = FittedAssessor().assess(self._profile(10.0), ReachConfig(), 50.0)
         assert a.needs_fill is True
-        assert a.metrics["berm_width_deficit"] == pytest.approx(20.0, abs=1.0)
+        assert a.details["berm_width_deficit"] == pytest.approx(20.0, abs=1.0)
         # subaerial dry-wedge deficit = shortfall × BE × width
-        assert a.deficit_m3 == pytest.approx(a.metrics["berm_width_deficit"] * 2.0 * 50.0)
+        assert a.deficit_m3 == pytest.approx(a.details["berm_width_deficit"] * 2.0 * 50.0)
 
     def test_no_ref_metrics_no_fill(self):
         x, z0, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=DuneSpec())
@@ -239,8 +239,8 @@ class TestFittedAssessorPlacement:
     def test_placement_is_full_active_wedge(self):
         cfg = ReachConfig(depth_of_closure=6.0)
         a = FittedAssessor().assess(self._profile(10.0), cfg, 50.0)
-        dd = a.metrics["berm_width_deficit"]
-        assert a.metrics["depth_of_closure"] == pytest.approx(6.0)
+        dd = a.details["berm_width_deficit"]
+        assert a.details["depth_of_closure"] == pytest.approx(6.0)
         assert a.placement_m3 == pytest.approx(dd * (2.0 + 6.0) * 50.0)
 
 
@@ -275,14 +275,14 @@ class TestGeometricAssessor:
     def test_basis_and_config_target(self):
         ga, p, cfg, *_ = self._realistic(target_bw=30.0)
         a = ga.assess(p, cfg, 50.0)
-        assert a.metrics["basis"] == "geometric"
-        assert a.metrics["target_berm_width"] == pytest.approx(30.0)
-        assert a.needs_fill and a.metrics["berm_width_deficit"] > 15.0
+        assert a.details["basis"] == "geometric"
+        assert a.details["target_berm_width"] == pytest.approx(30.0)
+        assert a.needs_fill and a.details["berm_width_deficit"] > 15.0
 
     def test_target_falls_back_to_ref_when_unset(self):
         ga, p, cfg, *_ = self._realistic(target_bw=None)  # no config → as-built ref berm
         a = ga.assess(p, cfg, 50.0)
-        assert a.metrics["target_berm_width"] == pytest.approx(p.ref_metrics.berm_width)
+        assert a.details["target_berm_width"] == pytest.approx(p.ref_metrics.berm_width)
 
     def test_synthesized_template_is_fill_only_and_preserves_upland(self):
         ga, p, cfg, x, _asbuilt, current = self._realistic(target_bw=30.0)
@@ -338,14 +338,14 @@ class TestGeometricAssessor:
         from erosion.metrics import fit_profile
 
         a = ga.assess(p, cfg, 50.0)
-        assert a.metrics["dune_fill_m3"] > 0.0  # slumped dune -> nonzero fill
+        assert a.details["dune_fill_m3"] > 0.0  # slumped dune -> nonzero fill
         # placement = berm wedge (BE+DClose) + the metered subaerial dune wedge
         be = p.ref_metrics.berm_elevation
-        berm_wedge = a.metrics["berm_width_deficit"] * (be + a.metrics["depth_of_closure"]) * 50.0
-        assert a.placement_m3 == pytest.approx(berm_wedge + a.metrics["dune_fill_m3"])
+        berm_wedge = a.details["berm_width_deficit"] * (be + a.details["depth_of_closure"]) * 50.0
+        assert a.placement_m3 == pytest.approx(berm_wedge + a.details["dune_fill_m3"])
         # the metered volume matches integrating the synthesized template's dune region
         m, _ = fit_profile(x, current, be, cfg.msl, ref=p.ref_metrics)
-        assert a.metrics["dune_fill_m3"] == pytest.approx(
+        assert a.details["dune_fill_m3"] == pytest.approx(
             ga._extra_placement(p, cfg, p.ref_metrics, m, 50.0)
         )
 
@@ -356,7 +356,7 @@ class TestGeometricAssessor:
 
         _ga, p, cfg, *_ = self._eroded_dune()
         a = FittedAssessor().assess(p, cfg, 50.0)
-        assert "dune_fill_m3" not in a.metrics
+        assert "dune_fill_m3" not in a.details
 
     def test_no_ref_metrics_places_no_fill(self):
         """Without an as-built fit basis (``ref_metrics``) there is no parametric
@@ -637,7 +637,7 @@ class TestEmergencyTrigger:
         p.zb = np.minimum(p.zb, p.ref_metrics.berm_elevation)  # plane the dune off
         cfg = self._cfg_trigger(dune_height=0.5)
         a = FittedAssessor().assess(p, cfg, 50.0)
-        assert a.metrics["dune_lost"] is True
+        assert a.details["dune_lost"] is True
         assert a.force is True
 
     def test_no_force_when_profile_never_had_a_dune(self):
@@ -648,7 +648,7 @@ class TestEmergencyTrigger:
         p = Profile("p0", x, z0.copy(), 0.3, ref_metrics=ref)
         cfg = self._cfg_trigger(dune_height=0.5, dune_width=5.0)
         a = FittedAssessor().assess(p, cfg, 50.0)
-        assert a.metrics["dune_lost"] is False
+        assert a.details["dune_lost"] is False
         assert a.force is False
 
     def test_base_volume_emergency_force(self):
@@ -670,7 +670,7 @@ class TestEmergencyTrigger:
         volume threshold (shared fallback)."""
         from erosion.nourishment import ProfileAssessment
 
-        a = ProfileAssessment(needs_fill=False, deficit_m3=100.0, metrics={})  # no dune metrics
+        a = ProfileAssessment(needs_fill=False, deficit_m3=100.0, details={})  # no dune metrics
         ncfg = _ncfg(volume_trigger=1e9)  # no trigger_geometry set
         cfg = _cfg(nourishment=ncfg)
         assert FittedAssessor().emergency_force(a, cfg) is False

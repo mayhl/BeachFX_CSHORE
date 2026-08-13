@@ -37,20 +37,20 @@ def _trigger_geometry(cfg: ReachConfig) -> GeometryThresholds:
     return cfg.nourishment.trigger_geometry if cfg.nourishment else GeometryThresholds()
 
 
-def _dune_emergency_force(metrics: dict, tg: GeometryThresholds) -> bool:
+def _dune_emergency_force(details: dict, tg: GeometryThresholds) -> bool:
     """Geometric emergency trigger (cReach.cpp:509): forced when the measured dune
     height (front relief) OR width falls below a configured threshold.  Each
     criterion is active only when its threshold is set; berm width is not a
-    trigger.  Reads the fitted ``metrics`` dict: a profile that never had a dune
+    trigger.  Reads the assessment ``details`` dict: a profile that never had a dune
     never fires, while a reference dune the storm erased (``dune_lost``) counts
     as below every active threshold.  Shared by the dune-aware assessors
     (Fitted, Geometric)."""
     # An erased dune measures as NaN relief / zero width -- below every active
     # threshold by definition, not unmeasurable
-    if metrics.get("dune_lost", False):
+    if details.get("dune_lost", False):
         return tg.dune_height is not None or tg.dune_width is not None
-    relief = metrics.get("dune_front_relief", np.nan)
-    width = metrics.get("dune_width", np.nan)
+    relief = details.get("dune_front_relief", np.nan)
+    width = details.get("dune_width", np.nan)
     if tg.dune_height is not None and np.isfinite(relief) and relief < float(tg.dune_height):
         return True
     if tg.dune_width is not None and np.isfinite(width) and 0.0 < width < float(tg.dune_width):
@@ -68,7 +68,7 @@ class ProfileAssessment:
     by the borrow ratio to drive duration and cost. ``force`` lets a profile
     override the reach economic default (the emergency trigger — set by the
     assessor's ``emergency_force``: a volume threshold on the base, plus the
-    geometric dune criterion for dune-aware assessors). ``metrics`` is free-form
+    geometric dune criterion for dune-aware assessors). ``details`` is free-form
     json that varies by assessor and rides along for output.
     """
 
@@ -76,7 +76,7 @@ class ProfileAssessment:
     deficit_m3: float
     placement_m3: float = 0.0
     force: bool = False
-    metrics: dict = field(default_factory=dict)
+    details: dict = field(default_factory=dict)
 
 
 class ProfileAssessor(ABC):
@@ -157,7 +157,7 @@ class VolumeAssessor(ProfileAssessor):
             needs_fill=deficit > 0.0,
             deficit_m3=deficit,
             placement_m3=placement,
-            metrics={"msl": cfg.msl, "depth_of_closure": dclose},
+            details={"msl": cfg.msl, "depth_of_closure": dclose},
         )
         a.force = self.emergency_force(a, cfg)
         return a
@@ -194,7 +194,7 @@ class FittedAssessor(ProfileAssessor):
     def emergency_force(self, a: ProfileAssessment, cfg: ReachConfig) -> bool:
         """Dune-aware trigger: the geometric dune criterion (shared
         ``_dune_emergency_force``) OR the base volume fallback."""
-        if _dune_emergency_force(a.metrics, _trigger_geometry(cfg)):
+        if _dune_emergency_force(a.details, _trigger_geometry(cfg)):
             return True
         return super().emergency_force(a, cfg)
 
@@ -202,7 +202,7 @@ class FittedAssessor(ProfileAssessor):
         ref = profile.ref_metrics
         if ref is None or not np.isfinite(ref.berm_elevation):
             return ProfileAssessment(
-                needs_fill=False, deficit_m3=0.0, metrics={"basis": self._basis}
+                needs_fill=False, deficit_m3=0.0, details={"basis": self._basis}
             )
         be = ref.berm_elevation
         m, _ideal = fit_profile(profile.x, profile.zb, be, cfg.msl, ref=ref)
@@ -212,7 +212,7 @@ class FittedAssessor(ProfileAssessor):
         deficit_m3 = berm_deficit * be * width_m  # subaerial dry-wedge trigger deficit
         # Placement fills the full active wedge, crest (BE) down to closure (cReach.cpp:1649).
         placement_m3 = berm_deficit * (be + dclose) * width_m
-        metrics = {
+        details = {
             "basis": self._basis,
             "berm_elevation": be,
             "berm_width": m.berm_width,
@@ -232,12 +232,12 @@ class FittedAssessor(ProfileAssessor):
         dune_fill = self._extra_placement(profile, cfg, ref, m, width_m)
         if dune_fill > 0.0:
             placement_m3 += dune_fill
-            metrics["dune_fill_m3"] = dune_fill
+            details["dune_fill_m3"] = dune_fill
         a = ProfileAssessment(
             needs_fill=berm_deficit > 0.0,
             deficit_m3=deficit_m3,
             placement_m3=placement_m3,
-            metrics=metrics,
+            details=details,
         )
         a.force = self.emergency_force(a, cfg)
         return a
