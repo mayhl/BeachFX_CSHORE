@@ -21,6 +21,8 @@ Output layout:
             profile_metrics.parquet
             snapshots.parquet
             placements.csv
+            grid.parquet            # common axis (+ georef seam); "postprocess": false skips
+            hydro.parquet           # hydro registered onto the common grid
             run_metadata.json
             run_summary.txt
 """
@@ -54,6 +56,7 @@ from .config import (
     _resolve_alternatives,
     _resolve_widths,
 )
+from .postprocess import postprocess_lifecycle
 from .profile import Profile
 from .reach import Reach
 from .results import ParquetResultsSink
@@ -171,6 +174,7 @@ class _LifecycleJob:
     out_root: str
     longshore_widths: list[float] = field(default_factory=list)  # metres, parallel to profiles
     save_cshore: bool = False
+    postprocess: bool = True  # common-grid registration pass after the flush
 
 
 def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
@@ -198,6 +202,9 @@ def _run_lifecycle(job: _LifecycleJob) -> tuple[str, str, int]:
         )
         reach.run(job.storms_df, job.sim_end)
 
+    if job.postprocess:
+        postprocess_lifecycle(sink.out_dir)
+
     return job.reach_id, job.alt_id, job.lc
 
 
@@ -214,6 +221,7 @@ def _build_jobs(
     lifecycles: list,
     run_spec="all",
     base_dir: str = ".",
+    postprocess: bool = True,
 ) -> list[_LifecycleJob]:
     """Expand the config into one ``_LifecycleJob`` per (reach × selected alternative
     × lifecycle).  ``run_spec`` (``"all"`` or a range/list like ``"1-4,8"``) picks
@@ -288,6 +296,7 @@ def _build_jobs(
                         out_root=out_root,
                         longshore_widths=longshore_widths,
                         save_cshore=save_cshore,
+                        postprocess=postprocess,
                     )
                 )
     return all_jobs
@@ -317,6 +326,7 @@ def run(
     global_sections = {s: cfg_raw[s] for s in _LAYERED_SECTIONS if s in cfg_raw}
     global_alts = cfg_raw.get("alternatives", {})
     reaches = _require(cfg_raw, "reaches", "top level")
+    postprocess = bool(cfg_raw.get("postprocess", True))
     # Which alternative ids to run: CLI --run overrides the config "run" (default all).
     run_spec = run_select if run_select is not None else cfg_raw.get("run", "all")
 
@@ -346,6 +356,7 @@ def run(
         lifecycles,
         run_spec=run_spec,
         base_dir=base_dir,
+        postprocess=postprocess,
     )
     log.info("Alternative selection: run=%s", run_spec)
 
