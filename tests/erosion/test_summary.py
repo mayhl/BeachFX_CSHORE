@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from erosion.summary import profile_extremes, storm_deltas
+from erosion.postprocess import profile_extremes, storm_deltas
 
 
 def _row(profile_id, label, t, **kw):
