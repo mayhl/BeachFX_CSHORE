@@ -16,8 +16,8 @@ from .assess import (
 )
 from .campaign import (
     ProfileNourishmentPlan,
-    _Work,
-    _Works,
+    WorkItem,
+    Workset,
     recovery_duration,
 )
 from .config import GeometryThresholds, NourishmentConfig
@@ -32,8 +32,8 @@ __all__ = [
     "ProfileAssessor",
     "ProfileNourishmentPlan",
     "VolumeAssessor",
-    "_Work",
-    "_Works",
+    "WorkItem",
+    "Workset",
     "_depth_of_closure",
     "_select_assessor",
     "recovery_duration",

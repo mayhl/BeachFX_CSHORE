@@ -30,7 +30,7 @@ class ProfileNourishmentPlan:
 
 
 @dataclass
-class _Work:
+class WorkItem:
     """Per-profile run-local bundle for one campaign — bundles the profile with its
     captured post-storm bed, recovery target, width, plan, and recovered flag so the
     campaign loop iterates objects instead of parallel arrays indexed by position.
@@ -45,8 +45,8 @@ class _Work:
     force: bool = False  # emergency geometric trigger fired (Tier-1)
 
 
-class _Works(list):
-    """The campaign's active (non-inundated) work items — a ``list[_Work]``, one per
+class Workset(list):
+    """The campaign's active (non-inundated) work items — a ``list[WorkItem]``, one per
     profile, that owns the loops over that set.
 
     It *is* a list (so ``for w in works`` / ``len(works)`` / ``zip`` all work); it
@@ -57,28 +57,29 @@ class _Works(list):
     """
 
     @classmethod
-    def build(cls, outcomes: list[StormOutcome], widths: list[float]) -> _Works:
+    def build(cls, outcomes: list[StormOutcome], widths: list[float]) -> Workset:
         """Bundle each non-inundated profile with its run-local campaign data.
 
         ``widths`` is aligned to ``outcomes`` (one per profile, including inundated
         ones), so the two zip positionally and inundated profiles drop out."""
         return cls(
-            _Work(o.profile, o.profile.zb.copy(), o.zb_pre, w)
+            WorkItem(o.profile, o.profile.zb.copy(), o.zb_pre, w)
             for o, w in zip(outcomes, widths)
             if not o.inundated
         )
 
     @classmethod
-    def build_scheduled(cls, profiles: list[Profile], widths: list[float]) -> _Works:
+    def build_scheduled(cls, profiles: list[Profile], widths: list[float]) -> Workset:
         """Bundle each profile for a periodic cycle — no storm, so no recovery.
 
         A planned cycle only ever fires in a quiet window (past the last recovery,
         clear of the next storm), so there is nothing to blend: every item starts
         ``recovered`` and the recover-the-rest sweep is a no-op.  The recovery beds
-        are the current one, kept only so a ``_Work`` stays one shape.
+        are the current one, kept only so a ``WorkItem`` stays one shape.
         """
         return cls(
-            _Work(p, p.zb.copy(), p.zb.copy(), w, recovered=True) for p, w in zip(profiles, widths)
+            WorkItem(p, p.zb.copy(), p.zb.copy(), w, recovered=True)
+            for p, w in zip(profiles, widths)
         )
 
     def assess(self, cfg: ReachConfig) -> None:
@@ -97,19 +98,19 @@ class _Works(list):
                 )
 
     @property
-    def plans(self) -> list[_Work]:
+    def plans(self) -> list[WorkItem]:
         return [w for w in self if w.plan is not None]
 
     @property
     def metrics(self) -> list[ProfileDemand]:
         """The scalar boundary to Tier-2: one ``ProfileDemand`` per planned profile.
-        The decider never sees a ``_Work`` — beds and templates stay on this side."""
+        The decider never sees a ``WorkItem`` — beds and templates stay on this side."""
         return [
             ProfileDemand(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
             for w in self.plans
         ]
 
-    def in_order(self, order: list[str]) -> list[_Work]:
+    def in_order(self, order: list[str]) -> list[WorkItem]:
         """Resolve the decider's ID order back onto the work items for placement."""
         by_id = {w.profile.id: w for w in self}
         return [by_id[pid] for pid in order]
@@ -217,7 +218,7 @@ def _apply_recovery_one(
 
 
 def _recover_profile(
-    w: _Work,
+    w: WorkItem,
     t_storm: float,
     t_apply: float,
     cfg: ReachConfig,

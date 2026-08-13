@@ -12,9 +12,9 @@ from ..decision.planner import decide_campaign, plan_placements
 from ..profile import FullNourishment, PartialNourishment
 from ..types import CampaignKind
 from .campaign import (
+    WorkItem,
+    Workset,
     _recover_profile,
-    _Work,
-    _Works,
 )
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class CampaignExecutor:
     storm_at_next: bool = False  # t_next is a following storm (vs sim/window end) → RECS on cutoff
     kind: CampaignKind = CampaignKind.STORM
 
-    def _apply(self, p: Placement, w: _Work) -> None:
+    def _apply(self, p: Placement, w: WorkItem) -> None:
         """Execute one planned placement on its work item."""
         # recovery up to the placement start; cut short here → RECN (crew, not storm).
         # A planned cycle has none to run — it only fires past the recovery completion.
@@ -83,7 +83,7 @@ class CampaignExecutor:
             )
         w.recovered = True
 
-    def run(self, order: list[_Work], works: _Works, resume: bool) -> CampaignCarryover | None:
+    def run(self, order: list[WorkItem], works: Workset, resume: bool) -> CampaignCarryover | None:
         """Plan the placements, then play the plan: audit decisions are emitted in
         emission order, placements are applied, and every profile the crew never
         reached is recovered.  ``works`` is the full (non-inundated) set for that
@@ -108,7 +108,7 @@ class CampaignExecutor:
 
 
 def _run_decided(
-    works: _Works,
+    works: Workset,
     t_base: float,
     t_next: float,
     cfg: ReachConfig,
@@ -168,7 +168,7 @@ def run_campaign(
         the next storm or couldn't finish within [t_storm, t_next].
     """
     widths = longshore_widths or [1.0] * len(outcomes)
-    works = _Works.build(outcomes, widths)
+    works = Workset.build(outcomes, widths)
 
     # No nourishment configured: pure recovery
     if cfg.nourishment is None:
@@ -205,5 +205,5 @@ def run_scheduled_campaign(
         return None
 
     widths = longshore_widths or [1.0] * len(profiles)
-    works = _Works.build_scheduled(list(profiles), widths)
+    works = Workset.build_scheduled(list(profiles), widths)
     return _run_decided(works, t_cycle, t_next, cfg, sink, prior, CampaignKind.SCHEDULED)
