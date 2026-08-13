@@ -1,8 +1,29 @@
-"""Pytest configuration.
+"""Pytest configuration — and the map of the suite.
 
-Shared test data builders (profiles, storms, forcing, configs, lifecycle runner)
-live in ``tests/builders.py`` and are imported directly by the test modules —
-they are not exposed as fixtures here.
+The layout (what lives where):
+
+    builders.py         shared builders: profiles, storms, ``ncfg`` (the one
+                        nourishment-policy doorway), and the lifecycle ``run()``
+                        (its ``runner`` is always explicit)
+    doubles.py          morphology-stated CSHORE stand-ins (``BermCut``,
+                        ``DuneScarp``, ``Overwash``, ...) + ``ScriptedRunner``
+    synthetic.py        parametric synthetic profile generator (``make_profile``)
+    erosion/            unit tests: metrics fitting (+ goldens), results sink,
+                        runner preflight, postprocess summaries
+    decision/           the pure planner suite (gates, crew clock, blackouts,
+                        cycles) and calendar-state pickling
+    lifecycle/          the interval loop end-to-end on doubles: profile events,
+                        storms, campaigns, planned cycles, event sequences, and
+                        the golden output timelines (``test_golden_timelines``)
+    integration/        only tests needing the real CSHORE binary — opt in with
+                        ``pytest -m integration``
+    goldens/            JSON regression fixtures (fits / real profiles /
+                        recovery); regenerate via ``REGEN_FIT_GOLDENS=1``
+    fit_gallery.py, recovery_gallery.py
+                        golden-case galleries (``--plot`` renders them)
+
+Shared test data builders are imported directly by the test modules — they are
+not exposed as fixtures here.
 
 ``--plot`` opts in to writing diagnostic plot artifacts (e.g. the fit gallery in
 ``tests/fit_gallery.py``); it is off by default so the suite stays fast and
