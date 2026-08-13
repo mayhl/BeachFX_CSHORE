@@ -15,7 +15,7 @@ from .assess import (
     _select_assessor,
 )
 from .campaign import (
-    ProfileNourishmentPlan,
+    FillSpec,
     WorkItem,
     Workset,
     recovery_duration,
@@ -30,7 +30,7 @@ __all__ = [
     "NourishmentConfig",
     "ProfileAssessment",
     "ProfileAssessor",
-    "ProfileNourishmentPlan",
+    "FillSpec",
     "VolumeAssessor",
     "WorkItem",
     "Workset",

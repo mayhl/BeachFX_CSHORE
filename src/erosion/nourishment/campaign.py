@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class ProfileNourishmentPlan:
+class FillSpec:
     profile_id: str
     volume_m3: float  # subaerial deficit (m³) — the trigger volume
     template_zb: np.ndarray  # template interpolated onto profile grid
@@ -40,7 +40,7 @@ class WorkItem:
     zb_post: np.ndarray
     zb_pre: np.ndarray  # zb_pre_new (recovery target on the fixed grid)
     width: float
-    plan: ProfileNourishmentPlan | None = None
+    plan: FillSpec | None = None
     recovered: bool = False
     force: bool = False  # emergency geometric trigger fired (Tier-1)
 
@@ -90,7 +90,7 @@ class Workset(list):
             a = assessor.assess(w.profile, cfg, w.width)
             w.force = a.force
             if a.needs_fill or a.force:
-                w.plan = ProfileNourishmentPlan(
+                w.plan = FillSpec(
                     profile_id=w.profile.id,
                     volume_m3=a.volume_m3,
                     template_zb=assessor.restore_template(w.profile, cfg),
