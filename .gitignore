@@ -50,3 +50,4 @@ tests/_artifacts/
 
 # mkdocs build output
 site/
+data/storms/restore_test_*.parquet
