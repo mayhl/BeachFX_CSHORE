@@ -15,32 +15,27 @@ src/
     reach.py             # Reach.run() — the interval loop; decides with `decision`, executes physics
     storm.py             # storm scheduling + parallel CSHORE driver + response classification
     interstorm.py        # background erosion + sea-level-change ticks between storms
-    profile.py           # Profile data + profile events (StormResponse, Recovery, ...)
+    profile.py           # Profile data + profile events + profile CSV loading
     decision/            # pure management-calendar planning (no physics imports)
       calendar.py        #   persistent state: cycle backlog + campaign carry-forward
-      model.py           #   the decision vocabulary (frozen dataclasses)
+      model.py           #   the decision vocabulary + the decision→sink emit funnel
       planner.py         #   the interval planner: campaign gate, crew-clock fold, cycle logic
-      emit.py            #   the one decision→sink funnel
     nourishment/         # assess deficits, execute campaigns (the physics side)
       config.py          #   NourishmentConfig + geometry thresholds
       assess.py          #   Tier-1 assessors + parametric template synthesis
-      campaign.py        #   work bundles + recovery application
-      execute.py         #   the campaign executor (plays the planner's decisions)
+      execute.py         #   work bundles, recovery, and the campaign executor
     metrics/             # morphology fitting (berm/dune detection + idealized forms)
     runner/              # CSHORE execution boundary
-      base.py            #   CSHORERunner ABC, CSHOREResult
+      base.py            #   CSHORERunner ABC, CSHOREResult, MockCSHORERunner
       local.py           #   LocalCSHORERunner (subprocess)
-      mock.py            #   MockCSHORERunner (tests)
       cshore_io.py       #   CSHORE infile generation + ODOC/OBPROF/OSETUP parsing (vendored)
       vfall.py           #   sediment fall-velocity (CSHORE wf input)
-    config.py            # ReachConfig root model
+    config.py            # ReachConfig root model + raw-config resolution
     types.py             # shared enums: snapshot labels, campaign/decision kinds
     units.py             # unit-aware config fields (ft/m, cy/m3)
     results.py           # ParquetResultsSink (output writer)
-    postprocess.py       # after-the-run registration pass (common grid + hydro)
-    summary.py           # after-the-run derived metrics
+    postprocess.py       # after-the-run registration pass + derived summary metrics
     sweep.py             # gen-alternatives CLI (offline cartesian plan generator)
-    geometry.py          # profile CSV loading
     viz.py               # plotting helpers
   executables/           # CSHORE binaries (macOS, Linux, Windows)
 data/
@@ -335,10 +330,12 @@ output/
     profiles.parquet        # all labeled snapshots — profile_id, label, t, node_idx, x, zb
     storm_hazard.parquet    # per-storm CSHORE output — profile_id, t_storm, node_idx, x, mwl, Hs, runup_m
     profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
-    snapshots.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+    snapshots.parquet       # lightweight snapshot log — one row per (profile, snapshot)
     events.parquet          # append-only profile event log (the audit trail of applied physics)
     decisions.parquet       # reach-scope decisions — launches, skips, defers, interrupts
-    placements.csv      # nourishment placement events — profile_id, t_start, t_end, volumes
+    placements.csv          # nourishment placements — profile_id, t_start, t_end, placed/borrow
+    grid.parquet            # common axis + georef seam ("postprocess": false skips)
+    hydro.parquet           # hydro registered onto the common grid
     warnings.csv            # surfaced run warnings (e.g. CSHORE failures)
     run_metadata.json
     run_summary.txt

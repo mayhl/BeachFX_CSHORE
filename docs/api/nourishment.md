@@ -21,11 +21,7 @@ flow and equations.
 
 ::: erosion.decision.calendar
 
-## Campaign state
-
-::: erosion.nourishment.campaign
-
-## Tier 3 — the campaign executor
+## Tier 3 — campaign state + the executor
 
 ::: erosion.nourishment.execute
 

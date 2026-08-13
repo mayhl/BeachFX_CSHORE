@@ -7,7 +7,7 @@ The bridge from the chained gridded array to BeachFX's parametric quantities
 
 ::: erosion.metrics.fit
 
-## Feature detection
+## Feature detection + shared geometry helpers
 
 ::: erosion.metrics.detect
 
@@ -15,14 +15,6 @@ The bridge from the chained gridded array to BeachFX's parametric quantities
 
 ::: erosion.metrics.forms
 
-## Shared geometry helpers
-
-::: erosion.metrics.geometry
-
 ## Types + constants
 
 ::: erosion.metrics.types
-
-## Profile review (manual-classification QC)
-
-::: erosion.metrics.review

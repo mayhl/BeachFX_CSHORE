@@ -20,8 +20,7 @@ The pure side:
 
 Offline (not part of a run):
 
-    postprocess.py  common-grid registration pass over a finished run dir
-    summary.py      derived metrics over a finished run dir
+    postprocess.py  common-grid registration + derived metrics over a finished run dir
     viz.py          plots and animations over run output
     sweep.py        gen-alternatives CLI (cartesian nourishment-plan tables)
 
