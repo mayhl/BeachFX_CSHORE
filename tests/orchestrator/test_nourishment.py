@@ -554,7 +554,7 @@ class TestNourishmentConfigValidation:
 
     def test_no_active_trigger_rejected(self):
         with pytest.raises(ValueError, match="no active trigger"):
-            self._build()  # no volume_trigger, no emergency_volume, no trigger_geometry
+            self._build()  # no volume_trigger, no emergency_volume, no emergency_geometry
 
     def test_volume_trigger_alone_is_valid(self):
         cfg = self._build(volume_trigger={"value": 1.0, "units": "m3"})
@@ -564,27 +564,29 @@ class TestNourishmentConfigValidation:
         cfg = self._build(emergency_volume={"value": 100.0, "units": "m3"})
         assert cfg.volume_trigger is None and cfg.emergency_volume == pytest.approx(100.0)
 
-    def test_trigger_geometry_alone_is_valid(self):
-        cfg = self._build(trigger_geometry={"dune_height": {"value": 2.0, "units": "m"}})
-        assert cfg.volume_trigger is None and cfg.trigger_geometry.dune_height == pytest.approx(2.0)
+    def test_emergency_geometry_alone_is_valid(self):
+        cfg = self._build(emergency_geometry={"dune_height": {"value": 2.0, "units": "m"}})
+        assert cfg.volume_trigger is None and cfg.emergency_geometry.dune_height == pytest.approx(
+            2.0
+        )
 
     def test_restore_below_trigger_rejected(self):
         with pytest.raises(ValueError, match="can't clear the emergency trigger"):
             self._build(
-                trigger_geometry={"dune_height": {"value": 3.0, "units": "m"}},
+                emergency_geometry={"dune_height": {"value": 3.0, "units": "m"}},
                 template_geometry={"dune_height": {"value": 2.0, "units": "m"}},
             )
 
     def test_restore_meets_trigger_is_valid(self):
         cfg = self._build(
-            trigger_geometry={"dune_height": {"value": 2.0, "units": "m"}},
+            emergency_geometry={"dune_height": {"value": 2.0, "units": "m"}},
             template_geometry={"dune_height": {"value": 2.5, "units": "m"}},
         )
         assert cfg.template_geometry.dune_height == pytest.approx(2.5)
 
     def test_trigger_set_restore_unset_is_valid(self):
         # unset restore target falls back to as-built (unknowable at config time) -> not checked
-        cfg = self._build(trigger_geometry={"dune_width": {"value": 10.0, "units": "m"}})
+        cfg = self._build(emergency_geometry={"dune_width": {"value": 10.0, "units": "m"}})
         assert cfg.template_geometry.dune_width is None
 
 
@@ -602,7 +604,7 @@ class TestEmergencyTrigger:
 
     def _cfg_trigger(self, **tg):
         ncfg = _ncfg(volume_trigger=1e9)  # never trips the volume gate
-        ncfg.trigger_geometry.__dict__.update(tg)
+        ncfg.emergency_geometry.__dict__.update(tg)
         cfg = _cfg(nourishment=ncfg)
         return cfg
 
@@ -671,7 +673,7 @@ class TestEmergencyTrigger:
         from erosion.nourishment import ProfileAssessment
 
         a = ProfileAssessment(needs_fill=False, deficit_m3=100.0, details={})  # no dune metrics
-        ncfg = _ncfg(volume_trigger=1e9)  # no trigger_geometry set
+        ncfg = _ncfg(volume_trigger=1e9)  # no emergency_geometry set
         cfg = _cfg(nourishment=ncfg)
         assert FittedAssessor().emergency_force(a, cfg) is False
         ncfg.emergency_volume = 50.0
@@ -685,7 +687,7 @@ class TestEmergencyTrigger:
         p, m = self._profile_with_dune()
         ncfg = _ncfg(volume_trigger=1e9, production_rate=500.0)  # volume gate never trips
         ncfg.template_geometry.berm_width = 1.0  # target << measured -> no berm deficit
-        ncfg.trigger_geometry.__dict__.update(dune_height=m.dune_front_relief + 1.0)  # force
+        ncfg.emergency_geometry.__dict__.update(dune_height=m.dune_front_relief + 1.0)  # force
         cfg = _cfg(nourishment=ncfg)
         cfg.storm.T_recover = 21.0
         a = _select_assessor(p, ncfg).assess(p, cfg, 50.0)

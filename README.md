@@ -132,7 +132,7 @@ foreshore slope, dune height/width/form) and is synthesized per profile on its
 own grid; any field left unset falls back to the profile's measured as-built
 geometry, so an empty `template_geometry` means restore-to-as-built. Nourishment
 triggers: `volume_trigger` (reach-level deficit gate), `emergency_volume`
-(per-profile forced mobilization), and `trigger_geometry` dune thresholds
+(per-profile forced mobilization), and `emergency_geometry` dune thresholds
 (dune-aware assessors); at least one must be active. Calendar-driven cycles
 (`cycle_interval_years`, `cycle_start_date`) propose on schedule and the volume
 gate disposes, so a healthy beach skips its cycle.

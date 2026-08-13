@@ -52,7 +52,7 @@ class NourishmentConfig(BaseModel):
     # Trigger + production
     # Regular (scheduled) trigger: reach-level volume deficit (m³) that launches a
     # campaign.  Optional — omit it for an emergency-only reach (the ≥1-active-trigger
-    # validator then requires emergency_volume or trigger_geometry instead).
+    # validator then requires emergency_volume or emergency_geometry instead).
     volume_trigger: ufloat("m3", "cy") | None = None
     production_rate: ufloat("m3/day", "cy/yr")  # dredge/pump output rate (m³/day)
     # Borrow = placement × ratio (cReach.cpp): extra material lost in placement.
@@ -97,10 +97,10 @@ class NourishmentConfig(BaseModel):
     # mobilization when its measured dune_height < dune_height OR dune_width <
     # dune_width.  None = that criterion is off; berm_width is NOT a trigger.
     # Dune-aware assessors (fitted, geometric) only.
-    trigger_geometry: GeometryThresholds = Field(default_factory=GeometryThresholds)
+    emergency_geometry: GeometryThresholds = Field(default_factory=GeometryThresholds)
     # Assessor-agnostic emergency trigger: a profile forces mobilization when its
     # measured subaerial deficit meets this volume threshold (m³).  The base
-    # ``ProfileAssessor`` path — dune-aware assessors add ``trigger_geometry`` on
+    # ``ProfileAssessor`` path — dune-aware assessors add ``emergency_geometry`` on
     # top and fall back to this.  None = the volume emergency path is off.
     emergency_volume: ufloat("m3", "cy") | None = None
 
@@ -146,7 +146,7 @@ class NourishmentConfig(BaseModel):
         trigger active (regular volume, emergency volume, or a geometric dune
         threshold).  A block with none is a silent no-op — express no-action
         explicitly with ``nourishment: null`` instead."""
-        tg = self.trigger_geometry
+        tg = self.emergency_geometry
         has_trigger = (
             self.volume_trigger is not None
             or self.emergency_volume is not None
@@ -156,7 +156,7 @@ class NourishmentConfig(BaseModel):
         if not has_trigger:
             raise ValueError(
                 "nourishment block has no active trigger; set volume_trigger, "
-                "emergency_volume, or trigger_geometry.dune_height/dune_width — or use "
+                "emergency_volume, or emergency_geometry.dune_height/dune_width — or use "
                 "`null` (no nourishment) for a recovery-only reach"
             )
         return self
@@ -169,12 +169,12 @@ class NourishmentConfig(BaseModel):
         emergency nourishment every interval.  Only checkable when both the restore
         target and the trigger are set explicitly — an unset restore target falls back
         to the measured as-built geometry, unknowable at config time."""
-        tmpl, trig = self.template_geometry, self.trigger_geometry
+        tmpl, trig = self.template_geometry, self.emergency_geometry
         for attr in ("dune_height", "dune_width"):
             target, threshold = getattr(tmpl, attr), getattr(trig, attr)
             if target is not None and threshold is not None and target < threshold:
                 raise ValueError(
-                    f"template_geometry.{attr} ({target}) is below trigger_geometry.{attr} "
+                    f"template_geometry.{attr} ({target}) is below emergency_geometry.{attr} "
                     f"({threshold}); a full restore can't clear the emergency trigger and "
                     "would re-fire it every interval"
                 )

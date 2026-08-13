@@ -31,10 +31,10 @@ def _depth_of_closure(profile: Profile, cfg: ReachConfig) -> float:
     return float(cfg.depth_of_closure)
 
 
-def _trigger_geometry(cfg: ReachConfig) -> GeometryThresholds:
+def _emergency_geometry(cfg: ReachConfig) -> GeometryThresholds:
     """Emergency trigger thresholds, or an all-``None`` (inactive) set when a bare
     reach config carries no nourishment policy."""
-    return cfg.nourishment.trigger_geometry if cfg.nourishment else GeometryThresholds()
+    return cfg.nourishment.emergency_geometry if cfg.nourishment else GeometryThresholds()
 
 
 def _dune_emergency_force(details: dict, tg: GeometryThresholds) -> bool:
@@ -194,7 +194,7 @@ class FittedAssessor(ProfileAssessor):
     def emergency_force(self, a: ProfileAssessment, cfg: ReachConfig) -> bool:
         """Dune-aware trigger: the geometric dune criterion (shared
         ``_dune_emergency_force``) OR the base volume fallback."""
-        if _dune_emergency_force(a.details, _trigger_geometry(cfg)):
+        if _dune_emergency_force(a.details, _emergency_geometry(cfg)):
             return True
         return super().emergency_force(a, cfg)
 

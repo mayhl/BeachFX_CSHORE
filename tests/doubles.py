@@ -118,7 +118,7 @@ class DuneCut(Damage):
 
     Prefer ``DuneScarp`` for storm damage — a storm undercuts the dune face, it does not
     plane the crest flat.  This form exists for the geometric emergency trigger, which
-    reads crest *height* (``trigger_geometry.dune_height``) directly.
+    reads crest *height* (``emergency_geometry.dune_height``) directly.
 
     Mind the cliff: shaving a trapezoidal crest widens its flat top, so the dune's
     prominence over the upland collapses.  Past ~1.5 m on ``template_profile`` the fitter
