@@ -58,6 +58,13 @@ class TestDecideCampaign:
         assert d.kind is DecisionKind.NOURISH_SKIP
         assert d.row() == {"deficit": 1.0, "trigger": 1e9}
 
+    def test_deficit_exactly_at_trigger_launches(self):
+        """The gate is ``>=``: a deficit meeting the trigger exactly mobilizes (the
+        boundary the blackout suite pins for windows, pinned here for the gate)."""
+        d = decide_campaign([_m("p0", 30.0)], None, ncfg(volume_trigger=30.0), False, STORM, t=20.5)
+        assert isinstance(d, LaunchCampaign)
+        assert d.kind is DecisionKind.NOURISH_TRIGGER
+
     def test_above_trigger_orders_by_priority_desc(self):
         ms = [_m("p0", 1.0), _m("p1", 5.0)]
         d = decide_campaign(ms, None, ncfg(volume_trigger=0.001), False, STORM, t=20.5)
@@ -89,8 +96,9 @@ class TestDecideCampaign:
     def test_emergency_only_has_no_volume_gate(self):
         """volume_trigger=None (emergency-only reach): no deficit ever mobilizes the
         regular gate; only an emergency force does."""
-        nc = ncfg()
-        nc.volume_trigger = None  # regular gate off
+        # A real emergency-only reach: the validator needs one active trigger, and
+        # emergency_volume is assessor-side -- the planner sees only `forced`
+        nc = ncfg(volume_trigger=None, emergency_volume=1e12)
         cold = decide_campaign([_m("p0", 1e9)], None, nc, False, STORM, t=20.5)
         assert isinstance(cold, SkipCampaign)  # no gate, no force -> skip
         hot = decide_campaign([_m("p0", 1e9)], None, nc, True, STORM, t=20.5)
