@@ -160,7 +160,7 @@ def _interrupt_multi() -> Made:
 
 
 def _periodic() -> Made:
-    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, interval=10.0))
+    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, tick_days=10.0))
     return run(
         [template_profile("p0")],
         storms_df=storms_at([20]),

@@ -32,7 +32,7 @@ class SLCConfig(BaseModel):
 
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
-    interval: ufloat("days") = 30.0
+    tick_days: ufloat("days") = 30.0
     scenario: str = "mid"  # label carried into output metadata
 
 
@@ -48,7 +48,7 @@ class UniformErosionConfig(BaseModel):
     type: Literal["uniform"] = "uniform"
     rate: float = 0.0
     per_profile_rates: dict[str, float] = {}
-    interval: ufloat("days") = 30.0
+    tick_days: ufloat("days") = 30.0
 
 
 class GenCadeErosionConfig(BaseModel):
@@ -126,8 +126,8 @@ def run_interstorm(
     slc = cfg.slc
 
     interval = min(
-        ecfg.interval if ecfg is not None else math.inf,
-        slc.interval if slc is not None else math.inf,
+        ecfg.tick_days if ecfg is not None else math.inf,
+        slc.tick_days if slc is not None else math.inf,
     )
     if math.isinf(interval):
         return  # no erosion or SLC configured

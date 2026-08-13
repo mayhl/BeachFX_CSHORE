@@ -30,11 +30,11 @@
       "erosion": {
         "type":         "uniform",
         "rate":         0.00082,
-        "interval": 30.0
+        "tick_days": 30.0
       },
       "slc": {
         "rate":         1.1e-5,
-        "interval": 30.0,
+        "tick_days": 30.0,
         "scenario":     "mid"
       }
     }

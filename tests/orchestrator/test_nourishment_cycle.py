@@ -43,7 +43,7 @@ def _cycle_cfg(
     if start_day is not None:
         payload["cycle_start_date"] = SIM_START + timedelta(days=start_day)
     nc = NourishmentConfig.model_validate(payload, context={"input_units": "m"})
-    erosion = UniformErosionConfig(rate=erosion_rate, interval=10.0) if erosion_rate else None
+    erosion = UniformErosionConfig(rate=erosion_rate, tick_days=10.0) if erosion_rate else None
     # z_berm masks recovery to the sub-berm face (see test_event_sequences._STORM)
     return ReachConfig(storm={"z_berm": 2.0}, nourishment=nc, erosion=erosion)
 

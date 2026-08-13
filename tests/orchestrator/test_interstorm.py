@@ -33,14 +33,14 @@ class TestRunInterstorm:
             [p],
             t_start=0.0,
             t_end=30.0,
-            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, interval=30.0)),
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=30.0)),
         )
         np.testing.assert_allclose(p.zb, -0.3, atol=1e-12)
 
     def test_slc_lowers_zb(self):
         p = _p()
         run_interstorm(
-            [p], t_start=0.0, t_end=30.0, cfg=_cfg(slc=SLCConfig(rate=0.005, interval=30.0))
+            [p], t_start=0.0, t_end=30.0, cfg=_cfg(slc=SLCConfig(rate=0.005, tick_days=30.0))
         )
         np.testing.assert_allclose(p.zb, -0.15, atol=1e-12)
 
@@ -51,20 +51,20 @@ class TestRunInterstorm:
             t_start=0.0,
             t_end=30.0,
             cfg=_cfg(
-                erosion=UniformErosionConfig(rate=0.01, interval=30.0),
-                slc=SLCConfig(rate=0.005, interval=30.0),
+                erosion=UniformErosionConfig(rate=0.01, tick_days=30.0),
+                slc=SLCConfig(rate=0.005, tick_days=30.0),
             ),
         )
         np.testing.assert_allclose(p.zb, -(0.3 + 0.15), atol=1e-12)
 
     def test_tick_count_matches_interval(self):
-        """interval=10 over 30 days → 3 Periodic snapshots."""
+        """tick_days=10 over 30 days → 3 Periodic snapshots."""
         p = _p()
         run_interstorm(
             [p],
             t_start=0.0,
             t_end=30.0,
-            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, interval=10.0)),
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=10.0)),
         )
         periodic = [s for s in p.snapshots if s.label == SnapshotLabel.Periodic]
         assert len(periodic) == 3
@@ -75,7 +75,7 @@ class TestRunInterstorm:
             [p0, p1],
             t_start=0.0,
             t_end=30.0,
-            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, interval=30.0)),
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=30.0)),
         )
         np.testing.assert_allclose(p0.zb, -0.3, atol=1e-12)
         np.testing.assert_allclose(p1.zb, -0.3, atol=1e-12)
@@ -85,7 +85,7 @@ class TestRunInterstorm:
         cfg = _cfg(
             erosion=UniformErosionConfig(
                 per_profile_rates={"p0": 0.01, "p1": 0.02},
-                interval=30.0,
+                tick_days=30.0,
             )
         )
         run_interstorm([p0, p1], t_start=0.0, t_end=30.0, cfg=cfg)
@@ -93,12 +93,12 @@ class TestRunInterstorm:
         np.testing.assert_allclose(p1.zb, -0.6, atol=1e-12)
 
     def test_partial_last_tick(self):
-        """interval=10, t_end=25 → 2 full ticks + 1 partial tick of 5 days."""
+        """tick_days=10, t_end=25 → 2 full ticks + 1 partial tick of 5 days."""
         p = _p()
         run_interstorm(
             [p],
             t_start=0.0,
             t_end=25.0,
-            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, interval=10.0)),
+            cfg=_cfg(erosion=UniformErosionConfig(rate=0.01, tick_days=10.0)),
         )
         np.testing.assert_allclose(p.zb, -0.25, atol=1e-12)

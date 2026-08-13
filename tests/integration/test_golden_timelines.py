@@ -52,7 +52,7 @@ def _cycle_cfg() -> ReachConfig:
         context={"input_units": "m"},
     )
     return ReachConfig(
-        storm=_STORM, nourishment=nc, erosion=UniformErosionConfig(rate=0.02, interval=10.0)
+        storm=_STORM, nourishment=nc, erosion=UniformErosionConfig(rate=0.02, tick_days=10.0)
     )
 
 

@@ -72,7 +72,7 @@ def test_inundation_logged():
 
 
 def test_erosion_tick_logged_with_payload():
-    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, interval=10.0))
+    cfg = ReachConfig(storm=_STORM, erosion=UniformErosionConfig(rate=0.01, tick_days=10.0))
     p = _run_one(ScriptedRunner(MINOR), cfg)
     ticks = [e for e in p.events if e.event_type == "ErosionTick"]
     assert ticks

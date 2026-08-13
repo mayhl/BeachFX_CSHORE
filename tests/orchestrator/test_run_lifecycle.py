@@ -69,7 +69,7 @@ class TestOutputSchema:
 
     def test_config_embedded_in_parquet_footer(self):
         with tempfile.TemporaryDirectory() as root:
-            cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=5.0))
+            cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, tick_days=5.0))
             sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0, config=cfg)
             _run(n_storms=2, cfg=cfg, sink=sink)
             for fname in ("events.parquet", "profiles.parquet"):
@@ -89,7 +89,7 @@ class TestOutputSchema:
 
 class TestWithErosionConfig:
     def test_erosion_lowers_prestorm_zb_vs_init(self):
-        cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=5.0))
+        cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, tick_days=5.0))
         profiles = _run(n_storms=1, cfg=cfg)
         for p in profiles:
             init_zb = p.snapshots[0].zb
@@ -101,7 +101,7 @@ class TestWithErosionConfig:
         the first storm. storms() places storms at t=20, 40 → the [20,40] gap must
         carry Periodic ticks (currently it does not — the interstorm interval is
         empty after run_campaign advances state.t to the next storm)."""
-        cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, interval=5.0))
+        cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, tick_days=5.0))
         profiles = _run(n_storms=2, cfg=cfg)
         for p in profiles:
             gap_ticks = [

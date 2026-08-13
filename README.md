@@ -107,8 +107,8 @@ Output is written to `output/{reach}/{alternative}/lc_{lifecycle:04d}/`.
   "alternatives": {
     "FWOP": {
       "storm":   { "T_recover": 21.0, "hydro_dt": 1.0 },
-      "erosion": { "type": "uniform", "rate": 8.2e-4, "interval": 30 },
-      "slc":     { "rate": 1.1e-5, "interval": 30 }
+      "erosion": { "type": "uniform", "rate": 8.2e-4, "tick_days": 30 },
+      "slc":     { "rate": 1.1e-5, "tick_days": 30 }
     },
     "FWP": {
       "nourishment": {
@@ -190,7 +190,7 @@ No `units` key needed. All dimensional length fields are interpreted as feet. No
   "alternatives": {
     "FWOP": {
       "storm":   { "T_recover": 21.0 },
-      "erosion": { "type": "uniform", "rate": 8.2e-4, "interval": 30 }
+      "erosion": { "type": "uniform", "rate": 8.2e-4, "tick_days": 30 }
     },
     "FWP": {
       "nourishment": {
@@ -221,7 +221,7 @@ Add `"units": {"input": "m"}` at the top level. Length fields interpret bare num
   "alternatives": {
     "FWOP": {
       "storm":   { "T_recover": 21.0 },
-      "erosion": { "type": "uniform", "rate": 2.5e-4, "interval": 30 }
+      "erosion": { "type": "uniform", "rate": 2.5e-4, "tick_days": 30 }
     },
     "FWP": {
       "nourishment": {
