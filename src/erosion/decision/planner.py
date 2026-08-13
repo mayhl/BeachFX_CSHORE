@@ -264,7 +264,7 @@ def plan_next_cycle(
     gap's end has no room to start.  Either way the cycle stays owed and is retried
     in the next gap, blocking those behind it.
 
-    Pure: peeks the tracker without committing — the caller commits (``next_due``,
+    Pure: peeks the tracker without committing — the caller commits (``take_due``,
     then ``clear`` once the fired campaign ran).
     """
     owed = cal.cycles.peek_due(t_b)

@@ -88,7 +88,7 @@ class Reach:
         """
         t_eroded = t_a
         while (d := plan_next_cycle(self.calendar, t_b, recovery_done)) is not None:
-            self.calendar.cycles.next_due(t_b)  # commit: this cycle is now the owed one
+            self.calendar.cycles.take_due(t_b)  # commit: this cycle is now the owed one
             if isinstance(d, DeferCycle):
                 emit(self.results, d.kind, d.t, **d.row())
                 break

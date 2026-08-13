@@ -80,29 +80,29 @@ class TestCycleTimes:
 class TestCycleTracker:
     def test_owes_nothing_before_the_first_cycle_date(self):
         t = CycleTracker.build(_cycle_cfg(1.0, start_day=100.0).nourishment, SIM_START, 2 * YEAR)
-        assert t.next_due(50.0) is None
+        assert t.take_due(50.0) is None
 
     def test_hands_out_the_cycle_once_it_comes_due(self):
         t = CycleTracker.build(_cycle_cfg(1.0, start_day=100.0).nourishment, SIM_START, 2 * YEAR)
-        assert t.next_due(150.0) == 100.0
+        assert t.take_due(150.0) == 100.0
 
     def test_an_unrun_cycle_stays_owed(self):
         """The gap closed without running it — it comes back in the next gap."""
         t = CycleTracker.build(_cycle_cfg(1.0, start_day=100.0).nourishment, SIM_START, 2 * YEAR)
-        assert t.next_due(150.0) == 100.0
-        assert t.next_due(150.0) == 100.0  # still owed; nothing cleared it
+        assert t.take_due(150.0) == 100.0
+        assert t.take_due(150.0) == 100.0  # still owed; nothing cleared it
 
     def test_an_owed_cycle_blocks_the_ones_behind_it(self):
         t = CycleTracker.build(_cycle_cfg(1.0, start_day=100.0).nourishment, SIM_START, 3 * YEAR)
-        assert t.next_due(3 * YEAR) == 100.0  # cycle 2 is also due, but waits its turn
+        assert t.take_due(3 * YEAR) == 100.0  # cycle 2 is also due, but waits its turn
         t.clear()
-        assert t.next_due(3 * YEAR) == 100.0 + YEAR
+        assert t.take_due(3 * YEAR) == 100.0 + YEAR
 
     def test_clearing_the_last_cycle_leaves_nothing_owed(self):
         t = CycleTracker.build(_cycle_cfg(1.0, start_day=100.0).nourishment, SIM_START, 200.0)
-        assert t.next_due(200.0) == 100.0  # the only cycle in the window
+        assert t.take_due(200.0) == 100.0  # the only cycle in the window
         t.clear()
-        assert t.next_due(200.0) is None
+        assert t.take_due(200.0) is None
 
 
 # --- config ----------------------------------------------------------------

@@ -71,9 +71,9 @@ def test_calendar_state_round_trip_preserves_the_backlog_mechanics():
     the deque and the owed slot survive as working state, not as reprs."""
     cal = CalendarState(cycles=CycleTracker(times=deque([100.0, 465.0])))
     revived: CalendarState = pickle.loads(pickle.dumps(cal))
-    assert revived.cycles.next_due(200.0) == 100.0
+    assert revived.cycles.take_due(200.0) == 100.0
     revived.cycles.clear()
-    assert revived.cycles.next_due(500.0) == 465.0
+    assert revived.cycles.take_due(500.0) == 465.0
 
 
 def test_importing_the_decision_layer_pulls_in_no_physics():

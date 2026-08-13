@@ -67,13 +67,13 @@ class CycleTracker:
         return cls(deque(cycle_times(ncfg, sim_start, sim_end)))
 
     def peek_due(self, t_end: float) -> float | None:
-        """``next_due`` without taking it — lets the interval loop see where to pause
+        """``take_due`` without taking it — lets the interval loop see where to pause
         the gap's erosion before it commits to running the cycle."""
         if self.owed is not None:
             return self.owed
         return self.times[0] if self.times and self.times[0] < t_end else None
 
-    def next_due(self, t_end: float) -> float | None:
+    def take_due(self, t_end: float) -> float | None:
         """The cycle the reach owes before ``t_end`` — the one still owed from an
         earlier gap, else the next one to come due.  None when nothing is owed yet."""
         if self.owed is None and self.times and self.times[0] < t_end:
