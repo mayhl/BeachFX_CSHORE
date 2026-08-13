@@ -65,7 +65,7 @@ class Reach:
         """When the last profile finishes recovering from the storm at ``t_storm``."""
         return t_storm + max((recovery_duration(p, self.cfg) for p in self.profiles), default=0.0)
 
-    def _erode_to_cycle(self, t_a: float, t_b: float, recovery_done: float = 0.0) -> float:
+    def _erode_to_split(self, t_a: float, t_b: float, recovery_done: float = 0.0) -> float:
         """Erode the gap ``[t_a, t_b]`` up to the planner's split point, and say how far.
 
         The split policy (hold the erosion back when a planned cycle is due, so the
@@ -139,7 +139,7 @@ class Reach:
         # A stormless lifecycle still erodes and still nourishes on its calendar; the
         # storm loop below would skip both, so run the whole window as one quiet gap.
         if n == 0:
-            t_split = self._erode_to_cycle(self.t, sim_end)
+            t_split = self._erode_to_split(self.t, sim_end)
             t_eroded = self._run_due_cycles(t_split, sim_end)
             run_interstorm(self.profiles, t_eroded, sim_end, self.cfg)
             self.t = sim_end
@@ -153,7 +153,7 @@ class Reach:
             # falls in the gap.  Only the LEADING gap is non-empty (later gaps close at
             # the next storm, so their cycles are already spent in Phase 3.5), and there
             # is no storm behind it to recover from — so no recovery deferral applies.
-            t_split = self._erode_to_cycle(self.t, storm.t)
+            t_split = self._erode_to_split(self.t, storm.t)
             t_eroded = self._run_due_cycles(t_split, storm.t)
             run_interstorm(self.profiles, t_eroded, storm.t, self.cfg)
 
@@ -180,7 +180,7 @@ class Reach:
             # (monotonic snapshots); recovery/nourishment then act on the eroded bed.
             # Stops at a planned cycle, if one is due before the next storm.
             recovery_done = self._recovery_done(campaign_start)
-            t_split = self._erode_to_cycle(storm_end, t_next, recovery_done)
+            t_split = self._erode_to_split(storm_end, t_next, recovery_done)
 
             # Phase 3 — campaign (recovery + nourishment) begins just after storm end.
             # storm_at_next distinguishes a recovery cut short by the next storm
