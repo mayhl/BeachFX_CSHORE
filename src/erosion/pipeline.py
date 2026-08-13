@@ -19,8 +19,8 @@ Output layout:
             profiles.parquet
             storm_hazard.parquet
             profile_metrics.parquet
-            profile_events.parquet
-            segment_events.csv
+            snapshots.parquet
+            placements.csv
             run_metadata.json
             run_summary.txt
 """

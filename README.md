@@ -335,10 +335,10 @@ output/
     profiles.parquet        # all labeled snapshots — profile_id, label, t, node_idx, x, zb
     storm_hazard.parquet    # per-storm CSHORE output — profile_id, t_storm, node_idx, x, mwl, Hs, runup_m
     profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
-    profile_events.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+    snapshots.parquet  # lightweight snapshot log — one row per (profile, snapshot)
     events.parquet          # append-only profile event log (the audit trail of applied physics)
     decisions.parquet       # reach-scope decisions — launches, skips, defers, interrupts
-    segment_events.csv      # nourishment placement events — profile_id, t_start, t_end, volumes
+    placements.csv      # nourishment placement events — profile_id, t_start, t_end, volumes
     warnings.csv            # surfaced run warnings (e.g. CSHORE failures)
     run_metadata.json
     run_summary.txt

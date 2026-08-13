@@ -123,9 +123,9 @@ class ParquetResultsSink(ResultsSink):
             profiles.parquet        # all labeled snapshots — one row per (profile, label, node)
             storm_hazard.parquet    # CSHORE spatial output — one row per (profile, storm, node)
             profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
-            profile_events.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+            snapshots.parquet  # lightweight snapshot log — one row per (profile, snapshot)
             decisions.parquet       # reach-scope orchestrator decisions — one row each
-            segment_events.csv      # nourishment placement events
+            placements.csv      # nourishment placement events
             run_metadata.json
             run_summary.txt
     """
@@ -240,9 +240,9 @@ class ParquetResultsSink(ResultsSink):
         self._write_profiles(profiles)
         self._write_storm_hazard()
         self._write_profile_metrics(profiles)
-        self._write_profile_events(profiles)
+        self._write_snapshots(profiles)
         self._write_decisions()
-        self._write_segment_events()
+        self._write_placements()
         self._write_warnings()
         self._write_metadata(meta, profiles)
         self._write_summary(meta, profiles)
@@ -334,7 +334,7 @@ class ParquetResultsSink(ResultsSink):
         if rows:
             self._to_parquet(pd.DataFrame(rows), "profile_metrics.parquet")
 
-    def _write_profile_events(self, profiles: list[Profile]) -> None:
+    def _write_snapshots(self, profiles: list[Profile]) -> None:
         """Lightweight snapshot log — one row per (profile, snapshot). No node data."""
         rows = []
         for p in profiles:
@@ -352,7 +352,7 @@ class ParquetResultsSink(ResultsSink):
                     }
                 )
         if rows:
-            self._to_parquet(pd.DataFrame(rows), "profile_events.parquet")
+            self._to_parquet(pd.DataFrame(rows), "snapshots.parquet")
 
     def _write_decisions(self) -> None:
         """Reach-scope decision log — the counterpart of ``events.parquet``.  Always
@@ -365,7 +365,7 @@ class ParquetResultsSink(ResultsSink):
         )
         self._to_parquet(df, "decisions.parquet")
 
-    def _write_segment_events(self) -> None:
+    def _write_placements(self) -> None:
         cols = [
             "event_type",
             "profile_id",
@@ -381,7 +381,7 @@ class ParquetResultsSink(ResultsSink):
             if self._nourishment_rows
             else pd.DataFrame(columns=cols)
         )
-        df.to_csv(os.path.join(self.out_dir, "segment_events.csv"), index=False)
+        df.to_csv(os.path.join(self.out_dir, "placements.csv"), index=False)
 
     def _write_warnings(self) -> None:
         cols = ["profile_id", "t", "message"]

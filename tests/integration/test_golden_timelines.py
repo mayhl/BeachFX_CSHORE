@@ -2,8 +2,8 @@
 
 The event-sequence suite asserts in-memory snapshot labels; these tests pin the
 *persisted* record instead — the full ordered contents of ``decisions.parquet``, the
-label stream in ``profile_events.parquet``, the applied-event stream in
-``events.parquet``, and the nourishment rows of ``segment_events.csv`` — for four
+label stream in ``snapshots.parquet``, the applied-event stream in
+``events.parquet``, and the nourishment rows of ``placements.csv`` — for four
 canonical lifecycles.  They are the schema-and-ordering contract the decide/execute
 split runs against: emission order (``decision_seq``) is the only ordering that holds
 by design, so these are the tests that catch a refactor silently reordering it.
@@ -73,9 +73,9 @@ class Scenario:
     # Payload keys absent from a row must be null there; the column set is pinned too.
     decisions: list
     decision_columns: set
-    labels: list  # profile_events.parquet label stream, time-ordered
+    labels: list  # snapshots.parquet label stream, time-ordered
     events: list  # events.parquet (event_type, t) stream, in event_seq order
-    segments: list  # segment_events.csv (event_type, t_start, t_end, placed_m3)
+    segments: list  # placements.csv (event_type, t_start, t_end, placed_m3)
     durations: dict = field(default_factory=dict)
 
 
@@ -241,8 +241,8 @@ def test_decisions_parquet_full_ordered_contents(sc, outputs):
 
 
 @pytest.mark.parametrize("sc", SCENARIOS, ids=_ids)
-def test_profile_events_label_stream(sc, outputs):
-    df = pd.read_parquet(os.path.join(outputs[sc.id], "profile_events.parquet"))
+def test_snapshots_label_stream(sc, outputs):
+    df = pd.read_parquet(os.path.join(outputs[sc.id], "snapshots.parquet"))
     assert list(df.sort_values("t", kind="stable")["label"]) == sc.labels, sc.id
 
 
@@ -256,8 +256,8 @@ def test_events_parquet_applied_stream(sc, outputs):
 
 
 @pytest.mark.parametrize("sc", SCENARIOS, ids=_ids)
-def test_segment_events_nourishment_rows(sc, outputs):
-    df = pd.read_csv(os.path.join(outputs[sc.id], "segment_events.csv"))
+def test_placements_nourishment_rows(sc, outputs):
+    df = pd.read_csv(os.path.join(outputs[sc.id], "placements.csv"))
     assert len(df) == len(sc.segments), sc.id
     for i, (etype, t0, t1, vol) in enumerate(sc.segments):
         row = df.iloc[i]

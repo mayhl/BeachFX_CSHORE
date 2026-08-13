@@ -66,7 +66,7 @@ class RunResult:
     @property
     def events(self) -> pd.DataFrame | None:
         if self._events is None:
-            self._events = self._load("profile_events.parquet")
+            self._events = self._load("snapshots.parquet")
         return self._events
 
     @property

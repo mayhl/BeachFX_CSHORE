@@ -63,9 +63,9 @@ class TestParquetResultsSinkOutputFiles:
         for fname in (
             "profiles.parquet",
             "storm_hazard.parquet",
-            "profile_events.parquet",
+            "snapshots.parquet",
             "decisions.parquet",
-            "segment_events.csv",
+            "placements.csv",
             "run_metadata.json",
             "run_summary.txt",
         ):
@@ -75,7 +75,7 @@ class TestParquetResultsSinkOutputFiles:
         "fname, expected",
         [
             ("profiles.parquet", {"profile_id", "label", "t", "node_idx", "x", "zb"}),
-            ("profile_events.parquet", {"profile_id", "label", "t", "storm_response_type"}),
+            ("snapshots.parquet", {"profile_id", "label", "t", "storm_response_type"}),
         ],
     )
     def test_exact_columns(self, out_dir, fname, expected):
@@ -99,22 +99,22 @@ class TestParquetResultsSinkOutputFiles:
         assert set(df["profile_id"].unique()) == {"p0", "p1"}
 
     @pytest.mark.parametrize("label", ["INIT", "PostStorm"])
-    def test_profile_events_label_present(self, out_dir, label):
-        df = pd.read_parquet(os.path.join(out_dir, "profile_events.parquet"))
+    def test_snapshots_label_present(self, out_dir, label):
+        df = pd.read_parquet(os.path.join(out_dir, "snapshots.parquet"))
         assert label in df["label"].values
 
     def test_storm_hazard_n_unique_storms(self, out_dir):
         df = pd.read_parquet(os.path.join(out_dir, "storm_hazard.parquet"))
         assert len(df["t_storm"].unique()) == 2
 
-    def test_segment_events_csv_columns(self, out_dir):
-        df = pd.read_csv(os.path.join(out_dir, "segment_events.csv"))
+    def test_placements_csv_columns(self, out_dir):
+        df = pd.read_csv(os.path.join(out_dir, "placements.csv"))
         assert {"event_type", "profile_id", "t_start", "t_end", "placed_m3", "placed_cy"}.issubset(
             set(df.columns)
         )
 
-    def test_segment_events_empty_when_no_nourishment(self, out_dir):
-        df = pd.read_csv(os.path.join(out_dir, "segment_events.csv"))
+    def test_placements_empty_when_no_nourishment(self, out_dir):
+        df = pd.read_csv(os.path.join(out_dir, "placements.csv"))
         assert len(df) == 0
 
     def test_run_metadata_json_fields(self, out_dir):
@@ -141,13 +141,13 @@ class TestRecordNourishment:
         sink = NullResultsSink()
         sink.record_nourishment("p0", 0.0, 1.0, 100.0, "FullNourishment")  # must not raise
 
-    def test_segment_events_csv_populated(self, tmp_path):
+    def test_placements_csv_populated(self, tmp_path):
         sink = ParquetResultsSink(str(tmp_path), "R1", "FWOP", lifecycle=0)
         sink.record_nourishment("p0", 10.0, 15.0, 500.0, "FullNourishment")
         sink.record_nourishment("p1", 15.0, 20.0, 300.0, "PartialNourishment")
         meta = RunMeta(reach_id="R1", alternative_id="FWOP", sim_start=SIM_START, lifecycle=0)
         sink.flush([], meta)
-        df = pd.read_csv(os.path.join(sink.out_dir, "segment_events.csv"))
+        df = pd.read_csv(os.path.join(sink.out_dir, "placements.csv"))
         assert len(df) == 2
         assert set(df["event_type"].unique()) == {"FullNourishment", "PartialNourishment"}
 

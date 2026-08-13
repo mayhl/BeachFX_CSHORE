@@ -32,7 +32,7 @@ def test_snapshot_label_vocabulary():
 
 
 def test_storm_response_type_contract():
-    # Int values are a serialized contract (written to profile_events.parquet),
+    # Int values are a serialized contract (written to snapshots.parquet),
     # so both the mapping and the int-ness matter.
     assert [(t.name, int(t)) for t in StormResponseType] == [
         ("NORMAL", 0),
