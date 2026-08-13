@@ -10,13 +10,21 @@ by design, so these are the tests that catch a refactor silently reordering it.
 
 Every pinned number is arithmetic on the scenario's stated damage: a ``BermCut(c)``
 deficit is ``c x 2 m`` berm elevation (+2 m3 of foreshore ramp on the volume
-assessor), and a placement runs ``deficit / production_rate`` days.
+assessor), and a placement runs ``deficit / production_rate`` days.  Two deficits
+(``_CYCLE_DEFICIT``, ``_BLACKOUT_DEFICIT``) are pinned from the run instead — see
+the note at their declaration.
+
+Authoring a new scenario: the label vocabulary is ``erosion.types.SnapshotLabel``
+(docstrings there explain each), the decision kinds are ``erosion.types.DecisionKind``
+with payload keys mirrored in ``erosion.decision.model``'s ``row()`` methods, and
+``tests/lifecycle/test_nourishment_cycle.py`` is the prior art for cycle labels
+(SSN/ESN vs the storm-triggered SEN/EEN).  Damage forms live in ``tests/doubles.py``.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pandas as pd
 import pytest
@@ -29,6 +37,13 @@ from tests.builders import SIM_START, ncfg, run, storms_at, template_profile
 from tests.doubles import MASSIVE, NONE, SEVERE, ScriptedRunner
 
 _STORM = {"z_berm": 2.0}  # mask recovery to the sub-berm face (see test_event_sequences)
+
+# Pinned from the run, not head-arithmetic: an accrued-erosion deficit measured
+# against the parametric restore template (and the recovery/re-cut interplay in
+# blackout_block) has no clean closed form.  Regenerate by rerunning the scenario.
+# The placement end-times ARE arithmetic on these: t_start + deficit/production.
+_CYCLE_DEFICIT = 226.73  # stormless_cycle: 20 erosion ticks assessed at the day-200 cycle
+_BLACKOUT_DEFICIT = 91.0  # blackout_block: doubled SEVERE damage less the cut-short recovery
 
 
 def _nourish_cfg(production_rate: float) -> ReachConfig:
@@ -76,7 +91,6 @@ class Scenario:
     labels: list  # snapshots.parquet label stream, time-ordered
     events: list  # events.parquet (event_type, t) stream, in event_seq order
     segments: list  # placements.csv (event_type, t_start, t_end, placed_m3)
-    durations: dict = field(default_factory=dict)
 
 
 _BASE_COLS = {"decision_seq", "kind", "t", "profile_id"}
@@ -149,13 +163,15 @@ SCENARIOS = [
         cfg_make=_cycle_cfg,
         storm_days=[],
         sim_end=300.0,
-        decisions=[("NOURISH_CYCLE", 200.0, None, {"deficit": 226.73, "resume": 0, "forced": 0})],
+        decisions=[
+            ("NOURISH_CYCLE", 200.0, None, {"deficit": _CYCLE_DEFICIT, "resume": 0, "forced": 0})
+        ],
         decision_columns=_BASE_COLS | {"deficit", "resume", "forced"},
         labels=["INIT"] + ["Periodic"] * 20 + ["SSN", "ESN"] + ["Periodic"] * 10 + ["EndIteration"],
         events=[("ErosionTick", 10.0 * k) for k in range(1, 21)]
-        + [("NourishmentStart", 200.0), ("FullNourishment", None)]
+        + [("NourishmentStart", 200.0), ("FullNourishment", 200.0 + _CYCLE_DEFICIT / 500.0)]
         + [("ErosionTick", 10.0 * k) for k in range(21, 31)],
-        segments=[("FullNourishment", 200.0, None, None)],
+        segments=[("FullNourishment", 200.0, 200.0 + _CYCLE_DEFICIT / 500.0, _CYCLE_DEFICIT)],
     ),
     Scenario(
         # A blackout spanning the whole first gap pushes the start past storm 2: the
@@ -169,7 +185,12 @@ SCENARIOS = [
         decisions=[
             ("NOURISH_TRIGGER", 20.501, None, {"deficit": 42.0, "resume": 0, "forced": 0}),
             ("BLACKOUT_DEFER", 20.501, "p0", {"requested": 20.501, "deferred_to": 38.0}),
-            ("NOURISH_TRIGGER", 34.501, None, {"deficit": 91.0, "resume": 0, "forced": 0}),
+            (
+                "NOURISH_TRIGGER",
+                34.501,
+                None,
+                {"deficit": _BLACKOUT_DEFICIT, "resume": 0, "forced": 0},
+            ),
             ("BLACKOUT_DEFER", 34.501, "p0", {"requested": 34.501, "deferred_to": 38.0}),
         ],
         decision_columns=_BASE_COLS | {"deficit", "resume", "forced", "requested", "deferred_to"},
@@ -191,9 +212,9 @@ SCENARIOS = [
             ("StormResponse", 34.5),
             ("Recovery", 38.0),
             ("NourishmentStart", 38.0),
-            ("FullNourishment", None),
+            ("FullNourishment", 38.0 + _BLACKOUT_DEFICIT / 100.0),
         ],
-        segments=[("FullNourishment", 38.0, None, None)],
+        segments=[("FullNourishment", 38.0, 38.0 + _BLACKOUT_DEFICIT / 100.0, _BLACKOUT_DEFICIT)],
     ),
 ]
 
@@ -226,18 +247,19 @@ def test_decisions_parquet_full_ordered_contents(sc, outputs):
     df = pd.read_parquet(os.path.join(outputs[sc.id], "decisions.parquet"))
     assert set(df.columns) == sc.decision_columns, sc.id
     assert list(df["decision_seq"]) == list(range(len(sc.decisions))), sc.id
-    assert len(df) == len(sc.decisions), sc.id
-    for i, (kind, t, pid, payload) in enumerate(sc.decisions):
-        row = df.iloc[i]
-        assert row["kind"] == kind, f"{sc.id} seq {i}"
-        assert row["t"] == pytest.approx(t, abs=1e-3), f"{sc.id} seq {i}"
-        assert (row["profile_id"] == pid) if pid is not None else pd.isna(row["profile_id"])
-        for key, want in payload.items():
-            assert row[key] == pytest.approx(want, abs=0.05), f"{sc.id} seq {i} {key}"
-        # every payload column this row does not claim must be null — absent keys
-        # landing as values would mean two decision kinds bled into each other
-        for key in sc.decision_columns - _BASE_COLS - set(payload):
-            assert pd.isna(row[key]), f"{sc.id} seq {i} stray {key}"
+    # One whole-stream assert per column: a failure diffs the full ordered stream
+    # instead of stopping at the first divergent cell
+    assert list(df["kind"]) == [k for k, _, _, _ in sc.decisions], sc.id
+    assert list(df["t"]) == pytest.approx([t for _, t, _, _ in sc.decisions], abs=1e-3), sc.id
+    assert [None if pd.isna(v) else v for v in df["profile_id"]] == [
+        pid for _, _, pid, _ in sc.decisions
+    ], sc.id
+    # Payload columns: a key a row does not claim must be null there — absent keys
+    # landing as values would mean two decision kinds bled into each other
+    for key in sorted(sc.decision_columns - _BASE_COLS):
+        want = [payload.get(key, float("nan")) for _, _, _, payload in sc.decisions]
+        got = list(pd.to_numeric(df[key]))  # nullable bools -> floats, None -> NaN
+        assert got == pytest.approx(want, abs=0.05, nan_ok=True), f"{sc.id} {key}"
 
 
 @pytest.mark.parametrize("sc", SCENARIOS, ids=_ids)
@@ -249,22 +271,14 @@ def test_snapshots_label_stream(sc, outputs):
 @pytest.mark.parametrize("sc", SCENARIOS, ids=_ids)
 def test_events_parquet_applied_stream(sc, outputs):
     df = pd.read_parquet(os.path.join(outputs[sc.id], "events.parquet")).sort_values("event_seq")
-    assert [r.event_type for r in df.itertuples()] == [e for e, _ in sc.events], sc.id
-    for (want_type, want_t), got_t in zip(sc.events, df["t"]):
-        if want_t is not None:
-            assert got_t == pytest.approx(want_t, abs=1e-3), f"{sc.id} {want_type}"
+    assert list(df["event_type"]) == [e for e, _ in sc.events], sc.id
+    assert list(df["t"]) == pytest.approx([t for _, t in sc.events], abs=1e-3), sc.id
 
 
 @pytest.mark.parametrize("sc", SCENARIOS, ids=_ids)
 def test_placements_nourishment_rows(sc, outputs):
     df = pd.read_csv(os.path.join(outputs[sc.id], "placements.csv"))
-    assert len(df) == len(sc.segments), sc.id
-    for i, (etype, t0, t1, vol) in enumerate(sc.segments):
-        row = df.iloc[i]
-        assert row["event_type"] == etype, f"{sc.id} row {i}"
-        if t0 is not None:
-            assert row["t_start"] == pytest.approx(t0, abs=1e-3)
-        if t1 is not None:
-            assert row["t_end"] == pytest.approx(t1, abs=1e-3)
-        if vol is not None:
-            assert row["placed_m3"] == pytest.approx(vol, abs=0.05)
+    assert list(df["event_type"]) == [s[0] for s in sc.segments], sc.id
+    assert list(df["t_start"]) == pytest.approx([s[1] for s in sc.segments], abs=1e-3), sc.id
+    assert list(df["t_end"]) == pytest.approx([s[2] for s in sc.segments], abs=1e-3), sc.id
+    assert list(df["placed_m3"]) == pytest.approx([s[3] for s in sc.segments], abs=0.05), sc.id
