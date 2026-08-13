@@ -1,6 +1,6 @@
 # erosion
 
-The **erosion module** of CHART FEAT — a Python simulation framework for storm-driven erosion of ocean-facing sandy beaches, using CSHORE as the 1D cross-shore morphology engine. It couples a multi-decade lifecycle orchestrator with CSHORE per-storm response to support Coastal Storm Risk Management (CSRM) feasibility studies, and supports multi-reach, multi-alternative (FWOP/FWP), and multi-lifecycle Monte Carlo simulations.
+The **erosion module** of CHART FEAT — a Python simulation framework for storm-driven erosion of ocean-facing sandy beaches, using CSHORE as the 1D cross-shore morphology engine. It couples a multi-decade interval-loop lifecycle engine with CSHORE per-storm response to support Coastal Storm Risk Management (CSRM) feasibility studies, and supports multi-reach, multi-alternative (FWOP/FWP), and multi-lifecycle Monte Carlo simulations.
 
 ## Orientation
 

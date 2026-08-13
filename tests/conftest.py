@@ -31,7 +31,7 @@ def pytest_addoption(parser):
         "--events-table",
         action="store_true",
         default=False,
-        help="Print an expected-vs-generated orchestrator event table (with OK/FAIL) "
+        help="Print an expected-vs-generated lifecycle event table (with OK/FAIL) "
         "in the terminal summary.",
     )
 

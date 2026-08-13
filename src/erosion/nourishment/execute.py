@@ -57,7 +57,7 @@ class Workset(list):
     It *is* a list (so ``for w in works`` / ``len(works)`` / ``zip`` all work); it
     only adds named bulk steps (``assess``, ``recover_unreached``) so ``run_campaign``
     and ``CampaignExecutor`` compose them instead of re-opening a ``for w in active``
-    each time — notably the recover-the-rest sweep, which the orchestrator would
+    each time — notably the recover-the-rest sweep, which the interval loop would
     otherwise repeat at every early return and after placement.
     """
 

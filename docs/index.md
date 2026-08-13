@@ -1,6 +1,6 @@
 # CHART FEAT — erosion module
 
-The **erosion module** of CHART FEAT: a lifecycle orchestrator that chains live
+The **erosion module** of CHART FEAT: an interval-loop lifecycle engine that chains live
 CSHORE cross-shore morphology runs storm-to-storm, with recovery, sea-level
 change, and emergency nourishment layered on the gridded-array chain.
 

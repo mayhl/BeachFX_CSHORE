@@ -180,7 +180,7 @@ class TestFullNourishment:
     def test_takes_een_snapshot_by_default(self):
         """Post-storm is the default campaign, so the end marker is EEN.
 
-        Which label each CAMPAIGN KIND gets is the orchestrator's call, asserted where it
+        Which label each CAMPAIGN KIND gets is the interval loop's call, asserted where it
         is made (test_event_sequences / test_nourishment_cycle) — passing a label in here
         and reading it back would only re-assert the dataclass field.
         """

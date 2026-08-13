@@ -1,7 +1,7 @@
 """Orchestrator event-generation tests.
 
 These exercise ``run_lifecycle`` end-to-end and assert the *sequence* of events
-(snapshot labels) each profile accumulates — i.e. that the orchestrator emits
+(snapshot labels) each profile accumulates — i.e. that the interval loop emits
 the right ordering of PreStorm / PostStorm / REC / SEN / EEN across a storm
 schedule.  They test event handling, not the nourishment/recovery numerics.
 

@@ -62,7 +62,7 @@ class CampaignKind(Enum):
 
 
 class DecisionKind(Enum):
-    """Reach/SIM-scope orchestrator *decisions* — distinct from the profile-scope
+    """Reach/SIM-scope *decisions* — distinct from the profile-scope
     morphology ``SnapshotLabel``s. Unified only at the event log's ``event_id``.
     """
 

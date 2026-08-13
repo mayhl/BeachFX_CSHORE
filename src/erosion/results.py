@@ -101,7 +101,7 @@ class ResultsSink:
     def record_warning(self, profile_id: str, t: float, message: str) -> None: ...
 
     def record_decision(self, kind, t: float, profile_id: str | None = None, **payload) -> None:
-        """Record a reach/SIM-scope orchestrator decision (NOURISH_TRIGGER, …).
+        """Record a reach/SIM-scope decision (NOURISH_TRIGGER, …).
 
         No-op in the base sink; the parquet sink persists them to
         ``decisions.parquet`` (the reach-scope counterpart of ``events.parquet``).
@@ -124,7 +124,7 @@ class ParquetResultsSink(ResultsSink):
             storm_hazard.parquet    # CSHORE spatial output — one row per (profile, storm, node)
             profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
             snapshots.parquet  # lightweight snapshot log — one row per (profile, snapshot)
-            decisions.parquet       # reach-scope orchestrator decisions — one row each
+            decisions.parquet       # reach-scope decisions — one row each
             placements.csv      # nourishment placement events
             run_metadata.json
             run_summary.txt
@@ -206,7 +206,7 @@ class ParquetResultsSink(ResultsSink):
         )
 
     def record_decision(self, kind, t: float, profile_id: str | None = None, **payload) -> None:
-        """Persist a reach-scope orchestrator decision (why the crew mobilized, deferred,
+        """Persist a reach-scope decision (why the crew mobilized, deferred,
         or placed a partial fill) — the audit trail behind the profile-scope events.
 
         ``decision_seq`` is the emission order, and it is the only ordering that holds:

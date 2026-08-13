@@ -1,7 +1,7 @@
 [project]
 name = "erosion"
 version = "0.1.0"
-description = "CHART FEAT erosion module — lifecycle orchestrator + CSHORE cross-shore morphology"
+description = "CHART FEAT erosion module — interval-loop lifecycle engine + CSHORE cross-shore morphology"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

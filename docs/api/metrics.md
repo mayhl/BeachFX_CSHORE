@@ -3,7 +3,7 @@
 The bridge from the chained gridded array to BeachFX's parametric quantities
 (dune height/width, berm width). Split across the `metrics` package.
 
-## fit_profile (orchestrator)
+## fit_profile
 
 ::: erosion.metrics.fit
 

@@ -27,9 +27,9 @@ measured as level-set footprints at those per-side bases, so the result does
 not depend on whether the dune is peaked, flat-topped, or rounded.
 
 The implementation is split across the package: ``types`` (constants + data
-classes), ``geometry`` (shared cross-shore helpers), ``detect`` (feature
-location), ``forms`` (idealized-profile assembly + form selection), ``fit`` (the
-``fit_profile`` orchestrator), and ``review`` (manual-classification QC).
+classes), ``detect`` (feature location + shared cross-shore helpers), ``forms``
+(idealized-profile assembly + form selection), and ``fit`` (the ``fit_profile``
+entry point + the manual-classification review pass).
 """
 
 from __future__ import annotations
