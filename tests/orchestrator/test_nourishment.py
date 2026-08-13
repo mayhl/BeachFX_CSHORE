@@ -147,14 +147,14 @@ class TestFittedAssessor:
     def test_no_erosion_no_fill(self):
         a = FittedAssessor().assess(self._profile(30.0), ReachConfig(), 50.0)
         assert a.needs_fill is False
-        assert a.volume_m3 == pytest.approx(0.0)
+        assert a.deficit_m3 == pytest.approx(0.0)
 
     def test_eroded_berm_needs_fill(self):
         a = FittedAssessor().assess(self._profile(10.0), ReachConfig(), 50.0)
         assert a.needs_fill is True
         assert a.metrics["berm_width_deficit"] == pytest.approx(20.0, abs=1.0)
         # subaerial dry-wedge deficit = shortfall × BE × width
-        assert a.volume_m3 == pytest.approx(a.metrics["berm_width_deficit"] * 2.0 * 50.0)
+        assert a.deficit_m3 == pytest.approx(a.metrics["berm_width_deficit"] * 2.0 * 50.0)
 
     def test_no_ref_metrics_no_fill(self):
         x, z0, _ = make_profile(berm_elevation=2.0, berm_width=30.0, dune=DuneSpec())
@@ -206,15 +206,15 @@ class TestVolumeAssessorPlacement:
         cfg.depth_of_closure = 6.0
         p = self._eroded(cfg.nourishment, ref_metrics=ref)
         a = VolumeAssessor().assess(p, cfg, width_m=1.0)
-        assert a.volume_m3 > 0.0
-        assert a.placement_m3 == pytest.approx(a.volume_m3 * (be + 6.0) / be)
+        assert a.deficit_m3 > 0.0
+        assert a.placement_m3 == pytest.approx(a.deficit_m3 * (be + 6.0) / be)
 
     def test_no_ref_metrics_no_inflation(self):
         cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001))
         cfg.depth_of_closure = 6.0
         p = self._eroded(cfg.nourishment, ref_metrics=None)
         a = VolumeAssessor().assess(p, cfg, width_m=1.0)
-        assert a.placement_m3 == pytest.approx(a.volume_m3)  # can't inflate without BE
+        assert a.placement_m3 == pytest.approx(a.deficit_m3)  # can't inflate without BE
 
     def test_zero_doc_no_inflation(self):
         from erosion.metrics import fit_profile
@@ -224,7 +224,7 @@ class TestVolumeAssessorPlacement:
         cfg = _cfg(nourishment=_ncfg(volume_trigger=0.001))  # depth_of_closure defaults to 0.0
         p = self._eroded(cfg.nourishment, ref_metrics=ref)
         a = VolumeAssessor().assess(p, cfg, width_m=1.0)
-        assert a.placement_m3 == pytest.approx(a.volume_m3)
+        assert a.placement_m3 == pytest.approx(a.deficit_m3)
 
 
 class TestFittedAssessorPlacement:
@@ -392,7 +392,7 @@ class TestNoDuneTemplateAnchor:
         a = VolumeAssessor().assess(p, cfg, 50.0)
         # Idealized-vs-actual reconstruction roundoff leaves a few tens of m³ over
         # the 50 m width; the seaward-dropped anchor manufactured ~40× that (2063 m³)
-        assert a.volume_m3 < 100.0
+        assert a.deficit_m3 < 100.0
 
     def test_template_never_overtops_the_asbuilt_bed(self):
         p = self._no_dune_profile()
@@ -656,7 +656,7 @@ class TestEmergencyTrigger:
         forces, below does not, and an unset threshold never fires."""
         from erosion.nourishment import ProfileAssessment
 
-        a = ProfileAssessment(needs_fill=True, volume_m3=100.0)
+        a = ProfileAssessment(needs_fill=True, deficit_m3=100.0)
         ncfg = _ncfg(volume_trigger=1e9)
         cfg = _cfg(nourishment=ncfg)
         assert VolumeAssessor().emergency_force(a, cfg) is False  # threshold unset
@@ -670,7 +670,7 @@ class TestEmergencyTrigger:
         volume threshold (shared fallback)."""
         from erosion.nourishment import ProfileAssessment
 
-        a = ProfileAssessment(needs_fill=False, volume_m3=100.0, metrics={})  # no dune metrics
+        a = ProfileAssessment(needs_fill=False, deficit_m3=100.0, metrics={})  # no dune metrics
         ncfg = _ncfg(volume_trigger=1e9)  # no trigger_geometry set
         cfg = _cfg(nourishment=ncfg)
         assert FittedAssessor().emergency_force(a, cfg) is False

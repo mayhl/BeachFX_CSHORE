@@ -62,7 +62,7 @@ def _dune_emergency_force(metrics: dict, tg: GeometryThresholds) -> bool:
 class ProfileAssessment:
     """Tier-1 physical read of one profile: whether it needs fill, and how much.
 
-    ``volume_m3`` is the subaerial deficit (m³) that drives the reach trigger
+    ``deficit_m3`` is the subaerial deficit (m³) that drives the reach trigger
     gate; ``placement_m3`` is the full active-height volume actually placed
     (subaerial deficit extended down to depth of closure), which Tier 2 scales
     by the borrow ratio to drive duration and cost. ``force`` lets a profile
@@ -73,7 +73,7 @@ class ProfileAssessment:
     """
 
     needs_fill: bool
-    volume_m3: float
+    deficit_m3: float
     placement_m3: float = 0.0
     force: bool = False
     metrics: dict = field(default_factory=dict)
@@ -95,7 +95,7 @@ class ProfileAssessor(ABC):
         """
         ncfg = cfg.nourishment
         ev = ncfg.emergency_volume if ncfg is not None else None
-        return ev is not None and a.volume_m3 >= float(ev)
+        return ev is not None and a.deficit_m3 >= float(ev)
 
     def restore_template(self, profile: Profile, cfg: ReachConfig) -> np.ndarray:
         """The restore bed shape (on the profile grid) this assessor builds to.
@@ -155,7 +155,7 @@ class VolumeAssessor(ProfileAssessor):
                 )
         a = ProfileAssessment(
             needs_fill=deficit > 0.0,
-            volume_m3=deficit,
+            deficit_m3=deficit,
             placement_m3=placement,
             metrics={"msl": cfg.msl, "depth_of_closure": dclose},
         )
@@ -202,14 +202,14 @@ class FittedAssessor(ProfileAssessor):
         ref = profile.ref_metrics
         if ref is None or not np.isfinite(ref.berm_elevation):
             return ProfileAssessment(
-                needs_fill=False, volume_m3=0.0, metrics={"basis": self._basis}
+                needs_fill=False, deficit_m3=0.0, metrics={"basis": self._basis}
             )
         be = ref.berm_elevation
         m, _ideal = fit_profile(profile.x, profile.zb, be, cfg.msl, ref=ref)
         target_berm_width = self._target_berm_width(cfg, ref)
         berm_deficit = max(0.0, target_berm_width - m.berm_width)
         dclose = _depth_of_closure(profile, cfg)
-        volume_m3 = berm_deficit * be * width_m  # subaerial dry-wedge trigger deficit
+        deficit_m3 = berm_deficit * be * width_m  # subaerial dry-wedge trigger deficit
         # Placement fills the full active wedge, crest (BE) down to closure (cReach.cpp:1649).
         placement_m3 = berm_deficit * (be + dclose) * width_m
         metrics = {
@@ -235,7 +235,7 @@ class FittedAssessor(ProfileAssessor):
             metrics["dune_fill_m3"] = dune_fill
         a = ProfileAssessment(
             needs_fill=berm_deficit > 0.0,
-            volume_m3=volume_m3,
+            deficit_m3=deficit_m3,
             placement_m3=placement_m3,
             metrics=metrics,
         )

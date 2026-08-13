@@ -74,7 +74,7 @@ class ReachNourishmentDecider:
         the volume trigger, OR any profile raised the emergency geometric ``force``
         (``forced``).  ``forced`` bypasses the volume gate the way ``resume`` does.
         """
-        total_deficit = sum(m.volume_m3 for m in metrics)
+        total_deficit = sum(m.deficit_m3 for m in metrics)
         resume = prior is not None and prior.crew_on_site
         # None volume_trigger = the regular gate is off (emergency-only reach).
         gate_met = ncfg.volume_trigger is not None and total_deficit >= ncfg.volume_trigger
@@ -83,7 +83,7 @@ class ReachNourishmentDecider:
 
         # Equal-spacing: priority = deficit.  A placement-order policy, so it lives
         # here rather than on the assessor that measured the deficit.
-        ordered = sorted(metrics, key=lambda m: -m.volume_m3)
+        ordered = sorted(metrics, key=lambda m: -m.deficit_m3)
         if prior is not None:
             rank = {pid: pos for pos, pid in enumerate(prior.priority_order)}
             # stable sort → priority order preserved within each prior rank

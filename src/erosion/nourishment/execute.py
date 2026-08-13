@@ -90,7 +90,7 @@ class CampaignExecutor:
         trailing sweep.
         """
         metrics = [
-            ProfileDemand(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
+            ProfileDemand(w.profile.id, w.plan.deficit_m3, w.plan.placement_m3, w.force)
             for w in order
         ]
         plan, campaign = plan_placements(

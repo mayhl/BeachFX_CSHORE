@@ -32,7 +32,7 @@ class ProfileDemand:
     """
 
     profile_id: str
-    volume_m3: float  # subaerial deficit (m³) — the trigger volume
+    deficit_m3: float  # subaerial deficit (m³) — the trigger volume
     placement_m3: float  # full active-height volume placed (borrow = ×ratio)
     force: bool = False  # emergency geometric trigger fired (Tier-1)
 

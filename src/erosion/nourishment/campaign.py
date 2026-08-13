@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class FillSpec:
     profile_id: str
-    volume_m3: float  # subaerial deficit (m³) — the trigger volume
+    deficit_m3: float  # subaerial deficit (m³) — the trigger volume
     template_zb: np.ndarray  # template interpolated onto profile grid
     placement_m3: float = 0.0  # full active-height volume placed (borrow = ×ratio)
 
@@ -92,7 +92,7 @@ class Workset(list):
             if a.needs_fill or a.force:
                 w.plan = FillSpec(
                     profile_id=w.profile.id,
-                    volume_m3=a.volume_m3,
+                    deficit_m3=a.deficit_m3,
                     template_zb=assessor.restore_template(w.profile, cfg),
                     placement_m3=a.placement_m3,
                 )
@@ -106,7 +106,7 @@ class Workset(list):
         """The scalar boundary to Tier-2: one ``ProfileDemand`` per planned profile.
         The decider never sees a ``WorkItem`` — beds and templates stay on this side."""
         return [
-            ProfileDemand(w.profile.id, w.plan.volume_m3, w.plan.placement_m3, w.force)
+            ProfileDemand(w.profile.id, w.plan.deficit_m3, w.plan.placement_m3, w.force)
             for w in self.plans
         ]
 

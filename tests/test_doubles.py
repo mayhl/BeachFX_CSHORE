@@ -39,7 +39,7 @@ def _assessed(damage: Damage, assessor: str, width_m: float = 1.0) -> float:
     p = template_profile("p0")
     p.zb = damage.bed(p)
     cfg = ReachConfig(nourishment=ncfg(volume_trigger=30.0, assessor=assessor))
-    return ASSESSORS[assessor]().assess(p, cfg, width_m).volume_m3
+    return ASSESSORS[assessor]().assess(p, cfg, width_m).deficit_m3
 
 
 class TestBermCutIsHonest:
