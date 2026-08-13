@@ -26,7 +26,6 @@ import pytest
 
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
-from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
 from erosion.types import DecisionKind as D
 from erosion.types import SnapshotLabel as L
@@ -66,13 +65,11 @@ def _nourish_cfg(production_rate=500.0) -> ReachConfig:
 def _emergency_cfg(production_rate=100.0) -> ReachConfig:
     # No regular volume gate; an emergency_volume threshold forces mobilization instead
     # (the ≥1-active-trigger validator accepts emergency_volume standing alone).
-    nc = NourishmentConfig.model_validate(
-        {
-            "production_rate": {"value": production_rate, "units": "m3/day"},
-            "emergency_volume": {"value": TRIGGER, "units": "m3"},
-            "assessor": "volume",
-        },
-        context={"input_units": "m"},
+    nc = ncfg(
+        volume_trigger=None,
+        production_rate=production_rate,
+        assessor="volume",
+        emergency_volume=TRIGGER,
     )
     return ReachConfig(storm=_STORM, nourishment=nc)
 

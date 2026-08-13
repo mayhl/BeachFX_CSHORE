@@ -251,7 +251,7 @@ class TestGeometricAssessor:
         """As-built (30 m berm, dune crest fixed at x=65) vs a realistically eroded
         current (shoreline retreated, berm ~7 m, dune fixed)."""
         from erosion.metrics import fit_profile
-        from erosion.nourishment import GeometricAssessor, NourishmentConfig
+        from erosion.nourishment import GeometricAssessor
 
         x = np.arange(0, 121, 1.0)
         render = lambda ks: np.interp(x, *zip(*ks))  # noqa: E731
@@ -260,14 +260,7 @@ class TestGeometricAssessor:
         ref, _ = fit_profile(x, asbuilt, 2.0, 0.0)
         p = Profile("p0", x, current.copy(), 0.3, ref_metrics=ref)
         tg = {} if target_bw is None else {"berm_width": {"value": target_bw, "units": "m"}}
-        ncfg = NourishmentConfig.model_validate(
-            {
-                "volume_trigger": {"value": 0.001, "units": "m3"},
-                "production_rate": {"value": 500.0, "units": "m3/day"},
-                "template_geometry": tg,
-            },
-            context={"input_units": "m"},
-        )
+        ncfg = _ncfg(template_geometry=tg)
         cfg = _cfg(nourishment=ncfg)
         cfg.depth_of_closure = 6.0
         return GeometricAssessor(), p, cfg, x, asbuilt, current
@@ -300,7 +293,7 @@ class TestGeometricAssessor:
         """As-built dune (crest 5 at x=65, toes at x=55/78) vs a current whose dune
         front has slumped to a crest of 4.0 (front relief 2.0) — berm intact."""
         from erosion.metrics import fit_profile
-        from erosion.nourishment import GeometricAssessor, NourishmentConfig
+        from erosion.nourishment import GeometricAssessor
 
         x = np.arange(0, 121, 1.0)
         render = lambda ks: np.interp(x, *zip(*ks))  # noqa: E731
@@ -308,17 +301,12 @@ class TestGeometricAssessor:
         current = render([(0, -1), (20, 0), (25, 2), (55, 2), (65, 4.0), (78, 3), (120, 3)])
         ref, _ = fit_profile(x, asbuilt, 2.0, 0.0)
         p = Profile("p0", x, current.copy(), 0.3, ref_metrics=ref)
-        ncfg = NourishmentConfig.model_validate(
-            {
-                "volume_trigger": {"value": 0.001, "units": "m3"},
-                "production_rate": {"value": 500.0, "units": "m3/day"},
-                "template_geometry": {
-                    "berm_width": {"value": 30.0, "units": "m"},
-                    "dune_height": {"value": dune_height, "units": "m"},
-                    "dune_width": {"value": dune_width, "units": "m"},
-                },
-            },
-            context={"input_units": "m"},
+        ncfg = _ncfg(
+            template_geometry={
+                "berm_width": {"value": 30.0, "units": "m"},
+                "dune_height": {"value": dune_height, "units": "m"},
+                "dune_width": {"value": dune_width, "units": "m"},
+            }
         )
         cfg = _cfg(nourishment=ncfg)
         cfg.depth_of_closure = 6.0
@@ -409,7 +397,7 @@ class TestDuneFormSynthesis:
 
     def _template(self, dune_form=None):
         from erosion.metrics import fit_profile
-        from erosion.nourishment import GeometricAssessor, NourishmentConfig
+        from erosion.nourishment import GeometricAssessor
 
         x = np.arange(0, 121, 1.0)
         render = lambda ks: np.interp(x, *zip(*ks))  # noqa: E731
@@ -424,14 +412,7 @@ class TestDuneFormSynthesis:
         }
         if dune_form is not None:
             tg["dune_form"] = dune_form
-        ncfg = NourishmentConfig.model_validate(
-            {
-                "volume_trigger": {"value": 0.001, "units": "m3"},
-                "production_rate": {"value": 500.0, "units": "m3/day"},
-                "template_geometry": tg,
-            },
-            context={"input_units": "m"},
-        )
+        ncfg = _ncfg(template_geometry=tg)
         cfg = _cfg(nourishment=ncfg)
         cfg.depth_of_closure = 6.0
         return x, current, GeometricAssessor().restore_template(p, cfg)

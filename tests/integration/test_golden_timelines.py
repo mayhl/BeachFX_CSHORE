@@ -31,7 +31,6 @@ import pytest
 
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
-from erosion.nourishment import NourishmentConfig
 from erosion.results import ParquetResultsSink
 from tests.builders import SIM_START, ncfg, run, storms_at, template_profile
 from tests.doubles import MASSIVE, NONE, SEVERE, ScriptedRunner
@@ -56,15 +55,12 @@ def _nourish_cfg(production_rate: float) -> ReachConfig:
 def _cycle_cfg() -> ReachConfig:
     from datetime import timedelta
 
-    nc = NourishmentConfig.model_validate(
-        {
-            "volume_trigger": {"value": 30.0, "units": "m3"},
-            "production_rate": {"value": 500.0, "units": "m3/day"},
-            "assessor": "volume",
-            "cycle_interval_years": 1.0,
-            "cycle_start_date": SIM_START + timedelta(days=200.0),
-        },
-        context={"input_units": "m"},
+    nc = ncfg(
+        volume_trigger=30.0,
+        production_rate=500.0,
+        assessor="volume",
+        cycle_interval_years=1.0,
+        cycle_start_date=SIM_START + timedelta(days=200.0),
     )
     return ReachConfig(
         storm=_STORM, nourishment=nc, erosion=UniformErosionConfig(rate=0.02, tick_days=10.0)
@@ -72,9 +68,15 @@ def _cycle_cfg() -> ReachConfig:
 
 
 def _blackout_cfg() -> ReachConfig:
-    cfg = _nourish_cfg(production_rate=100.0)
-    cfg.nourishment.blackout_windows = [(20.0, 38.0)]
-    return cfg
+    return ReachConfig(
+        storm=_STORM,
+        nourishment=ncfg(
+            volume_trigger=30.0,
+            production_rate=100.0,
+            assessor="volume",
+            blackout_windows=[(20.0, 38.0)],
+        ),
+    )
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,7 @@ import pandas as pd
 from erosion.config import ReachConfig
 from erosion.interstorm import UniformErosionConfig
 from erosion.results import ParquetResultsSink, read_parquet_footer
+from erosion.runner import MockCSHORERunner
 from erosion.types import SnapshotLabel
 from tests.builders import profile, run
 
@@ -26,8 +27,15 @@ def _run(
     sink=None,
     lifecycle: int = 0,
 ):
+    # The mock's fixed-window scoop is fine here: this suite checks pipeline
+    # plumbing/schema, not bed shapes -- named explicitly, not a silent default
     profiles, _ = run(
-        [_p(f"p{i}") for i in range(n_profiles)], n_storms, cfg=cfg, sink=sink, lifecycle=lifecycle
+        [_p(f"p{i}") for i in range(n_profiles)],
+        n_storms,
+        cfg=cfg,
+        sink=sink,
+        lifecycle=lifecycle,
+        runner=MockCSHORERunner(),
     )
     return profiles
 

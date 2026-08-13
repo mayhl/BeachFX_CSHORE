@@ -19,7 +19,7 @@ from erosion.interstorm import UniformErosionConfig
 from erosion.nourishment import NourishmentConfig
 from erosion.types import DecisionKind as D
 from erosion.types import SnapshotLabel as L
-from tests.builders import SIM_START, RecordingSink, run, storms_at, template_profile
+from tests.builders import SIM_START, RecordingSink, ncfg, run, storms_at, template_profile
 from tests.doubles import MINOR, ScriptedRunner
 
 YEAR = 365.0
@@ -34,15 +34,13 @@ def _cycle_cfg(
     erosion_rate: float = 0.0,
 ) -> ReachConfig:
     """A reach on a planned cycle, optionally with background erosion accruing deficit."""
-    payload = {
-        "volume_trigger": {"value": volume_trigger, "units": "m3"},
-        "production_rate": {"value": production_rate, "units": "m3/day"},
-        "assessor": "volume",
-        "cycle_interval_years": interval_years,
-    }
-    if start_day is not None:
-        payload["cycle_start_date"] = SIM_START + timedelta(days=start_day)
-    nc = NourishmentConfig.model_validate(payload, context={"input_units": "m"})
+    nc = ncfg(
+        volume_trigger=volume_trigger,
+        production_rate=production_rate,
+        assessor="volume",
+        cycle_interval_years=interval_years,
+        cycle_start_date=None if start_day is None else SIM_START + timedelta(days=start_day),
+    )
     erosion = UniformErosionConfig(rate=erosion_rate, tick_days=10.0) if erosion_rate else None
     # z_berm masks recovery to the sub-berm face (see test_event_sequences._STORM)
     return ReachConfig(storm={"z_berm": 2.0}, nourishment=nc, erosion=erosion)

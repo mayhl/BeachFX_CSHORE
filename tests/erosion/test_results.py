@@ -8,18 +8,21 @@ import pandas as pd
 import pytest
 
 from erosion.results import NullResultsSink, ParquetResultsSink, RunMeta
+from erosion.runner import MockCSHORERunner
 from erosion.types import DecisionKind
 from tests.builders import SIM_START, profile, run
 
 
 def _make_sink(out_root: str, n_storms: int = 2) -> ParquetResultsSink:
     sink = ParquetResultsSink(out_root, "R1", "FWOP", lifecycle=0)
+    # Schema tests only -- the mock scoop's bed shape is immaterial, named explicitly
     run(
         [profile("p0", n=50), profile("p1", n=50)],
         n_storms,
         sink=sink,
         reach_id="R1",
         alternative_id="FWOP",
+        runner=MockCSHORERunner(),
     )
     return sink
 
