@@ -48,7 +48,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from erosion.geometry import load_raw_profile
+from erosion.profile import load_raw_profile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 

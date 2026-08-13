@@ -19,8 +19,8 @@ import os
 import numpy as np
 import pytest
 
-from erosion.geometry import load_raw_profile
 from erosion.metrics import MorphType, fit_profile
+from erosion.profile import load_raw_profile
 from tests.fit_gallery import _metrics_to_json
 
 _HERE = os.path.dirname(__file__)

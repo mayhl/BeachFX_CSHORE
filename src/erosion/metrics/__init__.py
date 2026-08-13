@@ -34,10 +34,15 @@ location), ``forms`` (idealized-profile assembly + form selection), ``fit`` (the
 
 from __future__ import annotations
 
-from .detect import _analysis_cap, _dx_of, _smooth
-from .fit import fit_profile
-from .geometry import erosion_volume_above_msl, last_wet_dry_crossing, volume_above_datum
-from .review import ProfileReview, ReviewFlag, review_profile
+from .detect import (
+    _analysis_cap,
+    _dx_of,
+    _smooth,
+    erosion_volume_above_msl,
+    last_wet_dry_crossing,
+    volume_above_datum,
+)
+from .fit import ProfileReview, ReviewFlag, fit_profile, review_profile
 from .types import IdealizedProfile, MorphType, ProfileMetrics
 
 __all__ = [

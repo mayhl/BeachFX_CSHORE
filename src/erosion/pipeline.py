@@ -42,8 +42,7 @@ import pandas as pd
 from dask.distributed import Client, LocalCluster, as_completed
 
 from .config import ProfileGeometryConfig, ReachConfig
-from .geometry import load_raw_profile
-from .profile import Profile
+from .profile import Profile, load_raw_profile
 from .reach import Reach
 from .results import ParquetResultsSink
 from .runner.local import LocalCSHORERunner

@@ -18,7 +18,7 @@ from erosion.nourishment import NourishmentConfig
 from erosion.profile import Profile
 from erosion.reach import Reach
 from erosion.results import NullResultsSink
-from erosion.runner.mock import MockCSHORERunner
+from erosion.runner import MockCSHORERunner
 from tests.synthetic import DuneSpec, make_profile
 
 SIM_START = datetime(2030, 1, 1)

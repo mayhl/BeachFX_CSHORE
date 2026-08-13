@@ -10,8 +10,8 @@ import pytest
 from erosion.config import ReachConfig
 from erosion.metrics import MorphType, ProfileMetrics
 from erosion.profile import Profile
+from erosion.runner import MockCSHORERunner
 from erosion.runner.base import CSHOREResult, CSHORERunner
-from erosion.runner.mock import MockCSHORERunner
 from erosion.storm import (
     _recovery_fraction,
     build_storm_schedule,

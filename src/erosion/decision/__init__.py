@@ -7,7 +7,6 @@ proceeds.  This package must never import physics at runtime (``profile`` /
 """
 
 from .calendar import CalendarState, CampaignCarryover, CycleTracker, cycle_times
-from .emit import emit
 from .model import (
     DeferBlackout,
     DeferCycle,
@@ -18,6 +17,7 @@ from .model import (
     Placement,
     ProfileDemand,
     SkipCampaign,
+    emit,
 )
 from .planner import (
     ReachDecision,

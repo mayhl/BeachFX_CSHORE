@@ -22,7 +22,7 @@ def cshore_params():
 
 @pytest.fixture(scope="module")
 def real_profile() -> Profile:
-    from erosion.geometry import load_raw_profile
+    from erosion.profile import load_raw_profile
 
     raw = load_raw_profile(os.path.join(ROOT, "data/profiles/reach1_p0.csv"), 0.3)
     return Profile(id="Reach1_p0", x=raw["x"], zb=raw["z"], d50=raw["d50"])
