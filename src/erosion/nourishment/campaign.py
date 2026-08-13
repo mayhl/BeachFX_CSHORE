@@ -51,7 +51,7 @@ class _Works(list):
 
     It *is* a list (so ``for w in works`` / ``len(works)`` / ``zip`` all work); it
     only adds named bulk steps (``assess``, ``recover_unreached``) so ``run_campaign``
-    and ``_CampaignScheduler`` compose them instead of re-opening a ``for w in active``
+    and ``CampaignExecutor`` compose them instead of re-opening a ``for w in active``
     each time — notably the recover-the-rest sweep, which the orchestrator would
     otherwise repeat at every early return and after placement.
     """

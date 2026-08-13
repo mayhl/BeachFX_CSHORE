@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class _CampaignScheduler:
+class CampaignExecutor:
     """Tier-3 executor: applies a planned campaign — recovery to each placement
     start, the fill itself, and the audit emission of the planner's decisions.
 
@@ -130,7 +130,7 @@ def _run_decided(
         works.recover_unreached(t_base, t_next, cfg, storm_at_next)
         return None
 
-    scheduler = _CampaignScheduler(
+    scheduler = CampaignExecutor(
         t_storm=t_base,
         t_next=t_next,
         cfg=cfg,
