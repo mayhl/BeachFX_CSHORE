@@ -2,7 +2,7 @@
 
 import pytest
 
-from erosion.pipeline import _expand_plans, _merge_sections, _parse_run_spec
+from erosion.config import _expand_plans, _merge_sections, _parse_run_spec
 
 
 class TestParseRunSpec:
