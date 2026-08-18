@@ -211,9 +211,13 @@ class FittedAssessor(ProfileAssessor):
         target_berm_width = self._target_berm_width(cfg, ref)
         berm_deficit = max(0.0, target_berm_width - m.berm_width)
         dclose = _depth_of_closure(profile, cfg)
-        deficit_m3 = berm_deficit * be * width_m  # subaerial dry-wedge trigger deficit
+        # Wedge heights are ABOVE MSL (as VolumeAssessor's): be is an absolute
+        # elevation, so the dry-wedge vertical is be - msl.  A berm at or below
+        # MSL has no dry wedge -- clamp rather than bill a negative deficit.
+        be_h = max(be - cfg.msl, 0.0)
+        deficit_m3 = berm_deficit * be_h * width_m  # subaerial dry-wedge trigger deficit
         # Placement fills the full active wedge, crest (BE) down to closure (cReach.cpp:1649).
-        placement_m3 = berm_deficit * (be + dclose) * width_m
+        placement_m3 = berm_deficit * (be_h + dclose) * width_m
         details = {
             "basis": self._basis,
             "berm_elevation": be,

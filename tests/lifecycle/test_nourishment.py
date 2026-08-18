@@ -249,6 +249,17 @@ class TestFittedAssessorPlacement:
         assert a.details["depth_of_closure"] == pytest.approx(6.0)
         assert a.placement_m3 == pytest.approx(dd * (2.0 + 6.0) * 50.0)
 
+    def test_wedge_heights_are_above_msl(self):
+        # be is an ABSOLUTE elevation; the dry wedge is be - msl.  Using raw be
+        # (the old behavior) overbilled the deficit whenever msl != 0 -- and
+        # VolumeAssessor already subtracted it, so the two assessors disagreed.
+        cfg = ReachConfig(depth_of_closure={"value": 6.0, "units": "m"})
+        cfg.msl = 0.5  # assignment skips validation: metres, like every test here
+        a = FittedAssessor().assess(self._profile(10.0), cfg, 50.0)
+        dd = a.details["berm_width_deficit"]
+        assert a.deficit_m3 == pytest.approx(dd * (2.0 - 0.5) * 50.0)
+        assert a.placement_m3 == pytest.approx(dd * (2.0 - 0.5 + 6.0) * 50.0)
+
 
 class TestReachUnitConsistency:
     """Reach- and profile-level lengths now share ONE bare-float convention."""
