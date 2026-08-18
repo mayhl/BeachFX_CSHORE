@@ -9,7 +9,7 @@ from .nourishment import GeometryThresholds, NourishmentConfig
 from .profile import Profile, ProfileGeometryConfig, load_raw_profile
 from .runner.local import CSHOREParams
 from .storm import StormConfig
-from .units import parse_ufloat
+from .units import parse_ufloat, ufloat
 
 __all__ = [
     "ProfileGeometryConfig",
@@ -35,16 +35,19 @@ class ReachConfig(BaseModel):
     erosion: ErosionConfig | None = None
     slc: SLCConfig | None = None
     nourishment: NourishmentConfig | None = None
-    # Mean sea level (m, internal datum): the reference plane for subaerial
-    # volume / erosion metrics.  Constant in time — relative SLC is applied to
-    # the bed (see SLCConfig), so a moving MSL would double-count it.
-    msl: float = 0.0
-    # Depth of closure (m, positive depth below MSL): the seaward limit of the
-    # active profile.  Reach-wide default; a profile may override it via
-    # ProfileGeometryConfig.depth_of_closure.  Used by the nourishment placement
-    # model to extend the subaerial deficit down to the full active height
-    # (see nourishment.VolumeAssessor / FittedAssessor).  0.0 = no extension.
-    depth_of_closure: float = 0.0
+    # Mean sea level (internal m; bare config floats read as ft like every other
+    # elevation): the reference plane for subaerial volume / erosion metrics.
+    # Constant in time — relative SLC is applied to the bed (see SLCConfig), so a
+    # moving MSL would double-count it.
+    msl: ufloat("m", "ft") = 0.0
+    # Depth of closure (internal m, positive depth below MSL; bare floats = ft):
+    # the seaward limit of the active profile.  Reach-wide default; a profile may
+    # override it via ProfileGeometryConfig.depth_of_closure — the two levels now
+    # share ONE unit convention (a bare 6.0 used to mean 6.0 m here but 1.83 m
+    # there, a silent 3.28x on placement volume).  Used by the nourishment
+    # placement model to extend the subaerial deficit down to the full active
+    # height (see nourishment.VolumeAssessor / FittedAssessor).  0.0 = no extension.
+    depth_of_closure: ufloat("m", "ft") = 0.0
     # Working-grid spacing (m).  Profiles are resampled onto an equipartitioned
     # grid of this dx at load; 1.0 matches CSHORE's internal regrid so the storm
     # response survives the round-trip (see load_raw_profile).  None = native.

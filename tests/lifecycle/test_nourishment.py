@@ -167,7 +167,9 @@ class TestDepthOfClosure:
 
     def test_reach_default_when_no_override(self):
         p = _p()
-        assert _depth_of_closure(p, ReachConfig(depth_of_closure=6.0)) == pytest.approx(6.0)
+        assert _depth_of_closure(
+            p, ReachConfig(depth_of_closure={"value": 6.0, "units": "m"})
+        ) == pytest.approx(6.0)
 
     def test_profile_override_wins(self):
         g = ProfileGeometryConfig.model_validate(
@@ -175,7 +177,9 @@ class TestDepthOfClosure:
         )
         p = _p()
         p.geometry = g
-        assert _depth_of_closure(p, ReachConfig(depth_of_closure=6.0)) == pytest.approx(10.0)
+        assert _depth_of_closure(
+            p, ReachConfig(depth_of_closure={"value": 6.0, "units": "m"})
+        ) == pytest.approx(10.0)
 
     def test_none_override_falls_back_to_reach(self):
         g = ProfileGeometryConfig.model_validate(
@@ -183,7 +187,9 @@ class TestDepthOfClosure:
         )
         p = _p()
         p.geometry = g
-        assert _depth_of_closure(p, ReachConfig(depth_of_closure=6.0)) == pytest.approx(6.0)
+        assert _depth_of_closure(
+            p, ReachConfig(depth_of_closure={"value": 6.0, "units": "m"})
+        ) == pytest.approx(6.0)
 
 
 class TestVolumeAssessorPlacement:
@@ -237,11 +243,32 @@ class TestFittedAssessorPlacement:
         return Profile("p0", x, zc.copy(), 0.3, ref_metrics=m_init)
 
     def test_placement_is_full_active_wedge(self):
-        cfg = ReachConfig(depth_of_closure=6.0)
+        cfg = ReachConfig(depth_of_closure={"value": 6.0, "units": "m"})
         a = FittedAssessor().assess(self._profile(10.0), cfg, 50.0)
         dd = a.details["berm_width_deficit"]
         assert a.details["depth_of_closure"] == pytest.approx(6.0)
         assert a.placement_m3 == pytest.approx(dd * (2.0 + 6.0) * 50.0)
+
+
+class TestReachUnitConsistency:
+    """Reach- and profile-level lengths now share ONE bare-float convention."""
+
+    def test_bare_float_reads_as_ft_like_the_profile_level(self):
+        # No validation context: the ft default applies at BOTH levels now.
+        # A bare 6.0 used to mean 6.0 m here and 1.83 m at profile level.
+        reach = ReachConfig.model_validate({"depth_of_closure": 6.0})
+        prof = ProfileGeometryConfig.model_validate(
+            {"berm_elevation": 2.0, "depth_of_closure": 6.0}
+        )
+        assert reach.depth_of_closure == pytest.approx(6.0 * 0.3048)
+        assert reach.depth_of_closure == pytest.approx(prof.depth_of_closure)
+
+    def test_metric_context_reads_bare_floats_as_metres(self):
+        reach = ReachConfig.model_validate(
+            {"depth_of_closure": 6.0, "msl": 0.5}, context={"input_units": "m"}
+        )
+        assert reach.depth_of_closure == pytest.approx(6.0)
+        assert reach.msl == pytest.approx(0.5)
 
 
 class TestGeometricAssessor:
