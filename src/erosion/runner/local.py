@@ -123,6 +123,24 @@ def _build_cshore_config(params: CSHOREParams) -> dict:
     }
 
 
+def _scan_solver_warnings(storm_dir: str) -> tuple[int, int]:
+    """Count solver warnings in OMESSG.  CSHORE reports non-convergence and
+    negative wave variance ("SIGTIE is negative") ONLY here -- ODOC/OBPROF from
+    a non-converged run are byte-indistinguishable from a clean one -- so the
+    counts ride the result into the event log rather than going unread."""
+    path = os.path.join(storm_dir, "OMESSG")
+    if not os.path.exists(path):
+        return 0, 0
+    n_no_conv = n_sigtie = 0
+    with open(path, errors="replace") as f:
+        for line in f:
+            if "NO CONVERGENCE" in line:
+                n_no_conv += 1
+            elif "SIGTIE is negative" in line:
+                n_sigtie += 1
+    return n_no_conv, n_sigtie
+
+
 class LocalCSHORERunner(CSHORERunner):
     """Runs CSHORE via subprocess, reusing cshoreIO for infile generation and parsing."""
 
@@ -249,6 +267,8 @@ class LocalCSHORERunner(CSHORERunner):
         # GC can be delayed by traceback references, so be explicit.
         del params, bc, veg, hydro, sed, morpho, csio
 
+        n_no_conv, n_sigtie = _scan_solver_warnings(storm_dir)
+
         return CSHOREResult(
             zb=zb_final,
             x=x_final,
@@ -256,4 +276,6 @@ class LocalCSHORERunner(CSHORERunner):
             Hs=Hs,
             runup_m=runup_m,
             jr=jr,
+            n_no_convergence=n_no_conv,
+            n_sigtie_negative=n_sigtie,
         )

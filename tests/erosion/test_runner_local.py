@@ -29,3 +29,20 @@ class TestPreflight:
 
     def test_shipped_binary_passes_preflight(self, tmp_path):
         _make(tmp_path)
+
+
+class TestSolverWarningScan:
+    """OMESSG is the solver's only trace of non-convergence; the scan must read it."""
+
+    def test_scan_solver_warnings_counts_lines(self, tmp_path):
+        (tmp_path / "OMESSG").write_text(
+            "END OF LANDWARD MARCHING\n"
+            "NO CONVERGENCE OF QO ITERATION\n"
+            "Square of sigma SIGTIE is negative\n"
+            "NO CONVERGENCE OF QO ITERATION\n"
+            "ordinary line\n"
+        )
+        assert local_mod._scan_solver_warnings(str(tmp_path)) == (2, 1)
+
+    def test_scan_missing_omessg_is_clean(self, tmp_path):
+        assert local_mod._scan_solver_warnings(str(tmp_path)) == (0, 0)

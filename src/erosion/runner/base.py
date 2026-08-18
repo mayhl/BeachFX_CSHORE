@@ -31,6 +31,11 @@ class CSHOREResult(BaseModel):
     runup_m: float  # 2% runup from ODOC, meters (0.0 if not reported)
     # Landward wet-computation limit node count (hydro valid over nodes < jr); 0 = unknown.
     jr: int = 0
+    # Solver-warning counts scanned from OMESSG (0 = clean or not scanned).  A run
+    # that failed to converge looks byte-identical to a clean one in ODOC/OBPROF,
+    # so these are the only trace the solver leaves.
+    n_no_convergence: int = 0  # "NO CONVERGENCE" lines
+    n_sigtie_negative: int = 0  # "SIGTIE is negative" lines (unphysical wave energy)
 
 
 class CSHORERunner(ABC):

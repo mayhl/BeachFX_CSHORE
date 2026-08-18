@@ -250,6 +250,8 @@ class StormResponse(ProfileEvent):
             runup_m=float(r.runup_m),
             jr=int(r.jr),
             n_extrapolated=n_extrapolated,
+            n_no_convergence=int(r.n_no_convergence),
+            n_sigtie_negative=int(r.n_sigtie_negative),
         )
 
 
