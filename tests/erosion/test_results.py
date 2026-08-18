@@ -138,7 +138,9 @@ class TestRecordNourishment:
         row = sink._nourishment_rows[0]
         assert row["event_type"] == "FullNourishment"
         assert row["placed_m3"] == pytest.approx(500.0)
-        assert row["placed_cy"] == pytest.approx(500.0 * 1.30795)
+        # Exact reciprocal of _CY_TO_M3 = 27 x 0.3048^3 -- the old pin (1.30795)
+        # froze a 59 ppm round-trip drift between authoring and reporting
+        assert row["placed_cy"] == pytest.approx(500.0 / (27.0 * 0.3048**3))
 
     def test_null_sink_noop(self):
         sink = NullResultsSink()

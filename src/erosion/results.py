@@ -11,6 +11,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .units import M3_TO_CY
+
 if TYPE_CHECKING:
     from .config import ReachConfig
     from .profile import Profile
@@ -190,7 +192,7 @@ class ParquetResultsSink(ResultsSink):
         event_type: str,
         borrow_m3: float = 0.0,
     ) -> None:
-        CY_PER_M3 = 1.30795
+
         # placed_m3 = placement (geometry-effective, on the beach); borrow_m3 =
         # dredged volume (placement × ratio) — the basis for duration and cost.
         self._nourishment_rows.append(
@@ -200,9 +202,9 @@ class ParquetResultsSink(ResultsSink):
                 "t_start": t_start,
                 "t_end": t_end,
                 "placed_m3": placed_m3,
-                "placed_cy": placed_m3 * CY_PER_M3,
+                "placed_cy": placed_m3 * M3_TO_CY,
                 "borrow_m3": borrow_m3,
-                "borrow_cy": borrow_m3 * CY_PER_M3,
+                "borrow_cy": borrow_m3 * M3_TO_CY,
             }
         )
 

@@ -28,7 +28,8 @@ from typing import Annotated, Any
 
 from pydantic import BeforeValidator
 
-_CY_TO_M3: float = 0.7646  # 1 yd³ = 27 ft³ × 0.3048³ m³/ft³
+_CY_TO_M3: float = 27.0 * 0.3048**3  # 1 yd³ in m³ = 0.764554857984 (exact)
+M3_TO_CY: float = 1.0 / _CY_TO_M3  # reporting direction; keep the pair exact reciprocals
 
 _FACTORS: dict[str, float] = {
     # length
