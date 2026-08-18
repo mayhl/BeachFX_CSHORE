@@ -230,3 +230,15 @@ class TestClassifyStormResponse:
             berm_width=post[3],
         )
         assert classify_storm_response(m_pre, m_post, self.BE) == expected
+
+
+class TestShoreNormalAngle:
+    def test_compass_bearings_never_reach_cshore(self):
+        # The storm files carry compass bearings; CSHORE's ANGLE is shore-normal
+        # incidence and no transect azimuth exists to convert.  The schedule must
+        # feed ANGLE=0 (the shore-normal assumption every reference infile uses),
+        # whatever wave_direction says.
+        df = _storms(1)
+        df["wave_direction"] = 317.0  # a shipped-file-typical bearing
+        recs = build_storm_schedule(df, SIM_START, ReachConfig())
+        assert all(np.all(r.forcing["angle"] == 0.0) for r in recs)

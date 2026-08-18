@@ -73,7 +73,8 @@ def build_storm_schedule(
 
     storms_df columns: lifecycle, storm_id, hydro_tstp, date,
                        wave_height (Hs), wave_peak_period (Tp),
-                       water_elevation (swlbc), wave_direction (angle).
+                       water_elevation (swlbc), wave_direction (compass deg,
+                       read but NOT fed to CSHORE -- see the angle note below).
     """
     lc_df = storms_df[storms_df["lifecycle"] == lifecycle]
     sim_ts = pd.Timestamp(sim_start)
@@ -107,7 +108,12 @@ def build_storm_schedule(
             "Tp": raw["Tp"],
             "Wsetup": np.zeros(len(t_in_storm)),
             "swlbc": raw["swlbc"],
-            "angle": raw["angle"],
+            # Shore-normal assumption: the storm files carry COMPASS bearings, but
+            # CSHORE's ANGLE is incidence relative to shore-normal and no transect
+            # azimuth exists to convert -- feeding bearings (294-353 deg in the
+            # shipped files) silently changed the bed.  Every reference infile runs
+            # ANGLE=0; do the same until an azimuth is configured.
+            "angle": np.zeros(len(t_in_storm)),
         }
         # hydrograph span in days; PostStorm/recovery begin at t + duration
         duration = float(t_in_storm[-1] / 86400.0)
