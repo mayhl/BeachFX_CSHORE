@@ -104,9 +104,15 @@ def _odd(n: int) -> int:
 
 
 def _smooth(z: np.ndarray, dx: float) -> np.ndarray:
-    """Savitzky–Golay smoothing for feature *location*; raw z is used for magnitudes."""
+    """Savitzky–Golay smoothing for feature *location*; raw z is used for magnitudes.
+
+    The floor must survive ``_odd``: a poly-2 filter through 3 points is an exact
+    fit, so a floor of ``_SG_POLY + 2`` (= 4, decremented to 3 by ``_odd``) turned
+    smoothing OFF for every dx >= ~2 m -- exactly the real 10 ft survey spacing.
+    ``_SG_POLY + 3`` keeps a genuine 5-node window on coarse grids.
+    """
     n = len(z)
-    w = _odd(max(_SG_POLY + 2, int(round(_SMOOTH_WIN_M / dx))))
+    w = _odd(max(_SG_POLY + 3, int(round(_SMOOTH_WIN_M / dx))))
     if w > n:
         w = _odd(n)
     if w <= _SG_POLY or w < 3:
