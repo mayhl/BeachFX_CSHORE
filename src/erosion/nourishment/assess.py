@@ -166,20 +166,19 @@ class VolumeAssessor(ProfileAssessor):
 class FittedAssessor(ProfileAssessor):
     """Deficit from the FITTED geometry: measured berm-width shortfall vs the
     INIT (as-built) berm — the "hybrid" that reads the chained array *through*
-    the fitter (``metrics.py``), so BeachFX's geometric workflow runs on the real
+    the fitter (the ``metrics`` package), so BeachFX's geometric workflow runs on the real
     post-storm profile instead of raw array volume.
 
     ``BE`` and the target berm width come from the INIT fit (``ref_metrics``,
     Phase-3 decision 2a: measured, not a design-BE config).  Requires
     ``ref_metrics``; a profile without it isn't a `FittedAssessor` candidate and
-    reports no fill (per-profile assessor selection lands in Phase 4).
+    reports no fill (select per profile via ``per_profile_assessor``).
 
     NOTE: trusts the fitter's measured berm.  On a real survey (10 ft nodes, coarse
     enough that the fitter's smoother is a no-op) an unseeded fit lets noise
     fragment the berm's flat run and bill a phantom deficit, so the ``ref`` handed
     to ``fit_profile`` seeds the berm level; ``berm_lost`` then separates a
-    storm-destroyed berm from one the fitter merely missed.  The ``(BE+DClose)`` placement volume and the emergency
-    ``force`` trigger arrive in 3.2 / Phase 4.
+    storm-destroyed berm from one the fitter merely missed.
     """
 
     _basis = "fitted"

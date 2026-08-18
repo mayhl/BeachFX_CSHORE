@@ -1,4 +1,4 @@
-"""Integration-lite tests: run_lifecycle end-to-end with MockCSHORERunner."""
+"""Integration-lite tests: ``Reach.run`` end-to-end with MockCSHORERunner."""
 
 from __future__ import annotations
 
@@ -107,8 +107,8 @@ class TestWithErosionConfig:
     def test_erosion_ticks_between_storms(self):
         """Erosion/SLC must accrue in EVERY inter-storm interval, not just before
         the first storm. storms() places storms at t=20, 40 → the [20,40] gap must
-        carry Periodic ticks (currently it does not — the interstorm interval is
-        empty after run_campaign advances state.t to the next storm)."""
+        carry Periodic ticks (pins a once-real bug where the campaign advance left
+        the interstorm interval empty)."""
         cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, tick_days=5.0))
         profiles = _run(n_storms=2, cfg=cfg)
         for p in profiles:

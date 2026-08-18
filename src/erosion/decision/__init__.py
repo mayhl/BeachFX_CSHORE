@@ -1,9 +1,9 @@
 """Reach-scope decision layer.
 
-Owns decision emission, the management calendar (``CalendarState``), and the
-decision vocabulary; the interval planner lands here as the decide/execute split
-proceeds.  This package must never import physics at runtime (``profile`` /
-``campaign`` / ``assess``) — its currency is scalars, dates, and config.
+Owns decision emission, the management calendar (``CalendarState``), the
+decision vocabulary, and the interval planner.  This package must never import
+physics at runtime (``profile`` / ``nourishment.execute`` / ``assess``) — its
+currency is scalars, dates, and config.
 """
 
 from .calendar import CalendarState, CampaignCarryover, CycleTracker, cycle_times

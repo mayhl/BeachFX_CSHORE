@@ -2,7 +2,7 @@
 """Offline generator: expand a parameter product into numbered ``alternatives``.
 
 The pipeline itself has no product/sweep machinery — it just runs an id-keyed
-table of alternatives, selected via the ``run`` spec (see ``pipeline._parse_run_spec``).
+table of alternatives, selected via the ``run`` spec (see ``config._parse_run_spec``).
 This helper *authors* that table: give it a base config, a set of axes (dotted
 config paths -> value lists), and a mode, and it emits ``{id: config}`` numbered
 entries you paste into a config's ``alternatives`` block (then ``run: all`` or a

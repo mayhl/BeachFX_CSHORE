@@ -17,8 +17,8 @@ The layout (what lives where):
                         the golden output timelines (``test_golden_timelines``)
     integration/        only tests needing the real CSHORE binary — opt in with
                         ``pytest -m integration``
-    goldens/            JSON regression fixtures (fits / real profiles /
-                        recovery); regenerate via ``REGEN_FIT_GOLDENS=1``
+    goldens/            JSON regression fixtures; regenerate fits + real via
+                        ``REGEN_FIT_GOLDENS=1``, recovery via ``REGEN_RECOVERY_GOLDENS=1``
     fit_gallery.py, recovery_gallery.py
                         golden-case galleries (``--plot`` renders them)
 
@@ -183,7 +183,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
     # --- overview: one line per profile ------------------------------------
     tw.write_line("")
-    tw.section("Orchestrator event sequences — overview", sep="═")
+    tw.section("Reach-loop event sequences — overview", sep="═")
     w_scn = max([len("SCENARIO")] + [len(r["scenario"]) for r in rows])
     tw.write_line(f"  {'SCENARIO':<{w_scn}}  {'PROF':<4}  {'STATUS':<6}  EVENTS")
     tw.write_line(f"  {'─' * w_scn}  {'─' * 4}  {'─' * 6}  {'─' * 6}")

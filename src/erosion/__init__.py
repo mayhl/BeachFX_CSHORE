@@ -22,7 +22,7 @@ Offline (not part of a run):
 
     postprocess.py  common-grid registration + derived metrics over a finished run dir
     viz.py          plots and animations over run output
-    sweep.py        gen-alternatives CLI (cartesian nourishment-plan tables)
+    sweep.py        gen-alternatives CLI (cartesian alternatives tables)
 
 Shared vocabulary lives in ``types.py`` (snapshot labels, campaign/decision
 kinds), unit-aware config fields in ``units.py``, and the config root model in

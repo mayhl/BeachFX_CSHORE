@@ -1,5 +1,5 @@
 """
-Convert CHS timeseries CSV to the parquet format expected by run_cshore.py.
+Convert CHS timeseries CSV to the storms parquet the run-pipeline CLI expects.
 
 Selection options (can be combined; all filters applied before --n trim):
 

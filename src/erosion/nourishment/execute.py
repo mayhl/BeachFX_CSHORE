@@ -47,7 +47,7 @@ class WorkItem:
     width: float
     plan: FillSpec | None = None
     recovered: bool = False
-    force: bool = False  # emergency geometric trigger fired (Tier-1)
+    force: bool = False  # emergency trigger (volume or dune geometry) fired (Tier-1)
 
 
 class Workset(list):

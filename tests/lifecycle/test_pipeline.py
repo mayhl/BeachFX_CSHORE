@@ -1,4 +1,4 @@
-"""Pipeline orchestration helpers — the alternative run-selector."""
+"""Config-resolution helpers — the alternative run-selector (``erosion.config``)."""
 
 import pytest
 

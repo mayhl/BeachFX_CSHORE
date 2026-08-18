@@ -62,17 +62,27 @@ def out_dir(tmp_path_factory) -> str:
 
 
 class TestParquetResultsSinkOutputFiles:
-    def test_expected_files_written(self, out_dir):
-        for fname in (
+    def test_flush_writes_exactly_the_documented_set(self, out_dir):
+        # The REAL listing, not a hand-kept subset: three separately-maintained
+        # manifests had drifted apart and all omitted events.parquet.  Two files
+        # are conditional -- profile_metrics needs fitted snapshots and georef a
+        # georeferenced profile; neither exists in this fixture -- and that
+        # conditionality is part of the contract.
+        always = {
+            "events.parquet",
             "profiles.parquet",
             "storm_hazard.parquet",
             "snapshots.parquet",
             "decisions.parquet",
             "placements.csv",
+            "warnings.csv",
             "run_metadata.json",
             "run_summary.txt",
-        ):
-            assert os.path.isfile(os.path.join(out_dir, fname)), f"missing {fname}"
+        }
+        conditional = {"profile_metrics.parquet", "profile_georef.parquet"}
+        listing = set(os.listdir(out_dir))
+        assert always <= listing
+        assert listing <= always | conditional
 
     @pytest.mark.parametrize(
         "fname, expected",

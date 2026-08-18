@@ -3,7 +3,8 @@
 Tier 1 assesses each profile (physics), Tier 2 decides reach-scope go/no-go and
 order (the pure `erosion.decision` layer), Tier 3 executes the placements with a
 serial crew. See the [nourishment model](../design/NOURISHMENT_MODEL.md) for the
-flow and equations.
+flow and equations (a local, untracked design doc — the link resolves only in a
+working clone that has it; see the note on the [docs home](../index.md)).
 
 ## Tier 1 — profile assessment
 

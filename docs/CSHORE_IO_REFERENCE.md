@@ -1,6 +1,6 @@
 # CSHORE Input/Output Reference
 
-This document catalogs the parameters used by the CSHORE engine and how they are handled by the Python I/O scripts (`cshoreIO.py`).
+This document catalogs the parameters used by the CSHORE engine and how they are handled by the Python I/O layer (`src/erosion/runner/cshore_io.py`).
 
 ## 1. Input Parameters (`infile`)
 
@@ -65,9 +65,13 @@ CSHORE generates several text files prefixed with `O`.
 
 ---
 
-## 3. Python Transformation
+## 3. Python Transformation (legacy MATLAB/Beach-fx chain)
 
-The Python scripts transform these raw outputs into formats suitable for further analysis:
+> **NOTE:** this section describes the predecessor MATLAB→Beach-fx pipeline, kept
+> for reference. The current Python pipeline writes parquet/CSV/JSON in SI units
+> (see the Output Layout in the README); it produces no HDF5 or DAT files.
+
+The legacy chain transformed raw outputs as:
 1.  **HDF5 (`.h5`)**: Used for efficient storage of thousands of Monte Carlo iterations.
 2.  **DAT (`.dat`)**: The final formatted text file used for import into Beach-fx.
-3.  **Unit Conversion**: Results are typically converted from Metric (CSHORE) to Imperial (Beach-fx) during this phase.
+3.  **Unit Conversion**: Results were converted from Metric (CSHORE) to Imperial (Beach-fx) during this phase.

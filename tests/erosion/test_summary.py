@@ -1,4 +1,4 @@
-"""Unit tests for the post-hoc derived-metric helpers in ``erosion.summary``."""
+"""Unit tests for the post-hoc derived-metric helpers in ``erosion.postprocess``."""
 
 import numpy as np
 import pandas as pd

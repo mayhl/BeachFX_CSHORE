@@ -4,8 +4,8 @@ the BeachFX-CSHORE pipeline:
 
   1. Initial / pre-storm
   2. Post-storm    (CSHORE output — eroded berm, scarped dune face, offshore bar)
-  3. Post-recovery (beach_recover — exponential return toward equilibrium)
-  4. Background erosion (beach_translate — seaward shift of berm zone)
+  3. Post-recovery (profile.Recovery — exponential return toward equilibrium)
+  4. Background erosion (profile.ErosionTick — seaward shift of berm zone)
   5. Post-nourishment  (raised berm and dune restored to design template)
 
 Run:
@@ -190,7 +190,7 @@ for xp, yp, txt in [
 ax = axes[1, 0]
 base_plot(ax, x, z_storm, z_recover, "Post-recovery (~50%)", "#2ca02c")
 ax.plot(x, z_init, color="gray", lw=0.8, ls=":", zorder=2, label="Equilibrium target")
-ax.set_title("③ Post-storm recovery  (beach_recover)")
+ax.set_title("③ Post-storm recovery  (Recovery)")
 ax.set_ylabel("Elevation (ft)")
 ax.legend(fontsize=7.5, loc="upper right")
 ax.annotate(
@@ -213,7 +213,7 @@ ax.annotate(
 # ── Panel 4: Background erosion ───────────────────────────────────────────────
 ax = axes[1, 1]
 base_plot(ax, x, z_init, z_bg, "After background erosion", "#ff7f0e", ls="-")
-ax.set_title("④ Background erosion  (beach_translate)")
+ax.set_title("④ Background erosion  (ErosionTick)")
 ax.set_ylabel("Elevation (ft)")
 dz_bg = z_bg - z_init
 ax.fill_between(x, z_init, z_bg, where=dz_bg < -0.05, color="#ff7f0e", alpha=0.2)

@@ -105,18 +105,18 @@ class TestDecideCampaign:
         assert isinstance(hot, LaunchCampaign)
         assert hot.kind is DecisionKind.NOURISH_EMERGENCY
 
-    def test_scheduled_origin_records_the_cycle_kind(self):
+    def test_planned_origin_records_the_cycle_kind(self):
         nc = ncfg(volume_trigger=30.0)
         d = decide_campaign([_m("p0", 50.0)], None, nc, False, CYCLE, t=200.0)
         assert d.kind is DecisionKind.NOURISH_CYCLE
 
-    def test_scheduled_emergency_keeps_its_own_kind(self):
+    def test_planned_emergency_keeps_its_own_kind(self):
         """An emergency raised inside the cycle window would have mobilized the
         campaign either way, so it is not relabelled as a calendar action."""
         d = decide_campaign([_m("p0", 1.0)], None, ncfg(volume_trigger=1e9), True, CYCLE, t=200.0)
         assert d.kind is DecisionKind.NOURISH_EMERGENCY
 
-    def test_scheduled_skip_is_marked_cycle(self):
+    def test_planned_skip_is_marked_cycle(self):
         d = decide_campaign([_m("p0", 1.0)], None, ncfg(volume_trigger=1e9), False, CYCLE, t=200.0)
         assert isinstance(d, SkipCampaign)
         assert d.row() == {"cycle": True, "deficit": 1.0, "trigger": 1e9}

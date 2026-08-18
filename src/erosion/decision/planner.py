@@ -49,7 +49,9 @@ class ReachDecision:
     kind: DecisionKind
     total_deficit: float
     resume: bool  # a crew is already on site from a prior campaign
-    forced: bool = False  # mobilized by an emergency geometric trigger, not the volume gate
+    forced: bool = (
+        False  # mobilized by an emergency trigger (volume or dune geometry), not the volume gate
+    )
     order: list[str] = field(default_factory=list)
 
 
@@ -58,9 +60,10 @@ class ReachNourishmentDecider:
 
     Owns the reach-scope gate (deficit ≥ ``volume_trigger``, bypassed while a
     crew is already on site) and the placement order (priority desc; on resume,
-    prior-campaign profiles first via a stable sort). The economic ($$) gate and
-    the emergency ``force`` override arrive in a later phase; today the gate is
-    the volume trigger — behaviour-preserving.
+    prior-campaign profiles first via a stable sort).  An emergency ``force``
+    from any profile bypasses the volume gate; the economic ($$) gate
+    (``mobilization_volume_cy``) is still unbuilt, so the gate is the volume
+    trigger.
     """
 
     def decide(

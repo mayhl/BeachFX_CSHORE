@@ -16,15 +16,11 @@ Output layout:
     {output}/
         storm_events.csv              # one row per (lifecycle, storm_id)
         {reach_id}/{alternative_id}/lc_{lifecycle:04d}/
-            profiles.parquet
-            storm_hazard.parquet
-            profile_metrics.parquet
-            snapshots.parquet
-            placements.csv
+            (the ParquetResultsSink layout -- see results.py: events/profiles/
+             storm_hazard/profile_metrics/snapshots/decisions/placements/
+             warnings/run_metadata/run_summary)
             grid.parquet            # common axis (+ georef seam); "postprocess": false skips
             hydro.parquet           # hydro registered onto the common grid
-            run_metadata.json
-            run_summary.txt
 """
 
 from __future__ import annotations
@@ -262,7 +258,7 @@ def _build_jobs(
             # _merge_sections.)
             pinned_lc = alt_data.get("lifecycle")
             # Layer storm/cshore/erosion/slc global -> reach -> alt; nourishment stays
-            # alt-level (schema-v2 Phase 2 will feed it via the plan lowering).
+            # alt-level (the schema-v2 plan lowering in _expand_plans feeds it).
             sections = _merge_sections(global_sections, reach_data, alt_data)
             nourishment = alt_data.get("nourishment")
             if nourishment is not None:

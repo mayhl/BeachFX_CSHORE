@@ -7,8 +7,8 @@ changes no output.  ``Placement`` and ``FireCycle`` are executor instructions �
 they drive physics but are not themselves audit rows (a placement's audit trail
 is the nourishment segment it records, a fired cycle's is its NOURISH_* row).
 
-The planner that produces these lands with the crew-clock fold and the interval
-inversion; until then the campaign path emits its decisions inline.
+``planner.plan_placements`` produces these; the executor replays them as bed
+mutations and audit emission.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class ProfileDemand:
     profile_id: str
     deficit_m3: float  # subaerial deficit (m³) — the trigger volume
     placement_m3: float  # full active-height volume placed (borrow = ×ratio)
-    force: bool = False  # emergency geometric trigger fired (Tier-1)
+    force: bool = False  # emergency trigger (volume or dune geometry) fired (Tier-1)
 
 
 @dataclass(frozen=True)

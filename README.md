@@ -42,7 +42,7 @@ data/
   profiles/              # cross-shore profile CSVs (x ft, z ft, NAVD88)
   storms/                # storm forcing parquets (one row per hydrograph timestep)
 examples/
-  configs/               # example config files (ex1–ex4)
+  configs/               # example config files (ex1–ex4 + restore_test)
 tests/                   # unit + integration test suite
 ```
 

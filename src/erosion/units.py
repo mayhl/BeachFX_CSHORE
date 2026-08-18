@@ -8,7 +8,7 @@
 - Pydantic validation context ``{"input_units": "m" | "ft"}`` overrides the
   bare-float default unit when ``default_input`` is set.
 
-Fields without ``default_input`` (all ``CSHOREConfig`` fields) are context-immune:
+Fields without ``default_input`` (all ``CSHOREParams`` fields) are context-immune:
 a bare float always means the internal unit regardless of context.
 
 Conversion factors
@@ -134,7 +134,7 @@ def parse_ufloat(
 ) -> float:
     """Parse a unit-aware value outside of a pydantic model.
 
-    Useful in ``run_pipeline.py`` for reach-level geometry fields
+    Useful in ``pipeline.py`` (the ``run-pipeline`` CLI) for reach-level geometry fields
     (e.g. ``longshore_width``) that live outside ``ReachConfig``.
     """
     return _coerce(v, internal, default_input, (context or {}).get("input_units"))

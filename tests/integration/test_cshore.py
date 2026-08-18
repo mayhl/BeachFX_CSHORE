@@ -100,7 +100,7 @@ def _storms_df(n_storms: int = 3) -> pd.DataFrame:
 
 @pytest.mark.integration
 def test_three_storm_chain_completes(cshore_params, real_profile):
-    """Full 3-storm chain via run_lifecycle; profile is updated after each storm."""
+    """Full 3-storm chain via ``Reach.run``; profile is updated after each storm."""
     with tempfile.TemporaryDirectory() as work_dir:
         runner = LocalCSHORERunner(params=cshore_params, work_dir=work_dir)
         p = Profile(

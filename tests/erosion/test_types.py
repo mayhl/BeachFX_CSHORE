@@ -4,7 +4,7 @@ from erosion.types import SnapshotLabel, StormResponseType
 
 # Canonical snapshot-label vocabulary — the C++/RAG label set (see the
 # morphology-labels reference) plus the Python-model extensions the port adds
-# (``Periodic``, ``INUNDATION``, ``RECN``).  Pinned deliberately: changing a label
+# (``Periodic``, ``INUNDATION``, ``RECN``, ``EENS``, ``ESNS``).  Pinned deliberately: changing a label
 # is a contract change that should require editing this set too.
 SNAPSHOT_LABELS = {
     "INIT",

@@ -120,15 +120,19 @@ class NullResultsSink(ResultsSink):
 class ParquetResultsSink(ResultsSink):
     """Writes profile snapshots, storm hazard, nourishment events, and run metadata.
 
-    Output layout::
+    Output layout (the file list ``flush`` writes; the suite asserts the real
+    directory against it, so keep the two together)::
 
         {out_root}/{reach_id}/{alternative_id}/lc_{lifecycle:04d}/
+            events.parquet          # append-only applied-event log (the audit spine)
             profiles.parquet        # all labeled snapshots — one row per (profile, label, node)
             storm_hazard.parquet    # CSHORE spatial output — one row per (profile, storm, node)
-            profile_metrics.parquet # 0-D morphology metrics per (profile, snapshot)
-            snapshots.parquet  # lightweight snapshot log — one row per (profile, snapshot)
+            profile_metrics.parquet # 0-D metrics per fitted snapshot (only when any exist)
+            snapshots.parquet       # lightweight snapshot log — one row per (profile, snapshot)
             decisions.parquet       # reach-scope decisions — one row each
-            placements.csv      # nourishment placement events
+            placements.csv          # nourishment placement events
+            warnings.csv            # per-profile run warnings
+            profile_georef.parquet  # transect georeference (only when a profile has one)
             run_metadata.json
             run_summary.txt
     """
