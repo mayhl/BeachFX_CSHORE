@@ -174,6 +174,7 @@ def _fit_no_dune(
         foreshore_slope=foreshore_slope,
         berm_elevation=berm_elev_meas,
         berm_width=berm_width,
+        berm_x=float(x[berm_start_idx]) if berm_present else _NAN,
         upland_elevation=UE,
         volume_above_datum=vol,
         berm_scarp=berm_scarp,

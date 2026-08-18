@@ -46,8 +46,13 @@ def fit_profile(
 
     ``berm_elevation`` is the *design* berm crest BE used only for
     classification; the berm elevation is otherwise *measured* from the profile.
-    ``ref`` (optional) constrains the dune-crest search to ±30 m around
-    ``ref.dune_crest_x`` to avoid spurious post-storm peaks.
+    ``ref`` (optional) seeds the feature search from a reference fit, normally the
+    INIT (as-built) one: the dune-crest search is constrained to ±30 m around
+    ``ref.dune_crest_x`` to avoid spurious post-storm peaks, and the berm is
+    located by level set at ``ref.berm_elevation`` rather than by longest flat run
+    (see ``_detect_berm_and_toe``).  Both seed only *where to look*; every
+    elevation and width is still measured off the profile, so genuine storm loss
+    reads as loss.
 
     ``max_feature_length`` bounds the fit to the primary beach+dune system so
     far-landward terrain (a second dune, back-barrier) on a long cross-shore
@@ -132,7 +137,8 @@ def fit_profile(
         seaward_base,
         seaward_toe_idx,
         foreshore_slope,
-    ) = _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type)
+    ) = _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type, ref=ref, UE=UE)
+    berm_x = float(x[berm_start_idx]) if berm_present else _NAN
 
     # --- Dune (only for LOW_BERM / LOW_UPLAND) ---
     if morph_type == MorphType.HIGH_UPLAND.value or crest_idx <= seaward_toe_idx:
@@ -213,6 +219,7 @@ def fit_profile(
         foreshore_slope=foreshore_slope,
         berm_elevation=berm_elev_meas,
         berm_width=berm_width,
+        berm_x=berm_x,
         dune_crest_elevation=DE,
         dune_crest_x=crest_x,
         dune_width=dune_width,

@@ -21,6 +21,7 @@
     "berm_elevation": 2.0,
     "berm_scarp": false,
     "berm_width": 31.0,
+    "berm_x": 39.0,
     "dune_back_relief": 6.9999999992,
     "dune_back_slope": 0.279999999968,
     "dune_back_width": 25.0,

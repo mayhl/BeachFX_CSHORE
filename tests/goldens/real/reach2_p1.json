@@ -2,6 +2,7 @@
   "berm_elevation": 2.286,
   "berm_scarp": false,
   "berm_width": 24.384000000000015,
+  "berm_x": 1402.0800000000004,
   "dune_back_relief": 2.133599989313351,
   "dune_back_slope": 0.09997598499597209,
   "dune_back_width": 21.34112496515445,
@@ -13,12 +14,12 @@
   "dune_scarp": false,
   "dune_top_width": 0.0,
   "dune_width": 35.050387233154424,
-  "fit_quality": 0.02735546326709475,
+  "fit_quality": 0.028138894744217362,
   "foreshore_slope": 0.12303571428571321,
   "morph_type": "LOW_BERM",
-  "n_upland_nodes": 41,
+  "n_upland_nodes": 40,
   "scarp_height": NaN,
-  "shoreline_x": 1381.779169811321,
+  "shoreline_x": 1381.6639756097566,
   "upland_elevation": 1.8288000000000002,
   "volume_above_datum": 410.5199531520003
 }

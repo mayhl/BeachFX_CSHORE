@@ -24,7 +24,9 @@ _BERM_MAX_ABOVE_BE: float = (
     0.5  # a berm sits no higher than design BE + this (rejects upland noise-flats)
 )
 _LEVEL_TOL: float = 0.15  # elevation tolerance (m) for level-set crossings
-_REF_WIN_M: float = 30.0  # ± window (m) for ref-constrained crest search
+_REF_WIN_M: float = 30.0  # ± window (m) for the ref-constrained crest and berm search
+_MIN_BERM_NODES: int = 3  # a berm spanning fewer nodes than this is below resolution
+_BERM_GAP_NODES: int = 2  # level-set gaps up to this many nodes are noise, wider = a trough
 _CREST_EPS: float = 0.05  # elevation band (m) defining the crest plateau
 _MIN_PLATEAU_M: float = 3.0  # crest plateau wider than this idealizes as a flat top
 _GAUSS_MIN_NODES: int = 5  # minimum dune-region nodes before attempting a gaussian fit
@@ -64,6 +66,7 @@ class ProfileMetrics:
     foreshore_slope: float = _NAN
     berm_elevation: float = _NAN  # measured flat-berm elevation
     berm_width: float = 0.0
+    berm_x: float = _NAN  # seaward edge; with berm_width it fixes the berm footprint
 
     # Dune (NaN when no dune, i.e. HIGH_UPLAND / INDETERMINATE)
     dune_crest_elevation: float = _NAN  # DE: absolute crest elevation

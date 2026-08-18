@@ -9,12 +9,15 @@ import numpy as np
 from scipy.signal import find_peaks, savgol_filter
 
 from .types import (
+    _BERM_GAP_NODES,
     _BERM_MAX_ABOVE_BE,
     _BERM_MAX_DRIFT,
     _DUNE_MIN_PROMINENCE,
     _FLAT_SLOPE,
     _LEVEL_TOL,
+    _MIN_BERM_NODES,
     _NAN,
+    _REF_WIN_M,
     _SG_POLY,
     _SMOOTH_WIN_M,
     _UPLAND_WIN_M,
@@ -218,16 +221,77 @@ def _auto_cap(zs: np.ndarray, dx: float, n: int, s0: int, datum: float) -> int |
     return None
 
 
-def _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type):
+def _longest_cluster(band: np.ndarray) -> np.ndarray:
+    """Longest cluster of near-consecutive indices in sorted ``band``, bridging
+    gaps of up to ``_BERM_GAP_NODES`` missing nodes (noise dropouts) and splitting
+    at anything wider (a real trough).  Empty in → empty out."""
+    if band.size == 0:
+        return band
+    splits = np.where(np.diff(band) > _BERM_GAP_NODES + 1)[0] + 1
+    return max(np.split(band, splits), key=len)
+
+
+def _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type, ref=None, UE=None):
     """Locate the berm, the dune's seaward toe, and the foreshore slope.
+
+    Unseeded, the berm is the longest near-flat *run* between shore and crest —
+    a run-length contest that survey noise on a coarse grid can still lose
+    (a spurious flat wins, or the true run fragments), so the berm reads narrow
+    or vanishes and downstream bills a phantom deficit.
+
+    ``ref`` (optional) fixes this by supplying the berm ELEVATION from a reference
+    fit and taking the extent as a level set at that elevation.  Two safeguards
+    keep the seed honest:
+
+    1. **Drift re-base.**  ``ErosionTick`` lowers the WHOLE bed (erosion + SLC),
+       so a merely-aged berm sits below ``ref.berm_elevation`` by exactly the
+       cumulative drift; without re-basing, the level set starves once drift
+       exceeds ``_LEVEL_TOL`` and every profile reads berm-destroyed by ~month 7
+       at typical rates.  The upland drifts identically and storms rarely reach
+       it, so ``UE - ref.upland_elevation`` measures the drift and shifts the
+       seed level with the profile.
+    2. **Contiguity.**  The at-level nodes are split into clusters wherever more
+       than ``_BERM_GAP_NODES`` consecutive nodes leave the level (a real storm
+       trough), and only the longest cluster is the berm — a first-to-last
+       bounding box would span the trough and report it as intact berm.  Gaps of
+       ``<= _BERM_GAP_NODES`` are bridged so single-node noise dropouts do not
+       re-fragment the extent.
+
+    Only *where to look* and *what level* are seeded; the extent and elevation
+    are measured, so a narrowed berm reads narrower and one scoured below the
+    (re-based) level reads as gone.  ``ref`` also bounds the search to
+    ``±_REF_WIN_M`` around the reference footprint, though on a typical beach
+    that window already spans shore→crest and so rarely binds.
 
     Returns ``(berm_present, berm_start_idx, berm_end_idx, berm_elev_meas,
     berm_width, seaward_base, seaward_toe_idx, foreshore_slope)``.
     """
-    # --- Berm: longest flat run between shore and crest (measured elevation) ---
-    berm_start_idx, berm_end_idx = _longest_flat_run(
-        zs, dx, shore_idx, crest_idx, z_ceiling=BE + _BERM_MAX_ABOVE_BE
-    )
+    # --- Berm: level set at the (drift re-based) ref elevation, else flat run ---
+    lo, hi = shore_idx, crest_idx
+    if ref is not None and np.isfinite(ref.berm_x) and ref.berm_width > 0.0:
+        rl = int(np.searchsorted(x, ref.berm_x - _REF_WIN_M))
+        rh = int(np.searchsorted(x, ref.berm_x + ref.berm_width + _REF_WIN_M))
+        lo, hi = max(lo, rl), min(hi, max(rh, rl + 1))
+        if hi - lo < 1:  # window fell outside the beach; search unseeded
+            lo, hi = shore_idx, crest_idx
+    seeded_level = ref is not None and np.isfinite(ref.berm_elevation) and ref.berm_width > 0.0
+    if seeded_level:
+        level = ref.berm_elevation
+        if UE is not None and np.isfinite(UE) and np.isfinite(ref.upland_elevation):
+            level += UE - ref.upland_elevation  # safeguard 1: ride the bed drift
+        band = np.where(np.abs(zs[lo : hi + 1] - level) <= _LEVEL_TOL)[0]
+        best = _longest_cluster(band)
+        if best.size >= _MIN_BERM_NODES:
+            berm_start_idx, berm_end_idx = lo + int(best[0]), lo + int(best[-1])
+        else:
+            # Nothing contiguous at berm level, or too little to resolve: a
+            # foreshore ramp crosses the level in passing and would otherwise
+            # read as a berm one node wide.  Report destroyed, not a sliver.
+            berm_start_idx = berm_end_idx = lo
+    else:
+        berm_start_idx, berm_end_idx = _longest_flat_run(
+            zs, dx, lo, hi, z_ceiling=BE + _BERM_MAX_ABOVE_BE
+        )
     if berm_end_idx > berm_start_idx:
         berm_elev_meas = float(np.median(zb[berm_start_idx : berm_end_idx + 1]))
         # Noise can clip the flat run short of the true seaward edge; extend it
@@ -249,6 +313,9 @@ def _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type):
     # edge is the starting guess, but noise can truncate the detected berm short
     # of the true toe; advance through any remaining berm-level flat so the dune
     # front isn't measured across (and idealized as a ramp over) leftover berm.
+    # The walk must stay NEAR berm level (two-sided): a one-sided "not above"
+    # test also holds through anything scoured BELOW the berm, and marched the
+    # toe across a storm trough to the far side -- spanning the trough as berm.
     seaward_base = berm_elev_meas if berm_present else BE
     if berm_present:
         seaward_toe_idx = berm_end_idx
@@ -256,7 +323,7 @@ def _detect_berm_and_toe(x, zb, zs, dx, shore_idx, crest_idx, BE, morph_type):
         # berm must not creep into the rising upland.
         if morph_type != MorphType.HIGH_UPLAND.value:
             for i in range(berm_end_idx, crest_idx):
-                if zs[i] <= berm_elev_meas + _LEVEL_TOL:
+                if abs(zs[i] - berm_elev_meas) <= _LEVEL_TOL:
                     seaward_toe_idx = i
                 else:
                     break

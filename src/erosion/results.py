@@ -58,6 +58,7 @@ _METRIC_COLUMNS = (
     "foreshore_slope",
     "berm_elevation",
     "berm_width",
+    "berm_x",
     "dune_crest_elevation",
     "dune_crest_x",
     "dune_width",
