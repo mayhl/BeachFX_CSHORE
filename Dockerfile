@@ -24,5 +24,5 @@ RUN chmod +x src/executables/CSHORE_USACE_LINUX.out
 # Install dependencies using uv
 RUN uv sync
 
-# Default command to run the workflow
-CMD ["uv", "run", "examples/run_cshore.py"]
+# Default command: the smallest example lifecycle (see README for ex1-ex4)
+CMD ["uv", "run", "run-pipeline", "ex1"]

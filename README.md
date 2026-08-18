@@ -245,14 +245,17 @@ Any field can take `{"value": ..., "units": "..."}` to override the global setti
 {
   "units": { "input": "m" },
   "nourishment": {
-    "volume_trigger":  { "value": 90000,   "units": "cy" },
-    "production_rate": { "value": 1500000, "units": "cy/yr" },
-    "template_geometry": {
-      "berm_width": { "value": 200, "units": "ft" }
+    "FWP": {
+      "volume_trigger":  { "value": 90000,   "units": "cy" },
+      "production_rate": { "value": 1500000, "units": "cy/yr" },
+      "template_geometry": {
+        "berm_width": { "value": 200, "units": "ft" }
+      }
     }
   },
   "reaches": {
     "Reach1": {
+      "nourishment": ["FWP"],
       "longshore_width": { "value": 1000, "units": "ft" }
     }
   }
