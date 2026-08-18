@@ -10,7 +10,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from ..profile import Profile
-from .base import CSHOREResult, CSHORERunner
+from .base import CSHOREResult, CSHORERunner, InundationError
 from .cshore_io import cshoreIO
 
 
@@ -131,6 +131,7 @@ class LocalCSHORERunner(CSHORERunner):
         params: CSHOREParams,
         work_dir: str,
         infile_dir: str | None = None,
+        timeout_s: float = 900.0,
     ) -> None:
         self.config = _build_cshore_config(params)
         self.work_dir = work_dir
@@ -147,6 +148,9 @@ class LocalCSHORERunner(CSHORERunner):
         self.infile_dir = infile_dir
         if infile_dir:
             os.makedirs(infile_dir, exist_ok=True)
+        # A hung solver would otherwise stall its worker forever; timing out is a
+        # DEFECT (TimeoutExpired propagates), never an inundation
+        self.timeout_s = timeout_s
 
     def run(self, profile: Profile, storm_forcing: dict) -> CSHOREResult:
         csio = cshoreIO()  # fresh instance per call → thread-safe (no class-level state)
@@ -181,16 +185,27 @@ class LocalCSHORERunner(CSHORERunner):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=self.timeout_s,
         )
 
         odoc_path = os.path.join(storm_dir, "ODOC")
         if not os.path.exists(odoc_path):
+            # The binary terminates without output when the boundary SWL exceeds
+            # the profile crest -- the physical inundation signal
             stderr_tail = (proc.stderr or "").strip()[-300:]
-            raise RuntimeError(
+            raise InundationError(
                 f"CSHORE produced no output in {storm_dir} "
                 f"(exit code {proc.returncode}"
                 + (f", stderr: {stderr_tail}" if stderr_tail else "")
                 + "). Surge may have exceeded the profile crest elevation."
+            )
+        if proc.returncode != 0:
+            # Output exists but the solver died partway: a truncated ODOC parses
+            # as a (wrong) result, so fail loudly instead of reading it
+            stderr_tail = (proc.stderr or "").strip()[-300:]
+            raise RuntimeError(
+                f"CSHORE exited {proc.returncode} in {storm_dir} despite writing ODOC"
+                + (f"; stderr: {stderr_tail}" if stderr_tail else "")
             )
 
         params, bc, veg, hydro, sed, morpho = csio.load_CSHORE_results(storm_dir)
@@ -212,7 +227,7 @@ class LocalCSHORERunner(CSHORERunner):
         # redesign, so this now signals GENUINE surge overtopping, not a numerical failure
         # to mask.  Kept as first-class inundation detection until CSHORE reports it natively.
         if x_final.size == 0:
-            raise RuntimeError(
+            raise InundationError(
                 f"CSHORE output all-NaN in {storm_dir} (profile overtopped/inundated)."
             )
 

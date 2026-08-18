@@ -11,7 +11,7 @@ from erosion.config import ReachConfig
 from erosion.metrics import MorphType, ProfileMetrics
 from erosion.profile import Profile
 from erosion.runner import MockCSHORERunner
-from erosion.runner.base import CSHOREResult, CSHORERunner
+from erosion.runner.base import CSHOREResult, CSHORERunner, InundationError
 from erosion.storm import (
     _recovery_fraction,
     build_storm_schedule,
@@ -119,7 +119,14 @@ class _FailRunner(CSHORERunner):
     """Runner that always raises — simulates CSHORE failure (e.g. overtopping)."""
 
     def run(self, profile: Profile, storm_forcing: dict) -> CSHOREResult:
-        raise RuntimeError("CSHORE failed: profile overtopped")
+        raise InundationError("CSHORE failed: profile overtopped")
+
+
+class _DefectRunner(CSHORERunner):
+    """A broken install / truncated output -- NOT physics."""
+
+    def run(self, profile: Profile, storm_forcing: dict) -> CSHOREResult:
+        raise RuntimeError("truncated ODOC")
 
 
 class TestRunParallelCshoreFailure:
@@ -138,6 +145,20 @@ class TestRunParallelCshoreFailure:
             [p], t_storm=5.0, forcing=_forcing(), runner=_FailRunner(), cfg=ReachConfig()
         )
         np.testing.assert_array_equal(p.zb, zb_before)
+
+    def test_inundation_error_is_a_runtime_error(self):
+        # Subclassing keeps any caller that caught RuntimeError working
+        assert issubclass(InundationError, RuntimeError)
+
+    def test_defect_propagates_instead_of_reading_as_inundation(self):
+        # The old blanket catch relabeled ANY exception as INUNDATION and skipped
+        # the storm -- so a broken parser dropped exactly the storms that damage
+        import pytest
+
+        with pytest.raises(RuntimeError, match="truncated ODOC"):
+            run_parallel_cshore(
+                [_p()], t_storm=5.0, forcing=_forcing(), runner=_DefectRunner(), cfg=ReachConfig()
+            )
 
     def test_failure_zb_pre_new_is_original(self):
         p = _p()

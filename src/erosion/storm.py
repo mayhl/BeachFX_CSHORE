@@ -17,6 +17,8 @@ from .profile import Profiles, StormResponse, _shoreline_shift
 from .types import SnapshotLabel, StormResponseType
 from .units import ufloat
 
+from .runner.base import InundationError
+
 if TYPE_CHECKING:
     from .config import ReachConfig
     from .metrics import ProfileMetrics
@@ -252,8 +254,12 @@ def run_parallel_cshore(
     def _run_safe(profile: Profile) -> CSHOREResult | None:
         try:
             return runner.run(profile, forcing)
-        except Exception as exc:
-            log.warning("CSHORE failed for profile %s: %s", profile.id, exc)
+        except InundationError as exc:
+            # The one absorbed failure: a PHYSICAL outcome (storm skipped,
+            # INUNDATION snapshot).  Anything else -- missing binary, truncated
+            # output, parser bug -- propagates: relabeling defects as inundation
+            # silently dropped the most damaging storms of a run.
+            log.warning("CSHORE inundation for profile %s: %s", profile.id, exc)
             return None
 
     log.info("Storm t=%.1fd — running CSHORE for %d profile(s)", t_storm, len(profiles))

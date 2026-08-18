@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from erosion.profile import Profile
-from erosion.runner.base import CSHOREResult, CSHORERunner
+from erosion.runner.base import CSHOREResult, CSHORERunner, InundationError
 
 
 class Damage(ABC):
@@ -154,7 +154,7 @@ class Inundation(Damage):
     that returned ``None`` instead would slip past the catch and stop testing it."""
 
     def bed(self, profile: Profile) -> np.ndarray:
-        raise RuntimeError("mock CSHORE failure (inundation)")
+        raise InundationError("mock CSHORE failure (inundation)")
 
 
 NONE = BermCut(0.0)  # a storm that passed through without touching the beach

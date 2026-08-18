@@ -10,6 +10,17 @@ if TYPE_CHECKING:
     from ..profile import Profile
 
 
+class InundationError(RuntimeError):
+    """CSHORE ran but the profile was overtopped/inundated -- a PHYSICAL outcome.
+
+    This is the only exception ``run_storm`` absorbs into the INUNDATION path
+    (storm skipped, profile unchanged, INUNDATION snapshot).  Every other
+    exception is a DEFECT -- a missing binary, a truncated output, a parser
+    bug -- and must propagate; letting defects ride the inundation path made
+    the model silently drop its most damaging storms as "overtopped".
+    """
+
+
 class CSHOREResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

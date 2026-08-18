@@ -7,13 +7,14 @@ file I/O (cshore_io.py).  ``vfall.py`` computes the sediment fall-velocity
 input.
 """
 
-from .base import CSHOREResult, CSHORERunner, MockCSHORERunner
+from .base import CSHOREResult, CSHORERunner, InundationError, MockCSHORERunner
 from .local import CSHOREParams, LocalCSHORERunner
 
 __all__ = [
     "CSHOREParams",
     "CSHOREResult",
     "CSHORERunner",
+    "InundationError",
     "LocalCSHORERunner",
     "MockCSHORERunner",
 ]
