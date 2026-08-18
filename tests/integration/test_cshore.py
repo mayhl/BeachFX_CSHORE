@@ -159,3 +159,24 @@ def test_three_storm_chain_no_nans(cshore_params, real_profile):
 
         assert not np.any(np.isnan(p.zb)), "NaN in final zb"
         assert not np.any(np.isnan(p.x)), "NaN in x grid"
+
+
+def test_grid_matched_round_trip_conserves_dv(cshore_params, tmp_path):
+    """At grid_dx=1.0 the working grid matches CSHORE's internal regrid, so the
+    subaerial dV CSHORE computed must survive the interp back onto the working
+    grid (the native 10 ft grid retains only ~73% of it)."""
+    from erosion.metrics import volume_above_datum
+    from erosion.profile import load_raw_profile
+
+    raw = load_raw_profile(os.path.join(ROOT, "data/profiles/reach1_p0.csv"), 0.3, dx=1.0)
+    p = Profile(id="p1m", x=raw["x"], zb=raw["z"].copy(), d50=raw["d50"])
+    runner = LocalCSHORERunner(cshore_params, work_dir=str(tmp_path))
+    r = runner.run(p, _storm_forcing())
+
+    pre_on_out = np.interp(r.x, p.x, p.zb)
+    dv_cshore = volume_above_datum(r.x, r.zb) - volume_above_datum(r.x, pre_on_out)
+    zb_stored = np.interp(p.x, r.x, r.zb, left=r.zb[0], right=r.zb[-1])
+    dv_stored = volume_above_datum(p.x, zb_stored) - volume_above_datum(p.x, p.zb)
+
+    assert dv_cshore < 0.0  # the storm erodes
+    assert dv_stored == pytest.approx(dv_cshore, rel=0.02)

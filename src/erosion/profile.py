@@ -368,10 +368,17 @@ class PartialNourishment(ProfileEvent):
 # ---------------------------------------------------------------------------
 
 
-def load_raw_profile(profile_path, d50):
+def load_raw_profile(profile_path, d50, dx=None):
     """
     Load a profile CSV (feet, Beach-FX seaward-positive convention) and
     convert to CSHORE format (meters, landward-positive).
+
+    ``dx`` (m, optional) resamples onto an equipartitioned grid of that spacing.
+    CSHORE regrids internally to ~1 m and its output is interpolated back onto
+    the working grid, so a coarser working grid decimates the storm response
+    (~25% of subaerial dV lost at the native 10 ft spacing); dx=1.0 makes the
+    round-trip grid-matched and near-lossless.  None keeps the survey's native
+    nodes -- fitting raw surveys should see the data as measured.
     """
     raw = np.genfromtxt(profile_path, delimiter=",", encoding="utf-8-sig")
     valid = raw[~np.isnan(raw[:, 0])]
@@ -384,5 +391,10 @@ def load_raw_profile(profile_path, d50):
     z_m = z_m[::-1]
     diffs = np.diff(x_m)[::-1]  # positive spacings in reversed order
     x_m = np.concatenate(([0.0], np.cumsum(diffs)))
+
+    if dx is not None:
+        x_u = np.arange(0.0, x_m[-1] + dx / 2.0, dx)
+        z_m = np.interp(x_u, x_m, z_m)
+        x_m = x_u
 
     return {"x": x_m, "z": z_m, "d50": d50}

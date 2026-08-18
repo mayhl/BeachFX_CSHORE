@@ -45,6 +45,10 @@ class ReachConfig(BaseModel):
     # model to extend the subaerial deficit down to the full active height
     # (see nourishment.VolumeAssessor / FittedAssessor).  0.0 = no extension.
     depth_of_closure: float = 0.0
+    # Working-grid spacing (m).  Profiles are resampled onto an equipartitioned
+    # grid of this dx at load; 1.0 matches CSHORE's internal regrid so the storm
+    # response survives the round-trip (see load_raw_profile).  None = native.
+    grid_dx: float | None = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -253,12 +257,13 @@ def _load_profiles(
     reach_id: str,
     priorities: list[int] | None = None,
     geometry: ProfileGeometryConfig | None = None,
+    grid_dx: float | None = None,
 ) -> list[Profile]:
     """Load profiles sorted by priority (lower number = first); IDs use list index."""
     order = _priority_order(priorities, len(profile_paths))
     profiles = []
     for i in order:
-        raw = load_raw_profile(profile_paths[i], d50)
+        raw = load_raw_profile(profile_paths[i], d50, dx=grid_dx)
         profiles.append(
             Profile(
                 id=f"{reach_id}_p{i}",

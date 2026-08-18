@@ -269,7 +269,7 @@ def _build_jobs(
                 sections["nourishment"] = nourishment
             cfg = ReachConfig.model_validate(sections, context=units_context)
             base_profiles = _load_profiles(
-                profile_paths, cfg.cshore.d50, reach_id, priorities, geometry
+                profile_paths, cfg.cshore.d50, reach_id, priorities, geometry, cfg.grid_dx
             )
 
             if pinned_lc is None:
