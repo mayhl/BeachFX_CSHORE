@@ -174,10 +174,12 @@ class FittedAssessor(ProfileAssessor):
     ``ref_metrics``; a profile without it isn't a `FittedAssessor` candidate and
     reports no fill (per-profile assessor selection lands in Phase 4).
 
-    NOTE: trusts the fitter's measured berm — solid on clean profiles, but berm
-    detection on noisy real profiles is a known gap (e.g. ``reach1_p0``); fixing
-    that is a parallel track (Phase-3 decision 1b).  The ``(BE+DClose)`` placement
-    volume and the emergency ``force`` trigger arrive in 3.2 / Phase 4.
+    NOTE: trusts the fitter's measured berm.  On a real survey (10 ft nodes, coarse
+    enough that the fitter's smoother is a no-op) an unseeded fit lets noise
+    fragment the berm's flat run and bill a phantom deficit, so the ``ref`` handed
+    to ``fit_profile`` seeds the berm level; ``berm_lost`` then separates a
+    storm-destroyed berm from one the fitter merely missed.  The ``(BE+DClose)`` placement volume and the emergency
+    ``force`` trigger arrive in 3.2 / Phase 4.
     """
 
     _basis = "fitted"
@@ -227,6 +229,14 @@ class FittedAssessor(ProfileAssessor):
             # not never-there
             "dune_lost": bool(
                 np.isfinite(ref.dune_crest_elevation) and not np.isfinite(m.dune_crest_elevation)
+            ),
+            # Same reading for the berm: the ref had one and the post-storm fit
+            # measures none.  The berm search is ref-seeded, so nothing outside
+            # the reference footprint can stand in for a destroyed berm -- this
+            # separates storm loss from a fitter miss, and the full-width
+            # deficit it produces is then trustworthy rather than a noise artefact
+            "berm_lost": bool(
+                np.isfinite(ref.berm_elevation) and not np.isfinite(m.berm_elevation)
             ),
         }
         dune_fill = self._extra_placement(profile, cfg, ref, m, width_m)
