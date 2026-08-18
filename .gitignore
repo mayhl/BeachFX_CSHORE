@@ -40,6 +40,8 @@ CHS-SA_TS_SimB_Post0_SP1416_STWAVE14_Timeseries.csv
 data/chs_*.parquet
 data/top*.parquet
 data/EventDate_LC.parquet
+# Real site survey data extracted from the source xlsx -- regenerable, stays local
+data/oak_island/
 
 # Generated artifacts
 examples/storm_recovery_experiment.png
