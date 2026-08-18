@@ -13,6 +13,7 @@ from ..decision import Placement, SkipCampaign, emit
 from ..decision.calendar import CampaignCarryover
 from ..decision.model import ProfileDemand
 from ..decision.planner import decide_campaign, plan_placements
+from ..metrics import volume_above_datum
 from ..profile import FullNourishment, PartialNourishment, Recovery
 from ..storm import StormOutcome, _recovery_fraction
 from ..types import CampaignKind
@@ -268,19 +269,31 @@ class CampaignExecutor:
         w.profile.record_event("NourishmentStart", p.t_start, label)
 
         if p.cut_by_storm:
+            zb_before = w.profile.zb.copy()
             PartialNourishment(
                 t=p.t_end,
                 template_zb=w.plan.template_zb,
                 fraction=p.fraction,
                 label=self.kind.partial_label,
             ).apply(w.profile)
+            billed_m3, borrow_m3 = p.placed_m3, p.borrow_m3
+            ncfg = self.cfg.nourishment
+            if ncfg is not None and ncfg.partial_billing == "beach_volume":
+                # Bill the bed change the blend delivered instead of crew rate x
+                # time -- the two differ by the assessed-volume vs template-gap
+                # mismatch (see partial_billing in NourishmentConfig)
+                dv = volume_above_datum(
+                    w.profile.x, w.profile.zb, self.cfg.msl
+                ) - volume_above_datum(w.profile.x, zb_before, self.cfg.msl)
+                billed_m3 = max(dv, 0.0) * w.width
+                borrow_m3 = billed_m3 * ncfg.borrow_to_placement_ratio
             self.sink.record_nourishment(
                 w.profile.id,
                 p.t_start,
                 p.t_end,
-                p.placed_m3,
+                billed_m3,
                 "PartialNourishment",
-                borrow_m3=p.borrow_m3,
+                borrow_m3=borrow_m3,
             )
         else:
             FullNourishment(

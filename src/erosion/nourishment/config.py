@@ -59,6 +59,15 @@ class NourishmentConfig(BaseModel):
     # Drives duration and cost off the borrow volume, not the restored geometry.
     # Default 1.0 (BeachFX default since 4/8/2015); emergency EN is always 1.0.
     borrow_to_placement_ratio: float = 1.0
+    # What placed_m3 bills for a storm-cut PARTIAL placement.  The two disagree by
+    # the gap between the assessed volume (sizes the crew's job) and the parametric
+    # template's fill volume (moves the bed) — ~5% on the pinned scenario, one-sided.
+    # "crew_time" (default, BeachFX-style): rate × days worked — cost-conservative,
+    # bills mobilized effort whether or not the template absorbed it.
+    # "beach_volume": the bed change the blend actually delivered — accounting and
+    # morphology reconcile exactly (see tests/lifecycle/test_mass_balance.py).
+    # Full placements agree under both.  Borrow scales with the billed quantity.
+    partial_billing: Literal["crew_time", "beach_volume"] = "crew_time"
 
     # Cost accounting
     cost_per_cy: float = 0.0  # unit material cost ($/cy placed)

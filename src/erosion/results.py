@@ -197,8 +197,9 @@ class ParquetResultsSink(ResultsSink):
         borrow_m3: float = 0.0,
     ) -> None:
 
-        # placed_m3 = placement (geometry-effective, on the beach); borrow_m3 =
-        # dredged volume (placement × ratio) — the basis for duration and cost.
+        # placed_m3 = billed placement: crew rate × time by default, or the bed
+        # change itself under partial_billing="beach_volume" (full placements
+        # agree under both); borrow_m3 = billed × ratio — the duration/cost basis.
         self._nourishment_rows.append(
             {
                 "event_type": event_type,

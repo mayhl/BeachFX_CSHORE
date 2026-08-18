@@ -71,13 +71,15 @@ class TestPartialFillMassBalance:
     domain decision; these pins keep the divergence VISIBLE and bounded.
     """
 
-    def _interrupted(self):
+    def _interrupted(self, **ncfg_over):
         from tests.doubles import MASSIVE, NONE
 
         p = template_profile()
         cfg = ReachConfig(
             storm={"z_berm": _BE},
-            nourishment=ncfg(volume_trigger=10.0, production_rate=4.0, assessor="volume"),
+            nourishment=ncfg(
+                volume_trigger=10.0, production_rate=4.0, assessor="volume", **ncfg_over
+            ),
         )
         sink = ParquetResultsSink(tempfile.mkdtemp(), "test", "FWOP", lifecycle=0)
         profiles, sink = run(
@@ -105,6 +107,12 @@ class TestPartialFillMassBalance:
         partial, _, _, _ = self._interrupted()
         worked = partial["t_end"] - partial["t_start"]
         assert partial["placed_m3"] == pytest.approx(4.0 * worked, rel=1e-3)
+
+    def test_beach_volume_billing_reconciles_the_partial_segment(self):
+        # partial_billing="beach_volume": the books say exactly what the bed got
+        partial, full, dv_partial, dv_full = self._interrupted(partial_billing="beach_volume")
+        assert partial["placed_m3"] == pytest.approx(dv_partial, rel=1e-6)
+        assert full["placed_m3"] == pytest.approx(dv_full, rel=1e-6)
 
     def test_partial_segment_never_credits_more_than_billed(self):
         # the divergence stays one-sided (accounting >= beach) and bounded

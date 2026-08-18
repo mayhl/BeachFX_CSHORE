@@ -162,6 +162,7 @@ def ncfg(
     mobilization_days: float | None = None,
     storm_conflict: str | None = None,
     template_geometry: dict | None = None,
+    partial_billing: str | None = None,
 ) -> NourishmentConfig:
     """The one doorway for nourishment policy in tests (parametric restore, no array).
 
@@ -180,6 +181,8 @@ def ncfg(
         payload["assessor"] = assessor
     if emergency_volume is not None:
         payload["emergency_volume"] = {"value": emergency_volume, "units": "m3"}
+    if partial_billing is not None:
+        payload["partial_billing"] = partial_billing
     if cycle_interval_years is not None:
         payload["cycle_interval_years"] = cycle_interval_years
     if cycle_start_date is not None:
