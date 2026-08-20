@@ -28,7 +28,7 @@
     "FWOP": {
       "storm": {
         "T_recover":      21.0,
-        "recovery_model": "linear",
+        "recovery_model": "exponential",
         "hydro_dt":             1.0
       },
       "erosion": {
