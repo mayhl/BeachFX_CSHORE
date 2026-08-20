@@ -110,12 +110,18 @@ def run_interstorm(
     t_start: float,
     t_end: float,
     cfg: ReachConfig,
+    catch_up: bool = False,
 ) -> None:
     """Apply erosion + SLC ticks to all profiles from t_start to t_end.
 
     Each tick fires at the minimum of the two configured intervals.  Per-tick
     work is GIL-bound numpy + metric fitting with no cross-profile dependency,
     so profiles are processed serially within each tick.
+
+    ``catch_up`` lands the whole window as ONE tick stamped at ``t_end`` — for
+    ticks held back during a recovery (they must not precede the blend, which
+    would overwrite them below the berm, and their stamps must not fall inside
+    the recovery span).
     """
     if t_end <= t_start:
         return
@@ -131,6 +137,11 @@ def run_interstorm(
     )
     if math.isinf(interval):
         return  # no erosion or SLC configured
+
+    if catch_up:
+        for p in profiles:
+            _apply_tick(p, t_end - t_start, t_end, ecfg, slc)
+        return
 
     t = t_start
     while t < t_end:

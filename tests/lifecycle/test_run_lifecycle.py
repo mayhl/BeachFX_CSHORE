@@ -108,11 +108,13 @@ class TestWithErosionConfig:
         """Erosion/SLC must accrue in EVERY inter-storm interval, not just before
         the first storm. storms() places storms at t=20, 40 → the [20,40] gap must
         carry Periodic ticks (pins a once-real bug where the campaign advance left
-        the interstorm interval empty)."""
+        the interstorm interval empty).  Ticks are held during recovery; here the
+        next storm cuts the recovery short, so the whole gap lands as one catch-up
+        tick at the gap's end."""
         cfg = ReachConfig(erosion=UniformErosionConfig(rate=0.01, tick_days=5.0))
         profiles = _run(n_storms=2, cfg=cfg)
         for p in profiles:
             gap_ticks = [
-                s.t for s in p.snapshots if s.label == SnapshotLabel.Periodic and 20.0 < s.t < 40.0
+                s.t for s in p.snapshots if s.label == SnapshotLabel.Periodic and 20.0 < s.t <= 40.0
             ]
             assert gap_ticks, "no erosion ticks in the [20,40] inter-storm gap"

@@ -175,12 +175,12 @@ class Reach:
                         "storm skipped, profile reused (INUNDATION)",
                     )
 
-            # Phase 2.5 — inter-storm erosion / SLC over the gap [storm end, next storm].
-            # Applied BEFORE the campaign so Periodic ticks stay ≤ the recovery time
-            # (monotonic snapshots); recovery/nourishment then act on the eroded bed.
-            # Stops at a planned cycle, if one is due before the next storm.
+            # Phase 2.5 — ticks are HELD during recovery: erosion applied before the
+            # campaign would be overwritten below the berm by the recovery blend
+            # (which targets the stored pre-storm bed), so the recovery window's
+            # ticks land as one catch-up tick at recovery completion instead.
             recovery_done = self._recovery_done(campaign_start)
-            t_split = self._erode_to_split(storm_end, t_next, recovery_done)
+            t_hold = max(storm_end, min(recovery_done, t_next))
 
             # Phase 3 — campaign (recovery + nourishment) begins just after storm end.
             # storm_at_next distinguishes a recovery cut short by the next storm
@@ -196,10 +196,13 @@ class Reach:
                 storm_at_next=i + 1 < n,
             )
 
+            # The held recovery-window ticks, in one catch-up pass stamped at t_hold.
+            run_interstorm(self.profiles, storm_end, t_hold, self.cfg, catch_up=True)
+
             # Phase 3.5 — a planned cycle falling in this gap, once the storm's
             # recoveries have run out and the crew is free of storm work.  The rest of
             # the gap's erosion then lands on whatever bed the cycle left behind.
-            t_eroded = self._run_due_cycles(t_split, t_next, recovery_done)
+            t_eroded = self._run_due_cycles(t_hold, t_next, recovery_done)
             run_interstorm(self.profiles, t_eroded, t_next, self.cfg)
 
         self.profiles.snapshot_all(SnapshotLabel.EndIteration, self.t)

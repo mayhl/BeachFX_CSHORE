@@ -195,8 +195,10 @@ class TestPlannedCycleRun:
         it short, so the cycle is decided at the recovery completion, not on its own date
         — and no RECN is stamped.
 
-        It finds a beach the storm crew has just restored, so it skips on the volume gate;
-        the deferral is what's asserted, and the decision carries the time it fired.
+        It finds a beach the storm crew restored but the recovery window's held ticks
+        just landed on (the catch-up tick precedes the cycle assess), so it clears the
+        volume gate and places; the deferral is what's asserted, and the decision
+        carries the time it fired.
         """
         cfg = _cycle_cfg(1.0, start_day=25.0, erosion_rate=0.02)
         recovery_done = 20.5 + 0.001 + cfg.storm.T_recover  # storm end + offset + T_recover
@@ -208,7 +210,9 @@ class TestPlannedCycleRun:
             cfg=cfg,
             sink=RecordingSink(),
         )
-        cycle_decisions = [(k, t) for k, t, _pid, p in sink.decisions if p.get("cycle")]
+        cycle_decisions = [
+            (k, t) for k, t, _pid, p in sink.decisions if k is D.NOURISH_CYCLE or p.get("cycle")
+        ]
         assert len(cycle_decisions) == 1
         _kind, t_fired = cycle_decisions[0]
         assert t_fired == pytest.approx(recovery_done, abs=1e-6)

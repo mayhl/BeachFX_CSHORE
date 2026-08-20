@@ -374,8 +374,9 @@ CASES = [
         "9_periodic",
         "erosion ticks continue through every inter-storm gap (pre- AND post-storm)",
         _periodic,
-        # ticks @10,@20 before the storm; the storm ends at 20.5, so the tail ticks
-        # @30.5…@80.5 (6 ticks, one fewer than a storm-start window) before REC
+        # ticks @10,@20 before the storm; the gap's ticks are HELD through recovery —
+        # REC stamps its true completion (20.5 + offset + 21d), the held window lands
+        # as one catch-up tick at that same instant, then 10-day ticks resume
         {
             "p0": [
                 _I,
@@ -383,13 +384,12 @@ CASES = [
                 (_PER, 20.0),
                 (_PRE, 20.0),
                 (_POST, 20.5),
-                (_PER, 30.5),
-                _PER,
+                (_REC, 41.501),
+                (_PER, 41.501),
                 _PER,
                 _PER,
                 _PER,
                 (_PER, 80.5),
-                _REC,
                 _END,
             ]
         },

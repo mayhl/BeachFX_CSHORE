@@ -202,12 +202,10 @@ def _apply_recovery_one(
     eff_dt = T_recover if completed else (t_apply - t_storm)
     fraction = _recovery_fraction(eff_dt, T_recover, cfg.storm.recovery_model)
     if completed:
-        # A completed recovery ends at its true completion time.  When background
-        # erosion/SLC shares the gap, ticks and recovery are applied in phase order
-        # (not time order), so stamping REC mid-gap there would mis-sequence it —
-        # keep the gap-end stamp until the loop applies events in true time order.
-        interstorm = cfg.erosion is not None or cfg.slc is not None
-        t_rec = t_apply if interstorm else completion
+        # A completed recovery ends at its true completion time.  Gap ticks are
+        # held during recovery (reach loop) and land at/after the reach-wide
+        # recovery completion, so the mid-gap stamp no longer mis-sequences them.
+        t_rec = completion
         interrupted = False
     else:
         t_rec = t_apply
