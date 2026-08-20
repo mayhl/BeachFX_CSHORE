@@ -99,7 +99,7 @@ class ProfileSnapshot:
 # cannot silently mint a new type; the writer reindexes to base + the key union,
 # so the file's column set no longer depends on which events fired.
 EVENT_SCHEMA: dict[str, tuple[str, ...]] = {
-    "ErosionTick": ("dz_erosion", "dz_slc"),
+    "ErosionTick": ("dz_erosion", "dz_slc", "dt_days", "held"),
     "StormResponse": ("runup_m", "jr", "n_extrapolated", "n_no_convergence", "n_sigtie_negative"),
     "Inundation": (),
     "Recovery": ("fraction", "interrupted"),
@@ -237,22 +237,33 @@ class ProfileEvent(ABC):
 
 @dataclass
 class ErosionTick(ProfileEvent):
-    """Lower bed by erosion + SLC during the inter-storm interval."""
+    """Lower bed by erosion + SLC during the inter-storm interval.
+
+    ``held`` marks a catch-up tick: erosion owed for a recovery window, applied
+    as one lump at the recovery's completion rather than on the regular cadence.
+    ``dt_days`` is the span the tick covers — for a held tick it is not derivable
+    from its neighbours' times.
+    """
 
     event_type: ClassVar[str] = "ErosionTick"
     dz_erosion: float | np.ndarray = 0.0
     dz_slc: float | np.ndarray = 0.0
+    dt_days: float = 0.0
+    held: bool = False
 
     def _payload(self) -> dict:
         return {
             "dz_erosion": float(np.mean(self.dz_erosion)),
             "dz_slc": float(np.mean(self.dz_slc)),
+            "dt_days": float(self.dt_days),
+            "held": bool(self.held),
         }
 
     def apply(self, profile: Profile) -> None:
         profile.zb = profile.zb - (self.dz_erosion + self.dz_slc)
-        profile.snapshot(SnapshotLabel.Periodic, self.t)
-        self._emit(profile, SnapshotLabel.Periodic)
+        label = SnapshotLabel.PeriodicHeld if self.held else SnapshotLabel.Periodic
+        profile.snapshot(label, self.t)
+        self._emit(profile, label)
 
 
 @dataclass

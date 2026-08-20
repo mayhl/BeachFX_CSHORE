@@ -76,7 +76,11 @@ def test_erosion_tick_logged_with_payload():
     p = _run_one(ScriptedRunner(MINOR), cfg)
     ticks = [e for e in p.events if e.event_type == "ErosionTick"]
     assert ticks
-    assert set(ticks[0].payload) == {"dz_erosion", "dz_slc"}
+    assert set(ticks[0].payload) == {"dz_erosion", "dz_slc", "dt_days", "held"}
+    # the storm's recovery holds that gap's ticks -> exactly one held catch-up tick
+    held = [e for e in ticks if e.payload["held"]]
+    assert len(held) == 1
+    assert held[0].payload["dt_days"] == pytest.approx(21.001)  # offset + T_recover
 
 
 def test_storm_response_payload_carries_valid_domain_metadata():

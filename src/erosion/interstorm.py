@@ -92,11 +92,14 @@ def _apply_tick(
     t_tick: float,
     ecfg: UniformErosionConfig | None,
     slc: SLCConfig | None,
+    held: bool = False,
 ) -> None:
     ErosionTick(
         t=t_tick,
         dz_erosion=_erosion_rate(profile, ecfg) * dt,
         dz_slc=_slc_rate(profile, slc) * dt,
+        dt_days=dt,
+        held=held,
     ).apply(profile)
 
 
@@ -140,7 +143,7 @@ def run_interstorm(
 
     if catch_up:
         for p in profiles:
-            _apply_tick(p, t_end - t_start, t_end, ecfg, slc)
+            _apply_tick(p, t_end - t_start, t_end, ecfg, slc, held=True)
         return
 
     t = t_start

@@ -242,6 +242,7 @@ _RECN = L.RECN
 _EENS = L.EENS  # storm cut the placement mid-fill
 _INUN = L.INUNDATION
 _PER = L.Periodic
+_PERH = L.PeriodicHeld
 
 # reach-scope decision aliases
 _TRIG, _SKIP, _DEFER, _INTR, _SDEFER, _EMER = (
@@ -385,7 +386,7 @@ CASES = [
                 (_PRE, 20.0),
                 (_POST, 20.5),
                 (_REC, 41.501),
-                (_PER, 41.501),
+                (_PERH, 41.501),
                 _PER,
                 _PER,
                 _PER,

@@ -32,6 +32,7 @@ class SnapshotLabel(Enum):
     ESNS = "ESNS"  # planned cycle, cut short by the next storm
     EndIteration = "EndIteration"
     Periodic = "Periodic"
+    PeriodicHeld = "PeriodicHeld"  # catch-up tick: a recovery window's held erosion
 
 
 class CampaignKind(Enum):

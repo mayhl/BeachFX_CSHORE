@@ -115,6 +115,9 @@ class TestWithErosionConfig:
         profiles = _run(n_storms=2, cfg=cfg)
         for p in profiles:
             gap_ticks = [
-                s.t for s in p.snapshots if s.label == SnapshotLabel.Periodic and 20.0 < s.t <= 40.0
+                s.t
+                for s in p.snapshots
+                if s.label in (SnapshotLabel.Periodic, SnapshotLabel.PeriodicHeld)
+                and 20.0 < s.t <= 40.0
             ]
             assert gap_ticks, "no erosion ticks in the [20,40] inter-storm gap"

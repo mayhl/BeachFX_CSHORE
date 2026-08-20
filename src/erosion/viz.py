@@ -86,7 +86,7 @@ class RunResult:
         if self.profiles is None:
             return np.array([])
         ev = self.profiles
-        times = ev.loc[ev["label"] == "Periodic", "t"].unique()
+        times = ev.loc[ev["label"].isin(["Periodic", "PeriodicHeld"]), "t"].unique()
         return np.sort(times)
 
 
@@ -237,7 +237,14 @@ def plot_profile_evolution(
     sub = df[df["profile_id"] == profile_id].copy()
 
     # Exclude INIT — incompatible x grid; include everything else
-    all_labels = labels or ["PreStorm", "PostStorm", "REC", "EndIteration", "Periodic"]
+    all_labels = labels or [
+        "PreStorm",
+        "PostStorm",
+        "REC",
+        "EndIteration",
+        "Periodic",
+        "PeriodicHeld",
+    ]
     snaps = (
         sub[sub["label"].isin(all_labels)][["label", "t"]]
         .drop_duplicates()
@@ -330,6 +337,7 @@ _LABEL_ORDER = {
     "RECS": 3,
     "EndIteration": 4,
     "Periodic": 5,
+    "PeriodicHeld": 3.5,  # lands right after its REC, before EndIteration
 }
 
 # Marker style per snapshot label — each label gets its own color (the line keeps
@@ -342,6 +350,9 @@ _LABEL_MARKER = {
         marker="^", s=24, zorder=4, alpha=0.9, facecolors="none", color="#2ca02c"
     ),
     "Periodic": dict(marker=".", s=14, zorder=2, alpha=0.7, color="#ff7f0e"),  # orange dot
+    "PeriodicHeld": dict(  # open orange diamond — the recovery window's held erosion
+        marker="D", s=22, zorder=4, alpha=0.9, facecolors="none", color="#ff7f0e"
+    ),
 }
 
 
