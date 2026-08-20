@@ -14,10 +14,9 @@ from pydantic import BaseModel, ConfigDict
 
 from .metrics import MorphType
 from .profile import Profiles, StormResponse, _shoreline_shift
+from .runner.base import InundationError
 from .types import SnapshotLabel, StormResponseType
 from .units import ufloat
-
-from .runner.base import InundationError
 
 if TYPE_CHECKING:
     from .config import ReachConfig
@@ -210,8 +209,11 @@ def _apply_storm_result(
         return StormOutcome(p, None, zb_p.copy())
 
     # Shift-register pre-storm profile to post-storm shoreline position,
-    # keeping everything on the original fixed x-grid.
-    dx = _shoreline_shift(x_p, zb_p, r.x, r.zb)
+    # keeping everything on the original fixed x-grid.  Landward-only: storm
+    # flattening pushes the still-water crossing SEAWARD (foreshore deposition)
+    # while the berm/dune retreat; an unclamped negative dx would translate the
+    # whole recovery target seaward and compound into beach prograde per storm.
+    dx = max(_shoreline_shift(x_p, zb_p, r.x, r.zb), 0.0)
     zb_pre = np.interp(x_p - dx, x_p, zb_p, left=zb_p[0], right=zb_p[-1])
     StormResponse(t=t_post, result=r).apply(p)  # interpolates onto x_p, PostStorm at storm end
 
