@@ -33,7 +33,7 @@ from erosion.viz import (
     generate_profile_frames,
     load_runs,
     plot_metrics,
-    plot_profile_evolution,
+    plot_profile_evolution_dual,
 )
 
 
@@ -101,7 +101,7 @@ def main() -> None:
     for pid in profiles_to_plot:
         # --- Profile evolution (one per alternative) ---
         for alt_id, run in runs.items():
-            fig = plot_profile_evolution(run, pid)
+            fig = plot_profile_evolution_dual(run, pid)
             _save_or_show(fig, f"{pid}_{alt_id}_profile_evolution.png")
 
         # --- Metrics comparison (all alternatives overlaid) ---

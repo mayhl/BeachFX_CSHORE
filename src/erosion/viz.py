@@ -286,6 +286,30 @@ def plot_profile_evolution(
     return fig
 
 
+def plot_profile_evolution_dual(
+    run: RunResult,
+    profile_id: str,
+    labels: Sequence[str] | None = None,
+) -> Figure:
+    """Two-panel evolution: the beach-zone zoom on top, the full profile below.
+
+    The zoom shows the storm/recovery action; the full panel keeps the offshore
+    context (bar growth, shelf) that the zoom crops away.
+    """
+    fig, (ax_zoom, ax_full) = plt.subplots(2, 1, figsize=(11, 7), height_ratios=[1, 1])
+    plot_profile_evolution(run, profile_id, labels=labels, zoom_beach=True, ax=ax_zoom)
+    plot_profile_evolution(run, profile_id, labels=labels, zoom_beach=False, ax=ax_full)
+    # Full extent of the plotted (post-CSHORE) snapshots — the beach ylim floors at
+    # -5 m and the shared xlim includes INIT's raw grid, both wrong for this panel
+    df = run.profiles
+    sub = df[(df["profile_id"] == profile_id) & (df["label"] != "INIT")]
+    ax_full.set_xlim(sub["x"].min(), sub["x"].max())
+    ax_full.set_ylim(sub["zb"].min() - 0.5, sub["zb"].max() + 0.5)
+    ax_full.set_title("full profile")
+    fig.tight_layout()
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Plot 2 — metrics time series (comparison across alternatives)
 # ---------------------------------------------------------------------------
