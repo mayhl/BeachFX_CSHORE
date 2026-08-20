@@ -332,13 +332,16 @@ _LABEL_ORDER = {
     "Periodic": 5,
 }
 
-# Marker style per snapshot label
+# Marker style per snapshot label — each label gets its own color (the line keeps
+# the alternative's color) so sparse labels stay tellable apart on a dense series
 _LABEL_MARKER = {
-    "PreStorm": dict(marker="o", s=12, zorder=3, alpha=0.6),  # circle
-    "PostStorm": dict(marker="v", s=25, zorder=5, alpha=0.9),  # triangle-down
-    "REC": dict(marker="^", s=12, zorder=3, alpha=0.6),  # triangle-up
-    "RECS": dict(marker="^", s=20, zorder=4, alpha=0.9, facecolors="none"),  # open triangle-up
-    "Periodic": dict(marker=".", s=8, zorder=2, alpha=0.4),  # dot
+    "PreStorm": dict(marker="o", s=14, zorder=3, alpha=0.8, color="#1f77b4"),  # blue circle
+    "PostStorm": dict(marker="v", s=28, zorder=5, alpha=0.9, color="#d62728"),  # red tri-down
+    "REC": dict(marker="^", s=16, zorder=3, alpha=0.8, color="#2ca02c"),  # green tri-up
+    "RECS": dict(  # open green triangle-up
+        marker="^", s=24, zorder=4, alpha=0.9, facecolors="none", color="#2ca02c"
+    ),
+    "Periodic": dict(marker=".", s=14, zorder=2, alpha=0.7, color="#ff7f0e"),  # orange dot
 }
 
 
@@ -383,7 +386,9 @@ def plot_metrics(
                 if sub.empty:
                     continue
                 legend_lbl = lbl if first_alt else None
-                ax.scatter(sub["t"], sub[metric], color=color, label=legend_lbl, **style)
+                st = dict(style)
+                marker_color = st.pop("color", color)
+                ax.scatter(sub["t"], sub[metric], color=marker_color, label=legend_lbl, **st)
 
     for ax, metric in zip(flat_axes, metrics):
         ax.set_xlabel("Time (days)")
