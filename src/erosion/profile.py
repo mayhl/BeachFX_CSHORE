@@ -94,6 +94,26 @@ class ProfileSnapshot:
     storm_response_type: StormResponseType | None = None
 
 
+# Closed event-type vocabulary: event_type -> exact scalar payload keys, in
+# events.parquet column order.  record_event validates against this, so a typo
+# cannot silently mint a new type; the writer reindexes to base + the key union,
+# so the file's column set no longer depends on which events fired.
+EVENT_SCHEMA: dict[str, tuple[str, ...]] = {
+    "ErosionTick": ("dz_erosion", "dz_slc"),
+    "StormResponse": ("runup_m", "jr", "n_extrapolated", "n_no_convergence", "n_sigtie_negative"),
+    "Inundation": (),
+    "Recovery": ("fraction", "interrupted"),
+    "NourishmentStart": (),
+    "FullNourishment": (),
+    "PartialNourishment": ("fraction",),
+}
+
+# Stable payload-column order for events.parquet: registry order, first occurrence wins
+EVENT_PAYLOAD_COLUMNS: tuple[str, ...] = tuple(
+    dict.fromkeys(k for keys in EVENT_SCHEMA.values() for k in keys)
+)
+
+
 @dataclass
 class EventRecord:
     """One applied event, serialized for the append-only event log (Phase A output spine).
@@ -157,7 +177,18 @@ class Profile:
         ref_pos: float | None = None,
         **payload,
     ) -> None:
-        """Append an entry to the profile's append-only event log (Phase A output spine)."""
+        """Append an entry to the profile's append-only event log (Phase A output spine).
+
+        Raises ``ValueError`` when ``event_type`` is not in ``EVENT_SCHEMA`` or the
+        payload keys differ from the registered set — the vocabulary is closed.
+        """
+        keys = EVENT_SCHEMA.get(event_type)
+        if keys is None:
+            raise ValueError(f"unregistered event_type {event_type!r}; add it to EVENT_SCHEMA")
+        if set(payload) != set(keys):
+            raise ValueError(
+                f"{event_type} payload keys {sorted(payload)} != registered {sorted(keys)}"
+            )
         lbl = label.value if isinstance(label, SnapshotLabel) else label
         self.events.append(EventRecord(event_type, float(t), lbl, ref_pos, payload))
 

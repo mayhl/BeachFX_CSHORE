@@ -263,10 +263,15 @@ class ParquetResultsSink(ResultsSink):
         The bed each event produced lives in ``profiles.parquet`` (referenced by
         ``label`` + ``t``), so the log never duplicates node arrays; it carries the
         event type, its scalar payload, and the ``ref_pos`` seam (inert until Phase C).
-        ``event_seq`` orders events within a profile.  Payload keys vary by event type,
-        so absent keys land null in the columnar frame.
+        ``event_seq`` orders events within a profile.  Payload keys vary by event type
+        (absent keys land null), but the column set is pinned to base +
+        ``EVENT_PAYLOAD_COLUMNS`` so the file schema is identical regardless of which
+        events fired.
         """
-        base_cols = ["profile_id", "event_seq", "event_type", "t", "label", "ref_pos"]
+        from .profile import EVENT_PAYLOAD_COLUMNS
+
+        cols = ["profile_id", "event_seq", "event_type", "t", "label", "ref_pos"]
+        cols += list(EVENT_PAYLOAD_COLUMNS)
         rows = [
             {
                 "profile_id": p.id,
@@ -280,7 +285,7 @@ class ParquetResultsSink(ResultsSink):
             for p in profiles
             for seq, e in enumerate(p.events)
         ]
-        df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=base_cols)
+        df = pd.DataFrame(rows, columns=cols)
         self._to_parquet(df, "events.parquet")
 
     def _write_georef(self, profiles: list[Profile]) -> None:
