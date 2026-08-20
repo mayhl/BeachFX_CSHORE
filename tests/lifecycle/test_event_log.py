@@ -182,3 +182,77 @@ def test_events_parquet_roundtrips_full_lifecycle():
         )
         assert sr_df["jr"] == sr_mem.payload["jr"]
         assert sr_df["n_extrapolated"] == sr_mem.payload["n_extrapolated"]
+
+
+# ---------------------------------------------------------------------------
+# EVENT_SCHEMA registry — closed vocabulary + pinned parquet schema
+# ---------------------------------------------------------------------------
+
+
+def test_registry_closes_the_vocabulary():
+    """Every ``ProfileEvent`` subclass is registered and emits exactly its
+    registered payload keys.
+
+    ``StormResponse`` hand-rolls its ``record_event`` inside ``apply`` (the payload
+    needs the CSHORE result), so its keys are pinned by the runtime check plus the
+    round-trip test above rather than by ``_payload()`` here.
+    """
+    from erosion.profile import (
+        EVENT_SCHEMA,
+        ErosionTick,
+        FullNourishment,
+        PartialNourishment,
+        ProfileEvent,
+        Recovery,
+    )
+
+    assert {c.event_type for c in ProfileEvent.__subclasses__()} <= set(EVENT_SCHEMA)
+
+    zb = np.zeros(3)
+    for ev in (
+        ErosionTick(t=0.0),
+        Recovery(t=0.0, fraction=0.5, zb_post_storm=zb, zb_pre_storm=zb),
+        FullNourishment(t=0.0, template_zb=zb),
+        PartialNourishment(t=0.0, template_zb=zb, fraction=0.5),
+    ):
+        assert set(ev._payload()) == set(EVENT_SCHEMA[ev.event_type]), ev.event_type
+
+
+def test_record_event_rejects_unregistered_type():
+    with pytest.raises(ValueError, match="unregistered"):
+        template_profile("p0").record_event("StromResponse", 0.0)
+
+
+def test_record_event_rejects_wrong_payload_keys():
+    with pytest.raises(ValueError, match="payload keys"):
+        template_profile("p0").record_event("Recovery", 0.0, fraction=0.5)
+
+
+def test_events_parquet_columns_pinned():
+    """``events.parquet`` carries base + ``EVENT_PAYLOAD_COLUMNS`` regardless of
+    which events fired — an all-inundation run (every CSHORE call fails) emits no
+    StormResponse/Recovery, yet still writes their columns (all-null), so
+    downstream readers see one schema."""
+    import os
+    import tempfile
+
+    import pandas as pd
+
+    from erosion.profile import EVENT_PAYLOAD_COLUMNS
+    from erosion.results import ParquetResultsSink
+
+    base = ["profile_id", "event_seq", "event_type", "t", "label", "ref_pos"]
+    with tempfile.TemporaryDirectory() as root:
+        sink = ParquetResultsSink(root, "r", "FWOP", lifecycle=0)
+        run(
+            [template_profile("p0")],
+            storms_df=storms_at([20]),
+            runner=ScriptedRunner(Inundation()),
+            cfg=ReachConfig(storm=_STORM),
+            sink=sink,
+        )
+        df = pd.read_parquet(os.path.join(sink.out_dir, "events.parquet"))
+        assert list(df.columns) == base + list(EVENT_PAYLOAD_COLUMNS)
+        # no storm response fired, so its payload columns exist but are all null
+        assert set(df["event_type"]) <= {"ErosionTick", "Inundation"}
+        assert df["runup_m"].isna().all()
